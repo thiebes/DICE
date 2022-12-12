@@ -1,4 +1,4 @@
-# composite_fitting_with_noise
+# Noisy Diffusion Estimate Simulator
 
 [Program name] is © 2021, [Name of copyright holder]
 
