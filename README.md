@@ -1,15 +1,5 @@
 # Noisy Diffusion Estimate Simulator
 
-Noisy Diffusion Estimate Simulator is © 2022, Joseph Thiebes
-
-Noisy Diffusion Estimate Simulator is published and distributed under the Academic Software License v1.0 (ASL).
-
-Noisy Diffusion Estimate Simulator is distributed in the hope that it will be useful for non-commercial academic research, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the ASL for more details.
-
-You should have received a copy of the ASL along with this program; if not, write to joseph@thiebes.org.  It is also published at [this link](https://github.com/thiebes/noisy_diffusion_estimate_simulator).
-
-You may contact the original licensor at joseph@thiebes.org.
-
 # Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
 - Each simulation is a model of one experimental diffusion measurement, 
@@ -72,3 +62,13 @@ to be added to each pixel of each profile in a simulation. You can provide:
 If a range is provided, the number of values generated in the range will equal 
 the number of simulation iterations. Each value in the range will be used once
 for each simulation.
+
+Noisy Diffusion Estimate Simulator is © 2022, Joseph Thiebes
+
+Noisy Diffusion Estimate Simulator is published and distributed under the Academic Software License v1.0 (ASL).
+
+Noisy Diffusion Estimate Simulator is distributed in the hope that it will be useful for non-commercial academic research, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the ASL for more details.
+
+You should have received a copy of the ASL along with this program; if not, write to joseph@thiebes.org.  It is also published at [this link](https://github.com/thiebes/noisy_diffusion_estimate_simulator).
+
+You may contact the original licensor at joseph@thiebes.org.
