@@ -73,6 +73,8 @@ If a range is provided, the number of values generated in the range will equal
 the number of simulation iterations. Each value in the range will be used once
 for each simulation.
 
+# Copyright and license
+
 Noisy Diffusion Simulator is © 2022, Joseph Thiebes
 
 Noisy Diffusion Simulator is published and distributed under the Academic Software License v1.0 (ASL).
