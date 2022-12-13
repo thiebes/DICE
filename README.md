@@ -1,5 +1,15 @@
 # Noisy Diffusion Estimate Simulator
 
+This tool is designed to help gain a quantitative sense of the precision of composite fits of time-evolved Gaussian distributions that undergo decay and diffusion. After entering parameters to match your experimental setup, the program will perform simulations by:
+- generating a temporal series of profiles as Gaussian distributions,
+- adding normal white noise to the generated profiles,
+- fitting the noisy profiles with Gaussian functions, and
+- fitting the variances of the fitted Gaussian functions to a linear function.
+
+The slope of the resulting linear fit is proportional to a diffusion coefficient estimate. This estimate is then compared to the nominal diffusion parameter used to generate the profiles to begin with.
+
+By running many simulations for a given set of parameters, a statistical view of the precision of the fits is built up. The principal figure of merit that the tool will offer is the portion of the total number of fits that fall within an arbitrary proximity to the nominal diffusion value. e.g., what percentage of fitted diffusion coefficients are within ±10% of the nominal diffusion coefficient. 
+
 # Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
 - Each simulation is a model of one experimental diffusion measurement, 
