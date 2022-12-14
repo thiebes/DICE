@@ -60,19 +60,15 @@ nominal values for the diffusion and lifetime.
 
 Remember to use your units specified in the above unit parameters. 
 For example, if your units were entered as micrometers and nanoseconds, 
-then your units for the diffusion coefficient will be µm$^2$ ns$^{-1}$.
+then your units for the diffusion coefficient will be 
+$\text{µm}^2$ $\text{ns}^{-1}$
 
 ### Noise parameters
 Provide the standard deviation of the additive normal white noise
 to be added to each pixel of each profile in a simulation. You can provide:
 - A single value, which will be repeatedly used for every run of the simulation
 - An experimental profile at $t=0$, in the form of a comma-separated text file with 
-  the profile values in one row — the script will estimate the noise
-
-#### Coming soon:
-If a range is provided, the number of values generated in the range will equal 
-the number of simulation iterations. Each value in the range will be used once
-for each simulation.
+  the profile values in one row — the script will estimate the noise using Fourier transform
 
 # Copyright and license
 
