@@ -1,21 +1,21 @@
 # Noisy Diffusion Simulator
 
 This tool is designed to help gain a quantitative sense of the precision of composite fits of time-evolved Gaussian distributions that undergo decay and diffusion. After entering parameters to match your experimental setup, the program will perform simulations by:
-- generating a temporal series of profiles as Gaussian distributions,
+- generating a temporal series of profiles as decaying and diffusing Gaussian distributions,
 - adding normal white noise to the generated profiles,
 - fitting the noisy profiles with Gaussian functions, and
-- fitting the variances of the fitted Gaussian functions to a linear function.
+- fitting the variances of the fitted Gaussian functions to a linear function using weighted least squares.
 
 The slope of the resulting linear fit is proportional to a diffusion coefficient estimate. This estimate is then compared to the nominal diffusion parameter used to generate the profiles to begin with.
 
-By running many simulations for a given set of parameters, a statistical view of the precision of the fits is built up. The principal figure of merit that the tool will offer is the portion of the total number of fits that fall within an arbitrary proximity to the nominal diffusion value. e.g., what percentage of fitted diffusion coefficients are within ±10% of the nominal diffusion coefficient. 
+By running many simulations for a given set of parameters, a statistical view of the precision of the fits is built up. The principal figure of merit that the tool will offer is the portion of the total number of fits that fall within an arbitrary proximity to the nominal diffusion value. e.g., what percentage of fitted diffusion coefficients are within ±10% (or your selected precision level) of the nominal diffusion coefficient. 
 
 # Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
 - Each simulation is a model of one experimental diffusion measurement, 
   comprised of a series of time-evolved Gaussian profiles with noise.
-- Each simulation will have one set of parameters. 
-- A series of many simulation runs may have a range of parameters, or copies of the same parameters.
+- Each simulation will be executed using one set of parameters. 
+- A series of many simulations may have a range of parameters, or copies of the same parameters. 
 
 ## General parameters
 
@@ -55,20 +55,21 @@ Provide *one* of the following:
 - the diffusion coefficient and lifetime, or
 - the diffusion length
 The script will generate diffusion length for you from the diffusion coefficient and lifetime, 
-or you can enter the diffusion length yourself.
+or you can enter the diffusion length yourself and the script will generate corresponding
+nominal values for the diffusion and lifetime.
 
 Remember to use your units specified in the above unit parameters. 
-For example, if your units were entered as 
-micrometers and nanoseconds, then your units for the diffusion coefficient will be 
-µm$^2$ ns$^{-1}$.
+For example, if your units were entered as micrometers and nanoseconds, 
+then your units for the diffusion coefficient will be µm$^2$ ns$^{-1}$.
 
 ### Noise parameters
 Provide the standard deviation of the additive normal white noise
 to be added to each pixel of each profile in a simulation. You can provide:
-- High and low values for a distribution that is uniform in reciprocal log space
-- High and low values for a distribution that is uniform in reciprocal space
 - A single value, which will be repeatedly used for every run of the simulation
+- An experimental profile at $t=0$, in the form of a comma-separated text file with 
+  the profile values in one row — the script will estimate the noise
 
+#### Coming soon:
 If a range is provided, the number of values generated in the range will equal 
 the number of simulation iterations. Each value in the range will be used once
 for each simulation.
