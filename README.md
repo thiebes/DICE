@@ -16,9 +16,12 @@ If you enjoy this program and found it helpful, please share it.
 - [Installation](#installation)
 - [How to use](#how-to-use)
   - [Quick start](#quick-start)
+  - [Acronyms](acronyms)
   - [Parameter inputs](#parameter-inputs)
   - [Functions](#functions)
   - [Outputs](#outputs)
+  - [Known issues and limitations](#known-issues-and-limitations)
+- [How to cite](how to cite)
 - [License](license)
 
 # Installation
@@ -49,6 +52,11 @@ The main.py script, when run, will define all the functions and then run the sim
 You may wish to remove the final few lines of main.py that execute the simulation, if you wish to define all the functions without running a simulation. For example, you may want to use the functions with data loaded from a file of previous simulation results, or you might want to create a separate script that runs the simulation. 
 
 [Back to table of contents](table-of-contents)
+
+## Acronyms
+- CNR: contrast-to-noise ratio, *i.e.*, the ratio of the signal amplitude to the standard deviation of the noise
+- OLS: ordinary least-squares fitting algorithm
+- WLS: weighted least-squares fitting algorithm
 
 ## Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
@@ -123,10 +131,14 @@ The source code contains extensive documentation at almost every line, describin
   my_simulation_result = scan_iterator(my_parameters.txt)
   ```
 
+[Back to table of contents](table-of-contents)
+
 # Outputs
 - Summary text file
 - Results CSV file
 - Plot
+
+[Back to table of contents](table-of-contents)
 
 # Known issues and limitations
 - Performing OLS fits is totally unnecessary but was done for comparison purposes. Probably adding a lot of computational time.
@@ -135,30 +147,28 @@ The source code contains extensive documentation at almost every line, describin
 - Diffusion could be anomalous and/or non-Fickian.
 - Lifetime is currently only modeled as single-exponential. 
 
+[Back to table of contents](table-of-contents)
+
 # Acknowledgements
 
-This software could not have been written without the valuable feedback provided by
-[Professor Erik M. Grumstrup in the Chemistry & Biochemistry Department at 
-Montana State University](https://www.montana.edu/grumstruplab/). I also 
-acknowledge the support of my colleagues Skyler Hollinbeck, Sajia Afrin, and Alex 
-King, who each offered input on this project. This effort would also not have 
-been possible without the kindness and patience of my spouse and our two children.
+This software could not have been written without the valuable feedback provided by [Professor Erik M. Grumstrup in the Chemistry & Biochemistry Department at Montana State University](https://www.montana.edu/grumstruplab/). I also acknowledge the support of my colleagues Skyler Hollinbeck, Sajia Afrin, and Alex King, who each offered input on this project. This effort would also not have been possible without the kindness and patience of my spouse and our two children.
+
+[Back to table of contents](table-of-contents)
+
+# How to cite
+Coming soon.
+
+[Back to table of contents](table-of-contents)
 
 # License
 
-Noisy Diffusion Simulator simulates diffusion under experimental parameters and evaluates 
-the precision of composite fitting methods of estimating the diffusion coefficient.
+Noisy Diffusion Simulator simulates diffusion under experimental parameters and evaluates the precision of composite fitting methods of estimating the diffusion coefficient.
 Copyright (C) 2022 Joseph J. Thiebes
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+[Back to table of contents](table-of-contents)
