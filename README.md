@@ -58,6 +58,8 @@ You may wish to remove the final few lines of main.py that execute the simulatio
 - OLS: ordinary least-squares fitting algorithm
 - WLS: weighted least-squares fitting algorithm
 
+[Back to table of contents](table-of-contents)
+
 ## Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
 - Each simulation is a model of one experimental diffusion measurement, comprised of a series of time-evolved Gaussian profiles with noise.
