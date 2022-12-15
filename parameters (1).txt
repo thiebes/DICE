@@ -1,0 +1,76 @@
+################################################################
+# Change the below parameters according to your desired setup. 
+#
+# Be sure that every line has the following format, 
+# including the comma at the end of the line:
+#
+# 'label': value,
+#
+# Any line that starts with the pound sign (#) is "commented" and
+# will be ignored. To "uncomment" means to remove the pound sign. 
+# For many parameters, there are more than one option, but only one
+# should be uncommented. 
+#
+# After editing the file, save it. Each time you run the program, it
+# will read this parameters.txt file.
+#
+# See README.md for explanation of each parameter.
+################################################################
+
+{
+    ##### Filename slug #####
+    # use whatever text you want to add as a prefix
+    # for the filename of exported result data
+    'filename slug': 'test',
+
+    ##### Image type #####
+    # use 'none' to avoid saving a plot of the results
+    # to make a plot and save the image, specify the file type
+    # e.g., 'svg', 'png', etc.
+    'image type': 'svg',
+
+    ##### Verbose or brief #####
+    # Uncomment only one of the following lines:
+    # 'verbose or brief': 'verbose',
+    'verbose or brief': 'brief',
+
+    ##### Units #####
+    'length unit': 'micrometers',
+    'time unit': 'nanoseconds',
+
+    ##### Number of simulation iterations per diffusion length #####
+    'number of runs': 100,
+
+    ##### Spatial parameters #####
+    'spatial width': 5,
+    'pixel width': 100,
+
+    ##### Time axis parameter #####
+    # Uncomment only one of the following lines:
+    'time range': [0, 1, 10], # start, stop, steps (inclusive)
+    # 'time series': [0,0.003,0.005,0.010,0.020,0.050,0.150],
+
+    ##### Initial profile parameters #####
+    't0 amplitude': 1,
+    't0 mean': 0,
+    
+    # Uncomment either FWHM or sigma:
+    't0 FWHM': 1,
+    # 't0 sigma': 1,
+
+    ##### Diffusion length #####
+    # Remember to use values that correspond to the length and time units
+    # specified above (or squared units in the case of diffusion).
+    #
+    # Uncomment only one of the following lines:
+    'diffusion coefficient': 0.1, 'lifetime (tau)': 1, 
+    # 'diffusion length': 1,
+
+    ##### Noise standard deviation #####
+    # Uncomment only one of the following lines:
+    'noise value': 0.05,
+    # 'estimate noise from data': 'example_profile.csv',
+
+    ##### Precision level #####
+    'precision level': 0.1,
+}
