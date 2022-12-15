@@ -115,29 +115,25 @@ Briefly, if you want to know how many of the diffusion estimates are within 10% 
 
 The source code contains extensive documentation at almost every line, describing the functions and how they work. Therefore the following will just describe a few of the main functions that you may want to use from the command line:
 
-- ```open_parameters(filename)```
-  - this will open the parameters file and prepare the parameters to be used by the program
-  - it returns the parameters in the correct format as needed by the program
-  - ```filename``` should be a string which has the filename of your parameters file
-  - Example: 
-  ```
-  my_input_parameters = open_parameters('parameters.txt')
-  ```
-
-- ```scan_iterator(input_parameters)```
-  - this will run the simulations according to the parameters stored in ```input_parameters```
+- ```nds_runner(parameters_filename)```
+  - this will run the simulations according to the parameters stored in a parameters text file
   - it outputs a dictionary with the results of each individual simulation, along with a table of results from all simulations
   - Example: 
   ```
-  my_simulation_result = scan_iterator(my_input_parameters)
+  my_simulation_result = scan_iterator(my_parameters.txt)
   ```
 
 # Outputs
+- Summary text file
+- Results CSV file
+- Plot
 
 # Known issues and limitations
-- Distributions
-- Diffusion
-- Lifetime
+- Performing OLS fits is totally unnecessary but was done for comparison purposes. Probably adding a lot of computational time.
+- This program only evaluates Gaussian function fits for distribution profiles. Could incorporate options of Lorentzian, Voigt, Green's functions, etc.
+- Distributions could be non-Gaussian to begin with. Would require some thought about how to approach modeling the initial population.
+- Diffusion could be anomalous and/or non-Fickian.
+- Lifetime is currently only modeled as single-exponential. 
 
 # Acknowledgements
 
