@@ -21,7 +21,7 @@ If you enjoy this program and found it helpful, please share it.
   - [Functions](#functions)
   - [Outputs](#outputs)
   - [Known issues and limitations](#known-issues-and-limitations)
-- [How to cite](how to cite)
+- [How to cite](#how-to-cite)
 - [License](license)
 
 # Installation
