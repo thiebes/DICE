@@ -1,6 +1,6 @@
 # Noisy Diffusion Simulator
 
-This tool is designed to help gain a quantitative sense of the precision of composite fits of time-evolved Gaussian distributions that undergo decay and diffusion. After entering parameters to match your experimental setup, the program will perform simulations by:
+Noisy Diffusion Simulator is an open-source tool to help researchers gain a quantitative sense of the precision of composite fits of time-evolved Gaussian distributions that undergo decay and diffusion. After entering parameters to match your experimental setup, the program will perform simulations by:
 1. generating a temporal series of profiles as decaying and diffusing Gaussian distributions,
 2. adding normal white noise to the generated profiles,
 3. fitting the noisy profiles with Gaussian functions, and
