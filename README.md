@@ -163,7 +163,7 @@ Coming soon.
 # License
 
 Noisy Diffusion Simulator simulates diffusion under experimental parameters and evaluates the precision of composite fitting methods of estimating the diffusion coefficient.
-Copyright (C) 2022 Joseph J. Thiebes
+Copyright © 2022 Joseph J. Thiebes
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
