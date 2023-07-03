@@ -1,14 +1,18 @@
-# Noisy Diffusion Simulator
+# Diffusion Investigation and Validation Engine (DIVE)
 
-Noisy Diffusion Simulator is an open-source tool to help researchers gain a quantitative sense of the precision of composite fits of time-evolved Gaussian distributions that undergo decay and diffusion. After entering parameters to match your experimental setup, the program will perform simulations by:
-1. generating a temporal series of profiles as decaying and diffusing Gaussian distributions,
-2. adding normal white noise to the generated profiles,
-3. fitting the noisy profiles with Gaussian functions, and
-4. fitting the variances of the fitted Gaussian functions to a linear function using weighted least squares.
+## Introduction
 
-The slope of the resulting linear fit is proportional to a diffusion coefficient estimate. This estimate is then compared to the nominal diffusion parameter used to generate the profiles to begin with.
+The Diffusion Investigation and Validation Engine (DIVE) is a powerful, open-source tool that facilitates precise analysis and interpretation of diffusion experiments. It empowers researchers to assess the precision of their composite fits of Gaussian distributions that undergo decay and diffusion over time.
 
-By running many simulations for a given set of parameters, a statistical view of the precision of the fits is built up. The principal figure of merit that the tool will offer is the portion of the total number of fits that fall within an arbitrary proximity to the nominal diffusion value. e.g., what percentage of fitted diffusion coefficients are within ±10% (or your selected precision level) of the nominal diffusion coefficient. 
+With DIVE, you can input parameters that mirror your experimental setup, and the tool will conduct a series of simulations. Here's how it works:
+
+1. **Generation of Time-Series Profiles:** DIVE creates decaying and diffusing Gaussian distribution profiles that evolve over time.
+2. **Noise Addition:** Normal white noise is integrated into the generated profiles to simulate real-world experimental scenarios.
+3. **Gaussian Fit:** The noisy profiles are then fitted with Gaussian functions, deriving the Mean Squared Displacement (MSD).
+4. **Linear Fit and Diffusion Coefficient Estimation:** The MSD values of the Gaussian functions are fitted to a linear function using a weighted least squares method. The slope of this linear fit provides an estimate of the diffusion coefficient.
+5. **Analysis:** DIVE then compares this diffusion coefficient estimate to the nominal diffusion parameter used to generate the profiles. Through numerous simulations under the same parameter set, DIVE constructs a statistical overview of the fit's precision.
+
+The tool's primary value comes from determining the fraction of total fits that align within an acceptable proximity to the nominal diffusion value. In essence, DIVE provides the probability that your estimated diffusion coefficient achieves a degree of precision suitable for your research needs. This offers researchers a robust, quantifiable method of assessing experimental accuracy and precision, thereby contributing to more reliable and reproducible research.
 
 If you enjoy this program and found it helpful, please share it.
 
@@ -29,32 +33,32 @@ If you enjoy this program and found it helpful, please share it.
 This program is written in Python. If you don't have Python installed on your system, you may want to [download and install it](https://wiki.python.org/moin/BeginnersGuide/Download). Another option is to use an online service like [DataLore](https://datalore.jetbrains.com/).
 
 ## Packages
-The Noisy Diffusion Simulator relies on the following packages to function. If you have Python installed, or if you use an online service, some of these may already be installed as well. Installation of packages is a relatively simple process that usually just requires typing a single command. Package installation is [described here](https://packaging.python.org/en/latest/tutorials/installing-packages/). 
+The Noisy Diffusion Simulator relies on the following packages to function. Some of these may already be installed if you have Python installed or use an online service. Installation of packages is a relatively simple process that usually requires typing a single command. Package installation is [described here](https://packaging.python.org/en/latest/tutorials/installing-packages/). 
 * [NumPy](https://numpy.org/)
 * [Pandas](https://pandas.pydata.org/)
 * [MatPlotLib](https://matplotlib.org/)
 * [SciPy](https://scipy.org/)
 * [statsmodels](https://www.statsmodels.org/stable/index.html)
-* [sigfig](https://pypi.org/project/sigfig/)
-* [Pint](https://pint.readthedocs.io/en/stable/)
+* [Pint](https://pint.readthedocs.io/en/stable/) (for unit conversions)
 
 [Back to table of contents](table-of-contents)
 
 # How to use
 
 ## Quick start
-To get started right away, simply edit the parameters.txt file to match your experimental parameters and run the main.py script.
+To get started right away, copy all the files in this repository to your working directory in Python. Then, edit the parameters.txt file to match your experimental parameters and run the main.py script.
 
-To see an example before you edit anything, you can just run the main.py script right off the bat, and it will run based on the default parameters.
+To see an example before you edit anything, you can run the main.py script immediately, which will provide results based on the default parameters.
 
-The main.py script, when run, will define all the functions and then run the simulations according to the parameters.txt file. It is set up this way, in a single file, to make it easiest for researchers who may be new to using Python. 
+The main.py script, when run, will define all the functions and then run the simulations according to the parameters.txt file. 
 
-You may wish to remove the final few lines of main.py that execute the simulation, if you wish to define all the functions without running a simulation. For example, you may want to use the functions with data loaded from a file of previous simulation results, or you might want to create a separate script that runs the simulation. 
+You can remove the final few lines of main.py that execute the simulation, if you want to define all the functions without running a simulation. For example, you may use the functions with data loaded from a file of previous simulation results, or you may want to create a separate script that runs the simulation. 
 
 [Back to table of contents](table-of-contents)
 
-## Acronyms
-- CNR: contrast-to-noise ratio, *i.e.*, the ratio of the signal amplitude to the standard deviation of the noise
+## Glossary
+Jargon terms and acronyms used in this documentation include:
+- CNR: contrast-to-noise ratio, *i.e.,* the ratio of the signal amplitude to the standard deviation of the noise
 - OLS: ordinary least-squares fitting algorithm
 - WLS: weighted least-squares fitting algorithm
 
