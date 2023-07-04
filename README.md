@@ -30,18 +30,28 @@ If you enjoy this program and found it helpful, please share it.
 
 # Installation
 ## Python
-This program is written in Python. If you don't have Python installed on your system, you may want to [download and install it](https://wiki.python.org/moin/BeginnersGuide/Download). Another option is to use an online service like [DataLore](https://datalore.jetbrains.com/).
+This program is written in Python. If you don't have Python installed on your system, we recommend using the latest version. You can download and install Python from the [official website](https://www.python.org/downloads/). Alternatively, you can use online Python notebook services like [DataLore](https://datalore.jetbrains.com/).
 
-## Packages
-The Noisy Diffusion Simulator relies on the following packages to function. Some of these may already be installed if you have Python installed or use an online service. Installation of packages is a relatively simple process that usually requires typing a single command. Package installation is [described here](https://packaging.python.org/en/latest/tutorials/installing-packages/). 
-* [NumPy](https://numpy.org/)
-* [Pandas](https://pandas.pydata.org/)
-* [MatPlotLib](https://matplotlib.org/)
-* [SciPy](https://scipy.org/)
-* [statsmodels](https://www.statsmodels.org/stable/index.html)
-* [Pint](https://pint.readthedocs.io/en/stable/) (for unit conversions)
+### Packages
 
-[Back to table of contents](table-of-contents)
+DIVE depends on several Python packages. If you have Python already installed, some of these might be pre-installed. If not, you can install these packages using pip, Python's package installer. 
+
+You can do this by typing the following command in your terminal:
+
+```bash
+pip install numpy pandas matplotlib scipy statsmodels pint
+```
+
+Here are the packages required:
+
+- **[NumPy](https://numpy.org/)**: Fundamental package for numerical computation in Python.
+- **[Pandas](https://pandas.pydata.org/)**: Provides high-performance, easy-to-use data structures and data analysis tools.
+- **[Matplotlib](https://matplotlib.org/)**: A comprehensive library for creating static, animated, and interactive visualizations in Python.
+- **[SciPy](https://www.scipy.org/)**: A Python library used for scientific and technical computing.
+- **[Statsmodels](https://www.statsmodels.org/stable/index.html)**: A Python module that provides classes and functions for the estimation of many different statistical models.
+- **[Pint](https://pint.readthedocs.io/en/stable/)**: A Python package to define, operate and manipulate physical quantities.
+
+Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DIVE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
 
 # How to use
 
