@@ -39,11 +39,12 @@ DIVE depends on several Python packages. If you have Python already installed, s
 You can do this by typing the following command in your terminal:
 
 ```bash
-pip install numpy pandas matplotlib scipy statsmodels pint
+pip install ast numpy pandas matplotlib scipy statsmodels pint
 ```
 
 Here are the packages required:
 
+- **[ast](https://docs.python.org/3/library/ast.html)**: A built-in Python library for Abstract Syntax Trees.
 - **[NumPy](https://numpy.org/)**: Fundamental package for numerical computation in Python.
 - **[Pandas](https://pandas.pydata.org/)**: Provides high-performance, easy-to-use data structures and data analysis tools.
 - **[Matplotlib](https://matplotlib.org/)**: A comprehensive library for creating static, animated, and interactive visualizations in Python.
@@ -53,16 +54,25 @@ Here are the packages required:
 
 Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DIVE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
 
-# How to use
+## Quick Start
 
-## Quick start
-To get started right away, copy all the files in this repository to your working directory in Python. Then, edit the parameters.txt file to match your experimental parameters and run the main.py script.
+Here are some steps to quickly get started with DIVE:
 
-To see an example before you edit anything, you can run the main.py script immediately, which will provide results based on the default parameters.
+1. **Download the Repository**: Clone or download this repository and navigate to the project directory in your Python environment.
 
-The main.py script, when run, will define all the functions and then run the simulations according to the parameters.txt file. 
+2. **Edit Parameters**: Open the `parameters.txt` file and adjust the values to match your experimental parameters. This file serves as the primary means of input to the simulation.
 
-You can remove the final few lines of main.py that execute the simulation, if you want to define all the functions without running a simulation. For example, you may use the functions with data loaded from a file of previous simulation results, or you may want to create a separate script that runs the simulation. 
+3. **Run the Simulation**: Execute the `main.py` script in your Python environment to start the simulation. The script initializes all necessary functions and runs the simulation based on the parameters specified in `parameters.txt`.
+
+    ```bash
+    python main.py
+    ```
+   
+    If you want to get a feel of the simulation before editing the parameters, you can run the script immediately after downloading. It is set to work with default parameters that serve as an example.
+
+4. **View the Results**: Upon successful execution, the simulation results will be displayed.
+
+5. **Modifying the Simulation**: If you wish to use the functions without automatically running a simulation, you can comment or remove the lines in `main.py` that execute the simulation. This can be useful if you want to load data from a previous simulation or if you wish to create a separate script for running the simulation.
 
 [Back to table of contents](table-of-contents)
 
