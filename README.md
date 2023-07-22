@@ -1,18 +1,16 @@
-# Diffusion Investigation and Validation Engine (DIVE)
+# Diffusion Insight Computation Engine (DiCE)
 
 ## Introduction
 
-The Diffusion Investigation and Validation Engine (DIVE) is a powerful, open-source tool that facilitates precise analysis and interpretation of diffusion experiments. It empowers researchers to assess the precision of their composite fits of Gaussian distributions that undergo decay and diffusion over time.
+DiCE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DiCE provides a robust and quantifiable method for assessing experimental precision.
 
-With DIVE, you can input parameters that mirror your experimental setup, and the tool will conduct a series of simulations. Here's how it works:
+1. **Generation of time-series profiles:**  DiCE starts by generating Gaussian distribution profiles that undergo decay and diffusion as they evolve over time.
+2. **Noise addition:** To better resemble real-world scenarios, DiCE incorporates white noise into these generated profiles.
+3. **Gaussian fit:** The noisy profiles are then fitted with Gaussian functions, resulting in the derivation of the estimated Mean Squared Displacement (MSD) at each time point.
+4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of this function is proportional to the estimated diffusion coefficient.
+5. **Analysis:** DiCE concludes by comparing the estimated diffusion coefficient to the nominal diffusion parameter used to generate the initial profiles. By conducting multiple simulations with the same parameters, DiCE provides a statistical overview of the precision of the diffusion estimate.
 
-1. **Generation of Time-Series Profiles:** DIVE creates decaying and diffusing Gaussian distribution profiles that evolve over time.
-2. **Noise Addition:** Normal white noise is integrated into the generated profiles to simulate real-world experimental scenarios.
-3. **Gaussian Fit:** The noisy profiles are then fitted with Gaussian functions, deriving the Mean Squared Displacement (MSD).
-4. **Linear Fit and Diffusion Coefficient Estimation:** The MSD values of the Gaussian functions are fitted to a linear function using a weighted least squares method. The slope of this linear fit provides an estimate of the diffusion coefficient.
-5. **Analysis:** DIVE then compares this diffusion coefficient estimate to the nominal diffusion parameter used to generate the profiles. Through numerous simulations under the same parameter set, DIVE constructs a statistical overview of the fit's precision.
-
-The tool's primary value comes from determining the fraction of total fits that align within an acceptable proximity to the nominal diffusion value. In essence, DIVE provides the probability that your estimated diffusion coefficient achieves a degree of precision suitable for your research needs. This offers researchers a robust, quantifiable method of assessing experimental accuracy and precision, thereby contributing to more reliable and reproducible research.
+DiCE's primary advantage lies in its ability to quantify the fraction of total fits aligned within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DiCE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
 If you enjoy this program and found it helpful, please share it.
 
@@ -147,7 +145,7 @@ Briefly, if you want to know how many of the diffusion estimates are within 10% 
 
 # Functions
 
-The source code contains extensive documentation at almost every line, describing the functions and how they work. Therefore the following will just describe a few of the main functions that you may want to use from the command line:
+The source code contains extensive documentation at almost every line, describing the functions and how they work. Therefore the following will describe a few of the main functions that you may want to use from the command line:
 
 - ```nds_runner(parameters_filename)```
   - this will run the simulations according to the parameters stored in a parameters text file
@@ -167,17 +165,23 @@ The source code contains extensive documentation at almost every line, describin
 [Back to table of contents](table-of-contents)
 
 # Known issues and limitations
-- Performing OLS fits is totally unnecessary but was done for comparison purposes. Probably adding a lot of computational time.
+- Performing OLS fits is unnecessary but was done for comparison purposes. It adds a lot of computational time. Need to make it optional or eliminate it.
 - This program only evaluates Gaussian function fits for distribution profiles. Could incorporate options of Lorentzian, Voigt, Green's functions, etc.
-- Distributions could be non-Gaussian to begin with. Would require some thought about how to approach modeling the initial population.
-- Diffusion could be anomalous and/or non-Fickian.
-- Lifetime is currently only modeled as single-exponential. 
+- Non-Fickian diffusion is not analyzed by this program.
+- Lifetime is currently only modeled as single-exponential. In an experimental result with two (or more) very different lifetimes, this could mean that the experimental probability of precision is lower than predicted by the model.
+- The format of data in an imported profile for estimation of CNR is limited to single-line comma-separated values. Files that do not strictly follow this format will fail. This could be made more versatile.
 
 [Back to table of contents](table-of-contents)
 
 # Acknowledgements
 
-This software could not have been written without the valuable feedback provided by [Professor Erik M. Grumstrup in the Chemistry & Biochemistry Department at Montana State University](https://www.montana.edu/grumstruplab/). I also acknowledge the support of my colleagues Skyler Hollinbeck, Sajia Afrin, and Alex King, who each offered input on this project. This effort would also not have been possible without the kindness and patience of my spouse and our two children.
+I am deeply thankful to Professor Erik M. Grumstrup from the Chemistry & Biochemistry Department at Montana State University for his invaluable feedback and guidance throughout the development of this software. His expertise and commitment have been instrumental in refining this package. A link to his lab can be found [here](https://www.montana.edu/grumstruplab/).
+
+My colleagues, Skyler Hollinbeck and Sajia Afrin, deserve special mention for their thoughtful suggestions and probing questions, which consistently challenged me to improve and fine-tune this software.
+
+Lastly, I want to express my heartfelt gratitude to my spouse, Julia K. Thiebes. Beyond her unwavering support and patience, her insightful questions, informed by her past scientific education in a different field, have helped shape how I communicate about this project to a broader audience. Our children, Leila, Alexandria, and Zoe, have shown understanding and provided joy amidst the long hours dedicated to this work.
+
+Through the collective efforts of these individuals, this software has been made possible; for that, I am profoundly grateful.
 
 [Back to table of contents](table-of-contents)
 
