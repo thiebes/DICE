@@ -1,19 +1,19 @@
-# Diffusion Insight Computation Engine (DiCE)
-![DiCE logo](dice_logo_620w.png)
+# Diffusion Insight Computation Engine (DICE)
+![DICE logo](dice_logo_620w.png)
 
 ## Introduction
 
-DiCE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DiCE provides a robust and quantifiable method for assessing experimental precision.
+DICE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust and quantifiable method for assessing experimental precision.
 
 ### How it works
 
-1. **Generation of time-series profiles:**  DiCE starts by generating Gaussian distribution profiles that undergo decay and diffusion as they evolve over time.
-2. **Noise addition:** To better resemble real-world scenarios, DiCE incorporates white noise into these generated profiles.
+1. **Generation of time-series profiles:**  DICE starts by generating Gaussian distribution profiles that undergo decay and diffusion as they evolve over time.
+2. **Noise addition:** To better resemble real-world scenarios, DICE incorporates white noise into these generated profiles.
 3. **Gaussian fit:** The noisy profiles are then fitted with Gaussian functions, resulting in the derivation of the estimated Mean Squared Displacement (MSD) at each time point.
 4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of this function is proportional to the estimated diffusion coefficient.
-5. **Analysis:** DiCE concludes by comparing the estimated diffusion coefficient to the nominal diffusion parameter used to generate the initial profiles. By conducting multiple simulations with the same parameters, DiCE provides a statistical overview of the precision of the diffusion estimate.
+5. **Analysis:** DICE concludes by comparing the estimated diffusion coefficient to the nominal diffusion parameter used to generate the initial profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision of the diffusion estimate.
 
-DiCE's primary advantage lies in its ability to quantify the fraction of total fits aligned within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DiCE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
+DICE's primary advantage lies in its ability to quantify the fraction of total fits aligned within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
 If you enjoy this program and found it helpful, please share it.
 
