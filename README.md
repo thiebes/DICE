@@ -1,8 +1,11 @@
 # Diffusion Insight Computation Engine (DiCE)
+![DiCE logo](dice_logo_620w.png)
 
 ## Introduction
 
 DiCE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DiCE provides a robust and quantifiable method for assessing experimental precision.
+
+### How it works
 
 1. **Generation of time-series profiles:**  DiCE starts by generating Gaussian distribution profiles that undergo decay and diffusion as they evolve over time.
 2. **Noise addition:** To better resemble real-world scenarios, DiCE incorporates white noise into these generated profiles.
