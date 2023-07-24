@@ -35,7 +35,7 @@ This program is written in Python. If you don't have Python installed on your sy
 
 ### Packages
 
-DIVE depends on several Python packages. If you have Python already installed, some of these might be pre-installed. If not, you can install these packages using pip, Python's package installer. 
+DICE depends on several Python packages. If you have Python already installed, some of these might be pre-installed. If not, you can install these packages using pip, Python's package installer. 
 
 You can do this by typing the following command in your terminal:
 
@@ -53,11 +53,11 @@ Here are the packages required:
 - **[Statsmodels](https://www.statsmodels.org/stable/index.html)**: A Python module that provides classes and functions for the estimation of many different statistical models.
 - **[Pint](https://pint.readthedocs.io/en/stable/)**: A Python package to define, operate and manipulate physical quantities.
 
-Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DIVE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
+Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
 
 ## Quick Start
 
-Here are some steps to quickly get started with DIVE:
+Here are some steps to quickly get started with DICE:
 
 1. **Download the Repository**: Clone or download this repository and navigate to the project directory in your Python environment.
 
