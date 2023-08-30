@@ -3,7 +3,7 @@
 
 ## Introduction
 
-DICE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust and quantifiable method for assessing experimental precision.
+DICE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust and quantifiable method for assessing the likelihood of experimental accuracy.
 
 ### How it works
 
