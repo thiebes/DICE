@@ -1,5 +1,5 @@
 # Diffusion Insight Computation Engine (DICE)
-![DICE logo](dice_logo_620w.png)
+![DICE logo](logo/dice_logo_620w.png)
 
 ## Introduction
 
