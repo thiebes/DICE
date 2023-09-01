@@ -3,17 +3,18 @@
 
 ## Introduction
 
-DICE is an open-source tool that empowers researchers to evaluate the precision of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust and quantifiable method for assessing the likelihood of experimental accuracy.
+DICE is an open-source tool that empowers researchers to evaluate the precision and accuracy of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust method for assessing the likelihood of experimental accuracy.
 
 ### How it works
 
-1. **Generation of time-series profiles:**  DICE starts by generating Gaussian distribution profiles that undergo decay and diffusion as they evolve over time.
-2. **Noise addition:** To better resemble real-world scenarios, DICE incorporates white noise into these generated profiles.
-3. **Gaussian fit:** The noisy profiles are then fitted with Gaussian functions, resulting in the derivation of the estimated Mean Squared Displacement (MSD) at each time point.
+1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion.
+2. **Noise addition:** To better resemble real-world scenarios, DICE incorporates white noise into these generated profiles. The magnitude of the noise is parameterized by its standard deviation.
+3. **Gaussian fit:** The time-evolved noisy profiles are then fitted with Gaussian functions, resulting in the derivation of the estimated Mean Squared Displacement (MSD) at each time point.
 4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of this function is proportional to the estimated diffusion coefficient.
-5. **Analysis:** DICE concludes by comparing the estimated diffusion coefficient to the nominal diffusion parameter used to generate the initial profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision of the diffusion estimate.
+5. **Analysis:** DICE concludes by comparing the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision and accuracy of the diffusion estimate.
+6. **Presentation:** Several customizable plotting functions are provided to present the results. 
 
-DICE's primary advantage lies in its ability to quantify the fraction of total fits aligned within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
+DICE's primary advantage lies in its ability to quantify the fraction of the fitted diffusion estimates that are within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
 If you enjoy this program and found it helpful, please share it.
 
@@ -21,7 +22,7 @@ If you enjoy this program and found it helpful, please share it.
 - [Installation](#installation)
 - [How to use](#how-to-use)
   - [Quick start](#quick-start)
-  - [Acronyms](acronyms)
+  - [Glossary](#glossary)
   - [Parameter inputs](#parameter-inputs)
   - [Functions](#functions)
   - [Outputs](#outputs)
@@ -51,7 +52,7 @@ Here are the packages required:
 - **[Matplotlib](https://matplotlib.org/)**: A comprehensive library for creating static, animated, and interactive visualizations in Python.
 - **[SciPy](https://www.scipy.org/)**: A Python library used for scientific and technical computing.
 - **[Statsmodels](https://www.statsmodels.org/stable/index.html)**: A Python module that provides classes and functions for the estimation of many different statistical models.
-- **[Pint](https://pint.readthedocs.io/en/stable/)**: A Python package to define, operate and manipulate physical quantities.
+- **[Pint](https://pint.readthedocs.io/en/stable/)**: A Python package to define, operate and manipulate physical quantities (*i.e.*, units).
 
 Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
 
