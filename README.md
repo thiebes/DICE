@@ -5,6 +5,10 @@
 
 DICE is an open-source tool that empowers researchers to evaluate the precision and accuracy of their diffusion coefficient estimates derived from composite fits of time-resolved microscopy experiments. By simulating parameters that mirror your experimental setup, DICE provides a robust method for assessing the likelihood of experimental accuracy.
 
+This software accompanies the paper titled 'Quantifying noise effects in optical measures of excited state transport' by Joseph J. Thiebes and Erik M. Grumstrup, currently under review. The full citation will be updated upon publication. 
+
+Updates to this software can be found at [the DICE GitHub repository](https://github.com/thiebes/DICE).
+
 ### How it works
 
 1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion.
@@ -101,7 +105,7 @@ You may or may not care about keeping all the profile data. If you are generatin
 - To discard profile data and only retain the fitting results, choose 'brief'
 
 ### Units
-Provide the units that apply to all length and time parameter values.
+Provide the units that apply to all length and time parameter values. **Important!** The units you enter here for length and time will be applied to all parameters that represent physical quantities of length and/or time, respectively. 
 
 ### Number of simulation runs
 Provide a number of simulations to run for each value of diffusion length.
@@ -169,11 +173,12 @@ The source code contains extensive documentation at almost every line, describin
 [Back to table of contents](table-of-contents)
 
 # Known issues and limitations
-- Performing OLS fits is unnecessary but was done for comparison purposes. It adds a lot of computational time. Need to make it optional or eliminate it.
-- This program only evaluates Gaussian function fits for distribution profiles. Could incorporate options of Lorentzian, Voigt, Green's functions, etc.
-- Non-Fickian diffusion is not analyzed by this program.
-- Lifetime is currently only modeled as single-exponential. In an experimental result with two (or more) very different lifetimes, this could mean that the experimental probability of precision is lower than predicted by the model.
-- The format of data in an imported profile for estimation of CNR is limited to single-line comma-separated values. Files that do not strictly follow this format will fail. This could be made more versatile.
+- The format of data in an imported initial profile for estimation of $CNR_0$ is limited to a single line of comma-separated values. Data that do not strictly follow this format will fail.
+- This program only evaluates Gaussian function fits for distribution profiles. Lorentzian, Voigt, Green's function, *etc.* are not considered. 
+- Profiles analyzed are 1-dimensional. 
+- Non-Fickian diffusion (*e.g.*, subdiffusion) is not considered.
+- Anisotropic diffusion is not considered.
+- Lifetime is modeled as single-exponential.
 
 [Back to table of contents](table-of-contents)
 
@@ -181,9 +186,9 @@ The source code contains extensive documentation at almost every line, describin
 
 I am deeply thankful to Professor Erik M. Grumstrup from the Chemistry & Biochemistry Department at Montana State University for his invaluable feedback and guidance throughout the development of this software. His expertise and commitment have been instrumental in refining this package. A link to his lab can be found [here](https://www.montana.edu/grumstruplab/).
 
-My colleagues, Skyler Hollinbeck and Sajia Afrin, deserve special mention for their thoughtful suggestions and probing questions, which consistently challenged me to improve and fine-tune this software.
+My colleagues Skyler Hollinbeck and Sajia Afrin offered thoughtful suggestions and probing questions, which consistently challenged me to improve and fine-tune this software.
 
-Lastly, I want to express my heartfelt gratitude to my spouse, Julia K. Thiebes. Beyond her unwavering support and patience, her insightful questions, informed by her past scientific education in a different field, have helped shape how I communicate about this project to a broader audience. Our children, Leila, Alexandria, and Zoe, have shown understanding and provided joy amidst the long hours dedicated to this work.
+Lastly, I want to express my heartfelt gratitude to my spouse, Julia K. Thiebes, for her unwavering support and patience. Moreover, her insightful questions, informed by her past scientific education in a different field, have helped shape how I communicate about this project to a broader audience. Our children, Leila, Alexandria, and Minerva, have provided joy amidst the long hours dedicated to this work.
 
 Through the collective efforts of these individuals, this software has been made possible; for that, I am profoundly grateful.
 
