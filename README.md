@@ -92,62 +92,67 @@ Jargon terms and acronyms used in this documentation include:
 
 ## Parameter inputs
 - Edit the parameters.txt file to set up your simulation.
-- Each simulation is a model of one experimental diffusion measurement, comprised of a series of time-evolved Gaussian profiles with noise.
-- Each simulation will be executed using one set of parameters. 
-- A series of many simulations may have a range of parameters, or copies of the same parameters. 
+- Each simulation is a model of one experimental diffusion measurement comprising a series of time-evolved Gaussian profiles with noise.
+- Each simulation will be executed using one set of parameters.
+- Some parameters can be given as a series of values, and the program will run with each value in the series in turn.
 
 ### Filename slug
-The filename slug is a prefix for your output files to help you identify them later. The output files will already have several of your parameters indicated, so your slug could be a textual identifier of some other kind, for example to connect it to a set of experiments.
+A prefix for your output files to help you identify them later. The output files will already have several parameters indicated, so your slug could be a textual identifier to connect it to a set of experiments.
 
-### Verbose or brief
+### Image type
+The file type for the default plot image to be saved as. For example, `'jpg'`
+
+### Retain profile data?
 You may or may not care about keeping all the profile data. If you are generating a large number of profiles, keeping all that data may become a performance or memory issue. 
-- To keep all profile data (needed for e.g. plotting profiles), choose 'verbose'
-- To discard profile data and only retain the fitting results, choose 'brief'
+- To keep all profile data (needed for *e.g.*, plotting profiles), choose `1`
+- To discard profile data and only retain the fitting results, choose `0`
+
+### Parallel processing
+It is possible to take advantage of parallel processing with this program. To do so, select `1` for this parameter. 
 
 ### Units
-Provide the units that apply to all length and time parameter values. **Important!** The units you enter here for length and time will be applied to all parameters that represent physical quantities of length and/or time, respectively. 
+Provide the units that apply to all length and time parameter values. For example, `'micrometers'` and `'nanoseconds'`. **Important!** The units you enter here for length and time will be applied to all parameters that represent physical quantities of length and/or time, respectively. 
 
-### Number of simulation runs
-Provide a number of simulations to run for each value of diffusion length.
+### Number of simulation iterations
+Provide a number of simulations to run for each set of parameters. 
 
 ### Spatial parameters
-Provide the spatial width and number of pixels for the simulated scan. 
+Provide the spatial width and number of pixels for the simulated scan. Note that the value given for spatial width here will be assumed to be in the units of length specified above. 
 
 ### Temporal parameters
-Provide information about the time axis to be used for each simulation. You can provide:
-- Start, stop, and number of steps (inclusive) for an evenly-timed series of frames
-- An explicit series of time values
+Provide time axis information to be used in each simulation. You can provide:
+- **`'time range'`**: start, stop, and number of steps (inclusive) for an evenly-timed series of frames, *e.g.,* `[0, 1, 10]` or
+- **`'time series'`**: an explicit series of time values, *e.g.,* `[0.1, 0.3, 0.5, 0.7, 0.9]`
 
 ### Initial profile parameters
-Provide the amplitude, mean (i.e. center), and width of the initial Gaussian signal profile.
-- The amplitude is usually 1 arbitrary unit, but you can change it if needed. Note, however, that the noise standard deviation values are based on a normalized initial amplitude.
-- The mean is usually 0, for profiles centered at the origin, but you can change it if needed.
-- The width may be given as sigma (the standard deviation of the Gaussian) or as FWHM (full-width, half-maximum)
+Provide the amplitude, mean (*i.e.,* center), and width of the initial Gaussian signal profile.
+- The amplitude is usually 1 arbitrary unit, but it can be changed here if needed. Note, however, that the noise standard deviation values are relative to a normalized initial amplitude.
+- The mean is 0 for profiles centered at the origin.
+- The width may be given as sigma (the standard deviation of the Gaussian) or as FWHM (full-width, half-maximum).
 
-### Profile evolution parameters
+### Diffusion length
 Provide *one* of the following:
 - the diffusion coefficient and lifetime, or
 - the diffusion length
 If you enter diffusion length, the script will generate corresponding nominal values for the diffusion and lifetime (and *vice-versa*).
 
-Remember to use the units you specified in the unit parameters. 
-For example, if your unit parameters are micrometers and nanoseconds, 
-then the units for the diffusion coefficient will be assumed as
-$\text{µm}^2$ $\text{ns}^{-1}$
+***Remember to use the units you specified in the unit parameters.*** For example, if your unit parameters are micrometers and nanoseconds, then the units for the diffusion coefficient will be assumed as \[$\text{µm}^2$ $\text{ns}^{-1}$\]
 
-### Noise parameters
-  Provide the standard deviation of the additive normal white noise to be added to each pixel of each profile in a simulation. You can provide:
+### Noise standard deviation
+Provide the standard deviation of the white noise to be added to each pixel of each profile in a simulation. You can provide:
 - A single value, which will be repeatedly used for every run of the simulation
-- An experimental profile at $t=0$, in the form of a comma-separated text file with 
-  the profile values in one row — the script will estimate the noise using Fourier transform
+- An experimental profile at $t=0$, in the form of a comma-separated text file with the profile values in one row — the script will estimate the noise based on this initial profile.
 
-### Precision level
-Briefly, if you want to know how many of the diffusion estimates are within 10% of the nominal value, then you should enter 0.1 for precision level. For a more detailed explanation, read on.
+### Proximity level
+The proximity to the nominal value is used to analyze accuracy and precision. Proximity is expressed as the ratio of estimate to nominal diffusion coefficient values. The program will calculate what portion of the simulations are within the proximity level specified here. For example, if you want to know how many diffusion estimates are within 10% of the nominal value, you should enter 0.1 for the precision level. 
 
+In other words:
 - The simulations will produce diffusion coefficient estimates, $D_{est}$. 
-- The *accuracy* of each estimate is quantified by the relative proximity of the estimate to the nominal value, $D_{nom}$. The relative proximity is evaluated by taking the quotient of the estimate and the nominal value, *i.e.*, $D_{est} / D_{nom}$. 
+- The *accuracy* of each estimate is quantified by the relative proximity of the estimate to the nominal value, $D_{nom}$.
+- The relative proximity is evaluated by taking the quotient of the estimate and the nominal value, *i.e.*, $D_{est} / D_{nom}$. 
 - If the estimate is perfectly accurate, it will be equal to the nominal value, and the relative proximity will be 1. 
-- Precision is evaluated based on how many of the estimates lie within your specified arbitrary precision level. For example, if you enter 0.1 for your precision level, the program will tell you what portion of all the estimates were within $\pm 10$% of the nominal value. 
+- Proximity statistics are calculated from the number of estimates within the proximity level.
+- For example, if you enter 0.1 for your precision level, the program will tell you what portion of all the estimates were within $\pm 10$% of the nominal value. 
 
 [Back to table of contents](table-of-contents)
 
