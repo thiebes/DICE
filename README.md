@@ -9,16 +9,21 @@ This software accompanies the paper titled 'Quantifying noise effects in optical
 
 Updates to this software can be found at [the DICE GitHub repository](https://github.com/thiebes/DICE).
 
+This work is licensed under the Creative Commons Attribution 4.0 International License. To view a copy of this license, visit
+http://creativecommons.org/licenses/by/4.0/.
+
 ### How it works
 
 1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion.
-2. **Noise addition:** To better resemble real-world scenarios, DICE incorporates white noise into these generated profiles. The magnitude of the noise is parameterized by its standard deviation.
-3. **Gaussian fit:** The time-evolved noisy profiles are then fitted with Gaussian functions, resulting in the derivation of the estimated Mean Squared Displacement (MSD) at each time point.
+2. **Noise addition:** DICE incorporates white noise into the generated profiles to better resemble real-world scenarios. The magnitude of the noise is parameterized by its standard deviation.
+3. **Gaussian fit:** The time-evolved noisy profiles are then fitted with Gaussian functions, deriving the estimated Mean Squared Displacement (MSD) at each time point.
 4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of this function is proportional to the estimated diffusion coefficient.
 5. **Analysis:** DICE concludes by comparing the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision and accuracy of the diffusion estimate.
 6. **Presentation:** Several customizable plotting functions are provided to present the results. 
 
-DICE's primary advantage lies in its ability to quantify the fraction of the fitted diffusion estimates that are within a user-specified proximity to the nominal diffusion parameter. This provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
+DICE's primary advantage lies in its ability to quantify the fraction of the fitted diffusion estimates within a user-specified proximity to the nominal diffusion parameter, *e.g.*, "50% of the diffusion coefficient estimates are within $\pm 10 \\%$ of the nominal value." 
+
+Thus, DICE provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations based on your experimental parameters, such as the initial spot width, decay lifetime, and contrast-to-noise ratio. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
 If you enjoy this program and found it helpful, please share it.
 
@@ -36,11 +41,10 @@ If you enjoy this program and found it helpful, please share it.
 
 # Installation
 ## Python
-This program is written in Python. If you don't have Python installed on your system, we recommend using the latest version. You can download and install Python from the [official website](https://www.python.org/downloads/). Alternatively, you can use online Python notebook services like [DataLore](https://datalore.jetbrains.com/).
+This program is written in Python. We recommend using the latest version if you don't have Python installed on your system. You can install Python from the [official website](https://www.python.org/downloads/). Alternatively, you can use online Python notebook services (for example, [DataLore](https://datalore.jetbrains.com/)).
 
 ### Packages
-
-DICE depends on several Python packages. If you have Python already installed, some of these might be pre-installed. If not, you can install these packages using pip, Python's package installer. 
+DICE depends on several Python packages. Some of these might already be installed if you have Python installed. If not, you can install these packages using pip, Python's package installer. 
 
 You can do this by typing the following command in your terminal:
 
@@ -201,18 +205,5 @@ Through the collective efforts of these individuals, this software has been made
 
 # How to cite
 Coming soon.
-
-[Back to table of contents](table-of-contents)
-
-# License
-
-DICE: An open-source tool for assessing the precision of diffusion coefficient estimates derived from time-resolved microscopy experiments.
-Copyright (C) 2023 Joseph J. Thiebes
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 [Back to table of contents](table-of-contents)
