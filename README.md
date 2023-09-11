@@ -9,9 +9,6 @@ This software accompanies the paper titled 'Quantifying noise effects in optical
 
 Updates to this software can be found at [the DICE GitHub repository](https://github.com/thiebes/DICE).
 
-This work is licensed under the Creative Commons Attribution 4.0 International License. To view a copy of this license, visit
-http://creativecommons.org/licenses/by/4.0/.
-
 ### How it works
 
 1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion.
@@ -205,5 +202,12 @@ Through the collective efforts of these individuals, this software has been made
 
 # How to cite
 Coming soon.
+
+[Back to table of contents](table-of-contents)
+
+# License
+[![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png)](http://creativecommons.org/licenses/by/4.0/)  
+Diffusion Insight Computation Engine (DICE) by [Joseph J. Thiebes](http://thiebes.org) is licensed under a [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).  
+Based on a work at [https://github.com/thiebes/DICE](https://github.com/thiebes/DICE).
 
 [Back to table of contents](table-of-contents)
