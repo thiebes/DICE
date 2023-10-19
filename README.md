@@ -11,16 +11,20 @@ Updates to this software can be found at [the DICE GitHub repository](https://gi
 
 ### How it works
 
-1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion.
-2. **Noise addition:** DICE incorporates white noise into the generated profiles to better resemble real-world scenarios. The magnitude of the noise is parameterized by its standard deviation.
-3. **Gaussian fit:** The time-evolved noisy profiles are then fitted with Gaussian functions, deriving the estimated Mean Squared Displacement (MSD) at each time point.
-4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of this function is proportional to the estimated diffusion coefficient.
-5. **Analysis:** DICE concludes by comparing the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision and accuracy of the diffusion estimate.
+1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion. The *initial profile* has an amplitude of unity, width parameterized by either the full-width half-maximum or the Gaussian standard deviation, mean position of zero, and baseline background of zero.
+2. **Noise addition:** DICE incorporates white noise into the generated profiles to better resemble real-world scenarios. The magnitude of the noise is the same for every time frame and is parameterized by its standard deviation.
+3. **Gaussian fit:** The time-evolved noisy profiles are fitted with Gaussian functions, deriving the estimated Mean Squared Displacement (*MSD*) at each time point.
+4. **Linear fit and diffusion coefficient estimation:** The *MSD* values are fitted to a linear function using a weighted least squares method. The weights are assigned as the normalized inverse of the relative variance of the squared width parameter reported by the Gaussian fit. The slope of the linear fit is proportional to the estimated diffusion coefficient.
+5. **Analysis:** DICE compares the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision and accuracy of the diffusion estimate.
 6. **Presentation:** Several customizable plotting functions are provided to present the results. 
 
-DICE's primary advantage lies in its ability to quantify the fraction of the fitted diffusion estimates within a user-specified proximity to the nominal diffusion parameter, *e.g.*, "50% of the diffusion coefficient estimates are within $\pm 10 \\%$ of the nominal value." 
+DICE's primary advantage lies in its ability to quantify the precision and accuracy of diffusion estimates. This is accomplished by reporting the fraction of the diffusion estimates within a user-specified proximity to the nominal diffusion parameter. 
 
-Thus, DICE provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations based on your experimental parameters, such as the initial spot width, decay lifetime, and contrast-to-noise ratio. DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
+For example: "50% of the diffusion coefficient estimates are within $\pm 10 \\%$ of the nominal value." 
+
+Thus, DICE provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations based on your experimental parameters, such as the initial spot width, decay lifetime, and contrast-to-noise ratio. Other traditional quantifications of precision and accuracy, such as mean and standard deviation of estimated diffusion coefficients, are also reported.
+
+DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
 If you enjoy this program and found it helpful, please share it.
 
@@ -75,7 +79,7 @@ Here are some steps to quickly get started with DICE:
     python main.py
     ```
    
-    If you want to get a feel of the simulation before editing the parameters, you can run the script immediately after downloading. It is set to work with default parameters that serve as an example.
+    You can run the script immediately after downloading if you want to get a feel of the simulation before editing the parameters. It is set to work with default parameters that serve as an example.
 
 4. **View the Results**: Upon successful execution, the simulation results will be displayed.
 
@@ -112,7 +116,7 @@ You may or may not care about keeping all the profile data. If you are generatin
 It is possible to take advantage of parallel processing with this program. To do so, select `1` for this parameter. 
 
 ### Units
-Provide the units that apply to all length and time parameter values. For example, `'micrometers'` and `'nanoseconds'`. **Important!** The units you enter here for length and time will be applied to all parameters that represent physical quantities of length and/or time, respectively. 
+Provide the length and time units that apply to all length and time parameter values. For example, `'micrometers'` and `'nanoseconds'`. **Important!** The units you enter here for length and time will be applied to ***all parameters*** that represent physical quantities of length and/or time, respectively. Therefore, ensure that the magnitudes you enter for all parameters are appropriately scaled to match your specified units.
 
 ### Number of simulation iterations
 Provide a number of simulations to run for each set of parameters. 
@@ -137,7 +141,7 @@ Provide *one* of the following:
 - the diffusion length
 If you enter diffusion length, the script will generate corresponding nominal values for the diffusion and lifetime (and *vice-versa*).
 
-***Remember to use the units you specified in the unit parameters.*** For example, if your unit parameters are micrometers and nanoseconds, then the units for the diffusion coefficient will be assumed as \[$\text{µm}^2$ $\text{ns}^{-1}$\]
+***Remember to use the units you specified in the unit parameters.*** For example, if your unit parameters are micrometers and nanoseconds, then the units for the diffusion coefficient will be assumed as \[$`\text{µm}^2`$ $`\text{ns}^{-1} `$\]. Thus, ensure that all the magnitudes you enter are appropriately scaled to correspond to the units you have specified.
 
 ### Noise standard deviation
 Provide the standard deviation of the white noise to be added to each pixel of each profile in a simulation. You can provide:
