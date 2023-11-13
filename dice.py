@@ -1,277 +1,615 @@
 #########################################################################
-# Noisy Diffusion Simulator models diffusion using experimental         #
-# parameters and evaluates the precision of composite fitting           #
-# methods of estimating the diffusion coefficient.                      #
-# Copyright (C) 2022 Joseph J. Thiebes                                  #
+# Diffusion Insight Computation Engine (DICE) simulates optical         #
+# measures of diffusion in optoelectronic semiconducting materials      #
+# using experimental parameters, and evaluates the precision of         #
+# composite fitting methods of estimating the diffusion coefficient.    #
 #                                                                       #
-# This program is free software: you can redistribute it and/or modify  #
-# it under the terms of the GNU General Public License as published by  #
-# the Free Software Foundation, either version 3 of the License, or     #
-# (at your option) any later version.                                   #
+# Copyright (C) 2023 Joseph J. Thiebes                                  #
+#                                                                       #
+# This work is licensed under the Creative Commons Attribution 4.0      #
+# International License. To view a copy of this license, visit          #
+# http://creativecommons.org/licenses/by/4.0/ or send a letter to       #
+# Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.          #
 #                                                                       #
 # This program is distributed in the hope that it will be useful,       #
 # but WITHOUT ANY WARRANTY; without even the implied warranty of        #
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         #
-# GNU General Public License for more details.                          #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.                  #
 #                                                                       #
-# You should have received a copy of the GNU General Public License     #
-# along with this program.  If not, see <http://www.gnu.org/licenses/>. #
+# You should include a copy of the license or a link to it with         #
+# every copy of the work you distribute. You can do this by             #
+# including a link to the license in your README.md file or             #
+# documentation.                                                        #
 #########################################################################
 # See the README.md file for information about how to use this tool     #
 # and to cite it in publications.                                       #
 #########################################################################
 
+# Library imports
 import ast
+from typing import Any, Dict, List, Tuple
 import numpy as np
+from numpy.random import default_rng
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from scipy.signal import find_peaks
-# import matplotlib.pylab as pl
-from numpy.random import default_rng
 from scipy.optimize import curve_fit
 import statsmodels.api as sm
-from pint import UnitRegistry
-from sigfig import round
+from joblib import Parallel, delayed
 
-#################################
-# simple calculators and models #
-#################################
+def make_x_axis(scan_width: float, scan_width_pixels: int, psf_mu: float) -> np.ndarray:
+    """
+    Create an array representing an x-axis.
 
-# Make an x-axis array
-def make_x_axis(scan_width, scan_width_pixels, psf_mu):
-    x_start = psf_mu - scan_width/2
-    x_end = psf_mu + scan_width/2
+    Parameters:
+    scan_width (float): Total width of x-axis in spatial units.
+    scan_width_pixels (int): Total width of x-axis in pixels.
+    psf_mu (float): Center of x-axis aligned with center of point spread function.
+
+    Returns:
+    np.ndarray: Array of x-axis values.
+    """
+    if scan_width_pixels <= 0:
+        raise ValueError("scan_width_pixels must be a positive integer")
+    if scan_width <= 0:
+        raise ValueError("scan_width must be a positive number")
+    
+    x_start = psf_mu - scan_width / 2
+    x_end = psf_mu + scan_width / 2
     x_values = np.linspace(x_start, x_end, scan_width_pixels)
     return x_values
 
-# Calculate the time points with given start, end, and number of time points
-def timeline(t_start, t_end, tixels):
-    this_time = np.linspace(t_start, t_end, tixels)
-    return this_time
+def make_time_axis(t_start: float, t_end: float, tix: int) -> np.ndarray:
+    """
+    Create an array representing a time axis.
 
-# Convert sigma value to fwhm of a Gaussian
-def sigma_to_fwhm(sigma):
+    Parameters:
+    t_start (float): Start timestamp.
+    t_end (float): End timestamp.
+    tix (int): Number of time frames.
+
+    Returns:
+    np.ndarray: Array of time frame values.
+    """
+    if tix <= 0:
+        raise ValueError("Number of time frames must be a positive integer")
+    if t_start >= t_end:
+        raise ValueError("Start timestamp must be less than the end timestamp")
+    
+    time_frames = np.linspace(t_start, t_end, tix)
+    return time_frames
+
+def sigma_to_fwhm(sigma: float) -> float:
+    """
+    Convert standard deviation (sigma) of a Gaussian to the full width at half maximum (FWHM).
+
+    Parameters:
+    sigma (float): Standard deviation of the Gaussian.
+
+    Returns:
+    float: FWHM of the Gaussian.
+    """
+    if sigma <= 0:
+        raise ValueError("Sigma must be a positive number")
     return sigma * 2 * np.sqrt(2 * np.log(2))
 
-# Convert fwhm value to sigma of a Gaussian
-def fwhm_to_sigma(fwhm):
+def sigma2_to_fwhm(sigma2: float) -> float:
+    """
+    Convert variance (sigma^2) of a Gaussian to the full width at half maximum (FWHM).
+
+    Parameters:
+    sigma2 (float): Variance of the Gaussian.
+
+    Returns:
+    float: FWHM of the Gaussian.
+    """
+    if sigma2 <= 0:
+        raise ValueError("Sigma squared must be a positive number")
+    return sigma_to_fwhm(np.sqrt(sigma2))
+
+def fwhm_to_sigma(fwhm: float) -> float:
+    """
+    Convert full width at half maximum (FWHM) of a Gaussian to standard deviation (sigma).
+
+    Parameters:
+    fwhm (float): Full width at half maximum of the Gaussian.
+
+    Returns:
+    float: Standard deviation (sigma) of the Gaussian.
+    """
+    if fwhm <= 0:
+        raise ValueError("FWHM must be a positive number")
     return fwhm / (2 * np.sqrt(2 * np.log(2)))
 
-# Definition of a Gaussian
-def gaussian(x, mu, sig, amp):
-    return amp * np.exp(-1 * np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+def fwhm_to_sigma2(fwhm: float) -> float:
+    """
+    Convert full width at half maximum (FWHM) of a Gaussian to variance (sigma^2).
 
-# Calculate the integrated intensity of a pure Gaussian
-def integrated_intensity(psf_sigma, psf_amp):
-    return psf_amp * np.sqrt(2 * np.pi * np.power(psf_sigma,2.))
+    Parameters:
+    fwhm (float): Full width at half maximum of the Gaussian.
 
-#################################################################################
-# Make a distribution of noise sigmas that is uniform in reciprocal log space
-def make_invexp_noise_dist(noise_low, noise_high, num):
-    # get the -log10 of the reciprocal of the noise range
-    noise_low_inv = np.log10(np.power(noise_low, -1.))
-    noise_high_inv = np.log10(np.power(noise_high, -1.))
+    Returns:
+    float: Variance (sigma^2) of the Gaussian.
+    """
+    return fwhm_to_sigma(fwhm) ** 2
 
-    # instantiate a PCG-64 pseudo-random number generator 
-    # (new seed from chaotic environment)
+def gaussian(x: np.ndarray, mu: float, sig2: float, amp: float) -> np.ndarray:
+    """
+    Define a Gaussian function. Baseline is assumed to be zero.
+
+    Parameters:
+    x (np.ndarray): Array of x values.
+    mu (float): Mean value of the Gaussian.
+    sig2 (float): Variance of the Gaussian.
+    amp (float): Amplitude of the Gaussian.
+
+    Returns:
+    np.ndarray: Gaussian function y-values.
+    """
+    if sig2 <= 0:
+        raise ValueError("Variance (sig2) must be a positive number")
+    if amp < 0:
+        raise ValueError("Amplitude (amp) must be non-negative")
+
+    return amp * np.exp(-1 * np.power(x - mu, 2) / (2 * sig2))
+
+def integrated_intensity(sig2, amp):
+    """
+    Calculate the integrated intensity (area under the curve) of a Gaussian function.
+
+    Parameters:
+    - sig2 (float): The variance of the Gaussian (sigma squared).
+    - amp (float): The amplitude of the Gaussian peak.
+
+    Returns:
+    - float: The integrated intensity of the Gaussian.
+
+    Raises:
+    - ValueError: If any input is non-positive, as the variance and amplitude
+                   must be positive for a valid Gaussian function.
+    """
+    # Check that the inputs are positive, which is necessary for a valid Gaussian
+    if sig2 <= 0:
+        raise ValueError("Variance (sigma^2) must be positive.")
+    if amp <= 0:
+        raise ValueError("Amplitude must be positive.")
+
+    return amp * np.sqrt(2 * np.pi * sig2)
+
+
+def slope_to_diffusion_constant(slope, l_unit, t_unit):
+    """
+    Convert the slope from a linear fit of mean squared displacement vs. time 
+    -- i.e., MSD(t) = sigma^2_t - sigma^2_0 --
+    to a diffusion coefficient in conventional units [cm^2/s].
+
+    Parameters:
+    - slope (float): The slope from the MSD vs. time linear fit in user-provided units of length^2/time.
+    - l_unit (str): The user-provided unit of length used in the slope (e.g., 'micrometer').
+    - t_unit (str): The user-provided unit of time used in the slope (e.g., 'nanosecond').
+
+    Returns:
+    - float: The diffusion coefficient in units of cm^2/s.
+
+    Raises:
+    - ValueError: If the provided length or time units are not supported.
+    """
+
+    # Nested dictionaries for length and time conversion factors to centimeters and seconds
+    conversion_factors = {
+        'length': {
+            'meter': 100,
+            'centimeter': 1,
+            'millimeter': 0.1,
+            'micrometer': 1e-4,
+            'nanometer': 1e-7,
+            'angstrom': 1e-8,
+            'picometer': 1e-10,
+            # Add more length units here as needed
+        },
+        'time': {
+            'second': 1,
+            'millisecond': 1e-3,
+            'microsecond': 1e-6,
+            'nanosecond': 1e-9,
+            'picosecond': 1e-12,
+            'femtosecond': 1e-15,
+            'attosecond': 1e-18,
+            # Add more time units here as needed
+        }
+    }
+
+    # Error handling for invalid units
+    if l_unit not in conversion_factors['length']:
+        raise ValueError(f"Invalid length unit '{l_unit}'. Please use one of the following: "
+                         f"{', '.join(conversion_factors['length'].keys())}.")
+    if t_unit not in conversion_factors['time']:
+        raise ValueError(f"Invalid time unit '{t_unit}'. Please use one of the following: "
+                         f"{', '.join(conversion_factors['time'].keys())}.")
+
+    # Convert the slope to cm^2/s (note that 1 cm = 0.01 m)
+    slope_cm2_s = slope * conversion_factors['length'][l_unit] ** 2 / conversion_factors['time'][t_unit]
+
+    # Divide by 2 to get the diffusion coefficient in one dimension
+    diffusion_coefficient = slope_cm2_s / 2
+
+    return diffusion_coefficient
+
+def make_noise_distribution(noise_low, noise_high, num, logarithmic=False):
+    """
+    Create a distribution of noise sigmas, uniform in reciprocal space.
+    Optionally, make the distribution uniform in log space as well.
+
+    This is for the purpose of generating data that are uniformly distributed
+    on a plot where one axis is CNR (inverse of noise) and possibly 
+    logarithmic scale.
+
+    Parameters:
+    - noise_low (float): The lower bound for noise sigma values.
+    - noise_high (float): The upper bound for noise sigma values.
+    - num (int): The number of samples to generate.
+    - logarithmic (bool, optional): Flag to generate the distribution in
+      reciprocal log space. Defaults to False for linear space.
+
+    Returns:
+    - list: A list of noise sigma values.
+
+    Raises:
+    - ValueError: If the bounds are not positive or if the lower bound is
+                   greater than or equal to the upper bound.
+    """
+    if noise_low <= 0 or noise_high <= 0:
+        raise ValueError("Noise bounds must be positive.")
+    if noise_low >= noise_high:
+        raise ValueError("The lower bound must be less than the upper bound.")
+
+    # Get the reciprocal of the noise range. Note this reverses their sequence.
+    new_noise_high = 1 / noise_low
+    new_noise_low = 1 / noise_high
+
+    # Switch to logarithmic space if indicated
+    if logarithmic:
+        new_noise_low = np.log10(new_noise_low)
+        new_noise_high = np.log10(new_noise_high)
+
+    # Instantiate a PCG-64 pseudo-random number generator
     rng = default_rng()
-    # create the uniform distribution
-    noise_sigmas_inv = rng.uniform(low=noise_high_inv, high=noise_low_inv, size=num)
+    # Create the uniform distribution in the selected space
+    noise_sigmas_inv = rng.uniform(low=new_noise_low, high=new_noise_high, size=num)
 
-    # un-invert and exponentiate the values
-    noise_sigmas = [np.power(10, -1 * pHsigma) for pHsigma in noise_sigmas_inv]
+    # Transform the values back to direct space
+    if logarithmic:
+        noise_sigmas = np.power(10, -noise_sigmas_inv)
+    else:
+        noise_sigmas = 1 / noise_sigmas_inv
 
-    return noise_sigmas
-
-#################################################################################
-# Make a distribution of noise sigmas that is uniform in reciprocal space
-def make_inv_noise_dist(noise_low, noise_high, num):
-    # get the -log10 of the reciprocal of the noise range
-    noise_low_inv = np.power(noise_low, -1.)
-    noise_high_inv = np.power(noise_high, -1.)
-
-    # instantiate a PCG-64 pseudo-random number generator 
-    # (new seed from chaotic environment)
-    rng = default_rng()
-
-    # create the uniform distribution
-    noise_sigmas_inv = rng.uniform(low=noise_high_inv, high=noise_low_inv, size=num)
-
-    # un-invert the values
-    noise_sigmas = [np.power(sigma, -1) for sigma in noise_sigmas_inv]
-
-    return noise_sigmas
-
-#################################################################################
-# Convert the slope in a MSD vs. time analysis
-# to a diffusion constant with conventional units
-def slope_to_diffusion_constant(slope, l_unit, t_unit, dims):
-    ureg = UnitRegistry()
-    speed = slope * ureg(l_unit) ** 2 / ureg(t_unit)
-    dc = speed.to(ureg('centimeter squared') / ureg('second')) / (2. * dims)
-    return dc
-
-#########################################
-# Data management and parsing functions #
-#########################################
+    return noise_sigmas.tolist()
 
 #################################################################################
 # Get parameters from file
 def open_parameters(filename):
-    with open(filename) as f:
-        parms_txt = f.read()
-        parms_dict = ast.literal_eval(parms_txt)
-        result = parameter_parser(parms_dict)
-    return result
+    """
+    Reads simulation parameters from a file, evaluates and parses them.
+
+    Parameters:
+    - filename: The name of the file containing the simulation parameters.
+
+    Returns:
+    - A dictionary with parsed and formatted simulation parameters.
+
+    Raises:
+    - FileNotFoundError: If the file does not exist.
+    - ValueError: If the file content is not a valid dictionary.
+    - Exception: Propagates any parsing errors from `parameter_parser`.
+    """
+    try:
+        with open(filename, 'r') as f:
+            parms_txt = f.read() # read the file
+            parms_dict = ast.literal_eval(parms_txt) # evaluate the content literally
+            result = parameter_parser(parms_dict) # parse the content
+        return result
+    except FileNotFoundError:
+        raise FileNotFoundError(f"The file {filename} was not found.")
+    except SyntaxError as e:
+        raise ValueError(f"Error evaluating the file's contents as a dictionary: {e}")
+    except Exception as e:
+        # Re-raise any exceptions from the parameter_parser or other unexpected issues
+        raise Exception(f"An error occurred while parsing parameters: {e}")
+
+def check_for_unique_key(parameters_dictionary: Dict[str, Any], keys: List[str]) -> str:
+    """
+    Checks for the presence of a unique key in a dictionary from a list of possible keys.
+
+    Parameters:
+    - parameters_dictionary: A dictionary where the check is to be performed.
+    - keys: A list of keys, of which exactly one must exist in the dictionary.
+
+    Returns:
+    - The unique key that exists in the dictionary.
+
+    Raises:
+    - ValueError: If more than one of the specified keys is present in the dictionary,
+                   or if none of the keys are present.
+    - TypeError: If the inputs are not of the expected type (dictionary and list).
+    """
+    if not isinstance(parameters_dictionary, dict):
+        raise TypeError("The parameters_dictionary argument must be a dictionary.")
+    if not isinstance(keys, list):
+        raise TypeError("The keys argument must be a list.")
+    
+    existing_keys = [key for key in keys if key in parameters_dictionary]
+    if len(existing_keys) > 1:
+        raise ValueError(f"More than one parameter provided for {existing_keys}. Please provide only one.")
+    elif len(existing_keys) == 0:
+        raise ValueError(f"No parameter provided for {keys}.")
+    else:
+        return existing_keys[0]
+
+def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
+    """
+    Processes time-related parameters in the given dictionary by either creating
+    a time series from a time range or verifying the presence of an explicit time series.
+
+    Parameters:
+    - parameters_dictionary: A dictionary containing the simulation parameters.
+
+    Updates:
+    - The 'parameters_dictionary' will be updated with a 'time series' key containing
+      the calculated time series if 'time range' is provided. If 'time series' is provided,
+      it is assumed to be correct and is left as-is.
+
+    Raises:
+    - ValueError: If 'time range' contains invalid data or is incomplete.
+    """
+    unique_time_key = check_for_unique_key(parameters_dictionary, ['time range', 'time series'])
+    if unique_time_key == 'time range':
+        try:
+            t_start, t_end, t_steps = parameters_dictionary[unique_time_key]
+        except ValueError as e:
+            raise ValueError("The 'time range' must contain three values: start, end, and number of steps.") from e
+        except TypeError as e:
+            raise ValueError("The 'time range' must be a sequence (e.g., list or tuple) with three numerical values.") from e
+
+        # check if t_start, t_end, t_steps have the expected types (e.g., numerical types)
+        if not all(isinstance(value, (int, float)) for value in [t_start, t_end, t_steps]):
+            raise ValueError("The 'time range' values must be numeric.")
+
+        parameters_dictionary['time series'] = make_time_axis(t_start, t_end, t_steps)
+        del parameters_dictionary[unique_time_key]
+    
+    # Else if 'time series' is provided, it's assumed to be valid and no action is taken.
+
+def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int) -> None:
+    """
+    Processes noise-related parameters in the provided dictionary based on the unique noise key.
+
+    Parameters:
+    - parameters_dictionary: A dictionary containing the noise parameters.
+    - num_vals: The number of values to be in the noise series.
+
+    Updates:
+    - The 'parameters_dictionary' will be updated with a 'noise series' key containing
+      the noise values based on the noise parameters provided by the user.
+
+    Raises:
+    - ValueError: If any of the provided noise parameters are invalid or missing.
+    """
+    unique_noise_key = check_for_unique_key(parameters_dictionary, [
+        'noise range, reciprocal log', 'noise range, reciprocal',
+        'noise value', 'estimate noise from data'
+    ])
+
+    # Function to validate noise range input
+    def validate_noise_range(noise_range):
+        if len(noise_range) != 2 or not all(isinstance(value, (int, float)) for value in noise_range):
+            raise ValueError(f"Invalid noise range {noise_range}. It must be a sequence of two numeric values.")
+
+    try:
+        if unique_noise_key == 'noise range, reciprocal log':
+            noise_range = parameters_dictionary[unique_noise_key]
+            validate_noise_range(noise_range)
+            parameters_dictionary['noise series'] = make_noise_distribution(
+                noise_range[0], noise_range[1], num_vals, logarithmic=True
+            )
+        elif unique_noise_key == 'noise range, reciprocal':
+            noise_range = parameters_dictionary[unique_noise_key]
+            validate_noise_range(noise_range)
+            parameters_dictionary['noise series'] = make_noise_distribution(
+                noise_range[0], noise_range[1], num_vals, logarithmic=False
+            )
+        elif unique_noise_key == 'noise value':
+            noise_value = parameters_dictionary[unique_noise_key]
+            if not isinstance(noise_value, (int, float)):
+                raise ValueError(f"Invalid noise value {noise_value}. It must be a numeric value.")
+            parameters_dictionary['noise series'] = [noise_value]
+        elif unique_noise_key == 'estimate noise from data':
+            try:
+                # Assuming 'estimate noise from data' is a file path to the CSV
+                t0_profile_strings = pd.read_csv(parameters_dictionary[unique_noise_key], squeeze=True)
+                t0_profile_y = t0_profile_strings.astype(float).tolist()
+            except Exception as e:
+                raise ValueError("Error reading CSV for noise estimation.") from e
+            cnr_est = fft_cnr(t0_profile_y)
+            sigma_n = np.power(cnr_est, -1)
+            parameters_dictionary['noise series'] = [sigma_n]
+    except KeyError as e:
+        raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
+
+def handle_profile_width_parameters(parameters_dictionary: Dict[str, Any]) -> float:
+    """
+    Extracts and converts the profile width parameter to Gaussian variance (sigma squared).
+
+    Parameters:
+    - parameters_dictionary: A dictionary containing the profile width parameters.
+
+    Returns:
+    - The converted profile width parameter as variance (sigma^2).
+
+    Raises:
+    - ValueError: If the profile width parameter is not provided or cannot be converted.
+    """
+    unique_width_key = check_for_unique_key(parameters_dictionary, ['FWHM_0', 'sigma_0'])
+
+    try:
+        if unique_width_key == 'FWHM_0':
+            # Convert FWHM to variance.
+            fwhm = parameters_dictionary['FWHM_0']
+            if not isinstance(fwhm, (int, float)):
+                raise ValueError(f"Invalid t0 FWHM value: {fwhm}. It must be a numeric value.")
+            return fwhm_to_sigma2(fwhm)
+        else:  # If the key is 't0 sigma'
+            sigma = parameters_dictionary['sigma_0']
+            if not isinstance(sigma, (int, float)):
+                raise ValueError(f"Invalid sigma_0 value: {sigma}. It must be a numeric value.")
+            return np.power(sigma, 2.)
+    except KeyError as e:
+        raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
+
+def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
+    """
+    Handles the diffusion parameters by either calculating the diffusion length
+    from the nominal diffusion coefficient and lifetime (tau), or vice-versa.
+
+    Parameters:
+    - parameters_dictionary: A dictionary containing the diffusion-related parameters.
+
+    Raises:
+    - ValueError: If an inconsistent set of parameters is provided.
+    """
+    keys = ['nominal diffusion coefficient', 'nominal lifetime (tau)', 'nominal diffusion length']
+    provided_keys = [key for key in keys if key in parameters_dictionary]
+    
+    # Check if both 'nominal diffusion coefficient' and 'nominal lifetime (tau)' are provided
+    if 'nominal diffusion coefficient' in provided_keys and 'nominal lifetime (tau)' in provided_keys:
+        if 'nominal diffusion length' in provided_keys:
+            raise ValueError("Please provide either 'nominal diffusion length' or both 'nominal diffusion coefficient' and 'nominal lifetime (tau)', not all three.")
+        diff = parameters_dictionary['nominal diffusion coefficient']
+        tau = parameters_dictionary['nominal lifetime (tau)']
+        # Ensure numeric values are provided
+        if not isinstance(diff, (int, float)) or not isinstance(tau, (int, float)):
+            raise ValueError("Both 'nominal diffusion coefficient' and 'nominal lifetime (tau)' must be numeric.")
+        parameters_dictionary['nominal diffusion length'] = np.sqrt(diff * tau)
+        
+    # Check if only 'diffusion length' is provided
+    elif 'nominal diffusion length' in provided_keys:
+        if len(provided_keys) > 1:
+            raise ValueError("You provided 'nominal diffusion length' along with diffusion coefficient and/or lifetime. Please provide either 'diffusion length' or both 'diffusion coefficient' and 'lifetime (tau)', not a combination.")
+        ld = parameters_dictionary['nominal diffusion length']
+        # Ensure a numeric value is provided
+        if not isinstance(ld, (int, float)):
+            raise ValueError("'nominal diffusion length' must be numeric.")
+        # Set nominal values of diffusion coefficient and lifetime based on diffusion length
+        # Note there are infinite combinations that would be valid, but the end results would
+        # be the same. Thus nom lifetime is arbitrarily set to 1, and nom diffusion coeff
+        # is arbitrarily set to the square of the diffusion length. 
+        parameters_dictionary['nominal diffusion coefficient'] = np.power(ld,2)
+        parameters_dictionary['nominal lifetime (tau)'] = 1
+
+    # In the case that nothing was provided:       
+    else:
+        raise ValueError("Provide nominal values for either 'nominal diffusion length', or both 'nominal diffusion coefficient' and 'nominal lifetime (tau)'.")
+
+def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Parses the parameters dictionary and sets up simulation parameters.
+
+    Parameters:
+    - parameters_dictionary: Dictionary with parameters for the simulation.
+
+    Returns:
+    - A dictionary with parsed and formatted simulation parameters.
+
+    Raises:
+    - KeyError: If a required parameter is missing from the dictionary.
+    - ValueError: If there are conflicting or incorrect types of parameters.
+    """
+    # Ensure that these required keys are present 
+    required_keys = ['number of runs', 'spatial width', 'pixel width', 'mean_0', 'amplitude_0', 'noise range, number of values']
+    for key in required_keys:
+        if key not in parameters_dictionary:
+            raise KeyError(f"The required parameter '{key}' is missing from the parameters dictionary.")
+    # Further checks for required parameters are performed within each helper function called below.
+
+    num_noise = parameters_dictionary['noise range, number of values']
+    parameters_dictionary['x array'] = make_x_axis(
+        parameters_dictionary['spatial width'], 
+        parameters_dictionary['pixel width'], 
+        parameters_dictionary['mean_0']
+    )
+
+    # Handle profile width and set up the Gaussian parameters
+    width_0 = handle_profile_width_parameters(parameters_dictionary)
+    amp_0, mean_0 = parameters_dictionary['amplitude_0'], parameters_dictionary['mean_0']
+    parameters_dictionary['t0 Gaussian sigma^2, amplitude, mean'] = [width_0, amp_0, mean_0]
+
+    # Delegate handling of other parameters to dedicated functions
+    handle_time_parameters(parameters_dictionary)
+    handle_noise_parameters(parameters_dictionary, num_noise)
+    handle_diffusion_parameters(parameters_dictionary)
+
+    return parameters_dictionary
 
 #################################################################################
-# look at the parameters input by the user and set them up to pass to the iterator
-def parameter_parser(parameters_dictionary):
-
-    # most parameters are just copied in
-    result_dictionary = parameters_dictionary
-
-    num_runs = parameters_dictionary['number of runs']
-
-    # set up the x-axis based on user selection
-    wid = parameters_dictionary['spatial width']
-    pix = parameters_dictionary['pixel width']
-    mu = parameters_dictionary['t0 mean']
-    result_dictionary['x array'] = make_x_axis(wid, pix, mu)
-
-    # set up the time series based on user selection
-    # first check to see if more than one parameter were provided, or if none were provided
-    time_provided = [
-        'time range' in parameters_dictionary.keys(),
-        'time series' in parameters_dictionary.keys()
-    ]
-    if time_provided.count(True) > 1:
-        print('More than one time parameter was provided. Please only provide one.')
-        return
-    elif time_provided.count(True) == 0:
-        print('No time parameters provided.')
-        return
-    # if we are given a range, generate a series and get rid of the range
-    elif 'time range' in parameters_dictionary.keys():
-        tix_start, tix_end, tix_steps = \
-            parameters_dictionary['time range'][0], \
-            parameters_dictionary['time range'][1], \
-            parameters_dictionary['time range'][2]
-        result_dictionary['time series'] = timeline(tix_start, tix_end, tix_steps)
-        del result_dictionary['time range']
-    # else, we already have a series, so nothing more to do
-    
-    # generate noise sigma values as a series
-    # first check to see if more than one were provided, or if none were provided
-    noise_provided = [
-        'noise range, reciprocal log' in parameters_dictionary.keys(),
-        'noise range, reciprocal' in parameters_dictionary.keys(),
-        'noise value' in parameters_dictionary.keys(),
-        'estimate noise from data' in parameters_dictionary.keys()
-    ]
-    if noise_provided.count(True) > 1:
-        print('More than one noise parameter was provided. Please only provide one.')
-        return
-    elif noise_provided.count(True) == 0:
-        print('No noise parameters provided.')
-        return
-    elif 'noise value' in parameters_dictionary.keys():
-        result_dictionary['noise series'] =  [parameters_dictionary['noise value']] * num_runs
-    elif 'estimate noise from data' in parameters_dictionary.keys():
-        # read the file
-        t0_profile_strings = pd.read_csv(parameters_dictionary['estimate noise from data'])
-        # convert to floats
-        t0_profile_y = [float(y) for y in t0_profile_strings]
-        # get the CNR estimate
-        cnr = fft_snr_hsc([t0_profile_y])
-        # calculate the noise sigma based on the CNR
-        sigma_n = np.power(cnr['snrs_float'][0],-1)
-        # store the result
-        result_dictionary['noise series'] =  [sigma_n] * num_runs
-    elif 'noise range, reciprocal log' in parameters_dictionary.keys():
-        noise_low, noise_high, num = \
-            parameters_dictionary['noise range, reciprocal log'][0], \
-            parameters_dictionary['noise range, reciprocal log'][1], \
-            num_runs
-        result_dictionary['noise series'] = make_invexp_noise_dist(noise_low, noise_high, num)
-    elif 'noise range, reciprocal' in parameters_dictionary.keys():
-        noise_low, noise_high, num = \
-            parameters_dictionary['noise range, reciprocal'][0], \
-            parameters_dictionary['noise range, reciprocal'][1], \
-            num_runs
-        result_dictionary['noise series'] = make_inv_noise_dist(noise_low, noise_high, num)
-    
-    # profile width info
-    # check to see if fwhm or sigma was given, or if both or neither were given
-    t0width_provided = [
-        't0 FWHM' in parameters_dictionary.keys(),
-        't0 sigma' in parameters_dictionary.keys(),
-    ]
-    if t0width_provided.count(True) > 1:
-        print('More than one initial profile width parameter provided. Please only provide one.')
-        return
-    elif t0width_provided.count(True) == 0:
-        print('No profile width parameter provided.')
-        return
-    elif 't0 FWHM' in parameters_dictionary.keys():
-        t0width = fwhm_to_sigma(parameters_dictionary['t0 FWHM'])
-    else:
-        t0width = parameters_dictionary['t0 sigma']
-
-    t0amp, t0mean = parameters_dictionary['t0 amplitude'], parameters_dictionary['t0 mean']
-    result_dictionary['t0 Gaussian sigma, amplitude, mean'] = [t0width, t0amp, t0mean]
-
-    # diffusion length info
-    # check to see if diff + tau were given, or if L_D was given, or if both or neither were given
-    ld_provided = [
-        'diffusion coefficient' in parameters_dictionary.keys(),
-        'lifetime (tau)' in parameters_dictionary.keys(),
-        'diffusion length' in parameters_dictionary.keys()
-    ]
-    if ((ld_provided[0] == True) and (ld_provided[1] == True)) ^ (ld_provided[2] == True):
-        if (ld_provided[0] == True) and (ld_provided[1] == True):
-            diff = parameters_dictionary['diffusion coefficient']
-            tau =  parameters_dictionary['lifetime (tau)']
-            result_dictionary['diffusion length'] = np.sqrt(diff * tau)
-        else:
-            ld = result_dictionary['diffusion length']
-            parameters_dictionary['diffusion coefficient'] = np.power(ld,2)
-            parameters_dictionary['lifetime (tau)'] = 1
-    else:
-        print('Provide nominal values for either a) the diffusion length, or b) the diffusion coefficient and lifetime.')
-
-    return result_dictionary
-
-#################################################################################
-# print to console and append to summary file
 def print_and_append(summary_filename, text):
-    # print it
+    """
+    Prints the given text to the console and appends it to the specified file.
+    
+    Parameters:
+    summary_filename (str): The path to the file where text should be appended.
+    text (str): The text to be printed and appended to the file.
+    """
+    # Print the text to the console
     print(text)
-    # appending to file
-    with open(summary_filename, 'a') as file1:
-        file1.write(text + '\n')
+    
+    # Try appending the text to the specified file
+    try:
+        with open(summary_filename, 'a') as file1:
+            file1.write(text + '\n')
+    except IOError as e:
+        print(f"An error occurred while writing to the file: {e}")
 
 ##################################
 # model run management functions #
 ##################################
 
-#################################################################################
-# Iterate through variable parameters to generate a large number of scans
-def nds_runner(parameters_filename):
+###########################################################
+# Generate simulations using parameters
+def dice_runner(parameters_filename):
+    """
+    Execute a series of simulations based on parameters provided in a file.
+
+    This function reads simulation parameters from a file, initializes the simulation
+    environment, and executes multiple simulation runs. It collates results from 
+    individual simulations, performs analysis, and exports summary data.
+
+    Parameters:
+    - parameters_filename (str): Path to a text file containing simulation parameters.
+
+    Returns:
+    - result_dictionary (dict): A dictionary containing indices, parameters, run results,
+                                collated results, analysis, and a filename slug for output.
+
+    Raises:
+    - FileNotFoundError: If the parameters file does not exist or is unreadable.
+    - KeyError: If the expected keys are not present in the parameters file.
+    - ValueError: If parameter values are not of the expected type or out of expected range.
+    - IOError: If there is an error during file writing operations.
+
+    Note:
+    - This function uses multiprocessing if enabled in the parameters to speed up simulations.
+    """
 
     # open and process the parameters
     parameters_dictionary = open_parameters(parameters_filename)
 
-    # aliases of dictionary entries for brevity
-    ##### Units #####
+    # Units
     l_unit = parameters_dictionary['length unit']
     t_unit= parameters_dictionary['time unit']
 
-    ##### Number of simulation iterations #####
+    # Number of simulation runs per parameter set
     numruns = parameters_dictionary['number of runs']
 
-    ##### Spatial parameters #####
+    # Spatial parameters
     wid = parameters_dictionary['spatial width']
     pix = parameters_dictionary['pixel width']
     x_axis = parameters_dictionary['x array']
@@ -281,41 +619,45 @@ def nds_runner(parameters_filename):
     tix = len(t_axis)
 
     # Gaussian parameters for t0
-    sig, amp, mu = parameters_dictionary['t0 Gaussian sigma, amplitude, mean']
-    ld = parameters_dictionary['diffusion length']
-    diff = parameters_dictionary['diffusion coefficient']
-    tau = parameters_dictionary['lifetime (tau)']
+    sig2_0, amp_0, mu_0 = parameters_dictionary['t0 Gaussian sigma^2, amplitude, mean']
+    ld = parameters_dictionary['nominal diffusion length']
+    diff = parameters_dictionary['nominal diffusion coefficient']
+    tau = parameters_dictionary['nominal lifetime (tau)']
 
     # series of standard deviations of noise to be added
-    noise_sigmas = parameters_dictionary['noise series']
+    noise_series = parameters_dictionary['noise series']
+    noise_num = len(noise_series)
+
+    # calculate the total number of runs
+    runs_total = numruns * noise_num
 
     # do we keep all the profile data in memory or just the analysis results
-    verbose_or_brief = parameters_dictionary['verbose or brief']
+    retain_profile_data = parameters_dictionary['retain profile data']
 
-    # precision level
-    precision_level = parameters_dictionary['precision level']
+    # proximity level
+    proximity_level = parameters_dictionary['proximity level']
 
     # initialize the result dictionary
     result_dictionary = {
         'indices': {
-            'time_axis': t_axis, 
-            'x_axis': x_axis,
-            'all_noise_sigmas': noise_sigmas,
-            'total_runs': numruns
+            'time axis': t_axis, 
+            'x axis': x_axis,
+            'noise sigmas': noise_series,
+            'total runs': runs_total
         },
         'parameters':{
-            't0_sigma': sig,
-            't0_amplitude': amp,
-            't0_mu': mu,
-            'scan_width': wid,
-            'scan_pixels': pix,
-            'diffusion_length': ld,
-            'diffusion_coeff': diff,
-            'lifetime': tau,
-            'length_units': l_unit,
-            'time_units': t_unit,
+            'sigma^2_0': sig2_0,
+            'amplitude_0': amp_0,
+            'mu_0': mu_0,
+            'scan width': wid,
+            'scan pixels': pix,
+            'nominal diffusion length': ld,
+            'nominal diffusion coeff': diff,
+            'nominal lifetime': tau,
+            'length units': l_unit,
+            'time units': t_unit,
         },
-        'run_results': {},
+        'run results': {},
     }
 
     # aliases for subdictionaries
@@ -324,41 +666,49 @@ def nds_runner(parameters_filename):
 
     # parameter text slugs for file naming
     file_prefix = parameters_dictionary['filename slug']
-    ld_txt = str(round(parameters_dictionary['diffusion length'], decimals=3))
-    cnr_txt = str(round(1/parameters_dictionary['noise series'][0], decimals=3))
+    ld_txt = str(round(parameters_dictionary['nominal diffusion length'], 3))
+    cnr_txt = str(round(1/parameters_dictionary['noise series'][0], 3))
     pix_txt =  str(parameters_dictionary['pixel width'])
     tix_txt = str(len(parameters_dictionary['time series']))
     runs_txt = str(parameters_dictionary['number of runs'])
 
+    # the filename incorporates user-specified text along with several parameters for reference
     filename_slug = file_prefix + '_LD-' + ld_txt + '_CNR-' + cnr_txt + "_px-" + pix_txt.rjust(4, "0") + "_tx-" + tix_txt.rjust(3,"0") + '_runs-' + runs_txt
     result_dictionary['filename slug'] = filename_slug
     summary_filename = filename_slug + '_summary.txt'
+    result_dictionary['parameters']['summary filename'] = summary_filename
     result_filename = filename_slug + '_results.csv'
+    result_dictionary['parameters']['result filename'] = result_filename
 
     result_dictionary['image type'] = parameters_dictionary['image type']
     
-    # make array of run numbers corresponding to noise sigmas for iterative simulations
-    run_numbers = list(range(numruns))
-    parameter_sets = zip(run_numbers, noise_sigmas)
-
+    # Make array of parameters for iterative simulations, indexed by run number.
+    # This is only currently set up for handling multiple noise values.
+    run_numbers = list(range(runs_total))
+    noise_list = np.concatenate([np.repeat(noise, numruns) for noise in noise_series])
+    parameter_sets = zip(run_numbers, noise_list)
+    
     # create summary text file and record parameters
-    print_and_append(summary_filename, 'Running ' + str(indices['total_runs']) + ' simulations with the following parameters (rounded):')
+    print_and_append(summary_filename, 'Running ' + str(indices['total runs']) + ' simulations with the following parameters (rounded):')
     print_and_append(summary_filename, '')
     print_and_append(summary_filename, 'Spatial width: ' + str(wid) + ' ' + l_unit)
     print_and_append(summary_filename, 'Pixel width: ' + str(pix) + ' pixels')
     print_and_append(summary_filename, 'Number of time frames: ' + str(tix) + ' frames')
-    print_and_append(summary_filename, 'Initial distribution sigma: ' + str(round(sig, decimals=3)) + ' ' + l_unit)
-    print_and_append(summary_filename, 'Nominal diffusion length: ' + str(round(ld, decimals=3)) + ' ' + l_unit)
-    print_and_append(summary_filename, 'Nominal diffusion coefficient: ' + str(round(diff, decimals=3)) + ' ' + l_unit + '^2 per ' + t_unit )
+    print_and_append(summary_filename, 'Noise stdev: ' + str(round(noise_series[0], 3)))
+    print_and_append(summary_filename, 'Initial contrast-to-noise ratio (CNR): ' + str(round(1/noise_series[0], 3)))
+    print_and_append(summary_filename, 'Initial profile sigma^2: ' + str(round(sig2_0, 3)) + ' ' + l_unit + '^2')
+    print_and_append(summary_filename, 'Nominal diffusion length: ' + str(round(ld, 3)) + ' ' + l_unit)
+    print_and_append(summary_filename, 'Nominal diffusion coeff: ' + str(round(diff, 5)) + ' ' + l_unit + '^2 per ' + t_unit )
     print_and_append(summary_filename, 'Nominal lifetime: ' + str(tau) + ' ' + t_unit)
-    print_and_append(summary_filename, 'Noise standard deviation: ' + str(round(noise_sigmas[0], decimals=3)))
-    print_and_append(summary_filename, 'Initial contrast-to-noise ratio (CNR): ' + str(round(1/noise_sigmas[0], decimals=3)))
     print_and_append(summary_filename, '')
 
-    result = [scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, verbose_or_brief) for this_run, this_noise_sigma in parameter_sets]
-                
+    if parameters_dictionary['multiprocessing'] == 1:
+        result = Parallel(n_jobs=-1)(delayed(scan_runner)(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data) for this_run, this_noise_sigma in parameter_sets)
+    else:    
+        result = [scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data) for this_run, this_noise_sigma in parameter_sets]
+ 
     # update the result dictionary
-    [result_dictionary['run_results'].update(this_result) for this_result in result]
+    [result_dictionary['run results'].update(this_result) for this_result in result]
 
     # Collate data from runs
     print_and_append(summary_filename, 'Model runs completed. Collating results.')
@@ -366,54 +716,72 @@ def nds_runner(parameters_filename):
     collated_results = pd.DataFrame(
         np.asarray(
             [
-            [result_dictionary['run_results'][run]['run'], 
-             result_dictionary['run_results'][run]['run_parameters']['run_diff'],
-             result_dictionary['run_results'][run]['run_parameters']['run_tau'],
-             result_dictionary['run_results'][run]['run_parameters']['run_ld'],
-             1/result_dictionary['run_results'][run]['run_parameters']['run_noise'], 
-             result_dictionary['run_results'][run]['fft_snr_hsc']['snrs_float'][0],
-             result_dictionary['run_results'][run]['nominal_profiles']['parameters_t']['sigmas'][0],
-             result_dictionary['run_results'][run]['noisy_profile_fits']['parameter_estimates']['sigmas_t'][0],
-             result_dictionary['run_results'][run]['diffusion']['ols'],
-             result_dictionary['run_results'][run]['diffusion']['wls']] 
-             for run in result_dictionary['run_results'].keys()
+            [result_dictionary['run results'][run]['run'], 
+            result_dictionary['run results'][run]['run parameters']['nominal diffusion coefficient'],
+            result_dictionary['run results'][run]['run parameters']['nominal lifetime'],
+            result_dictionary['run results'][run]['run parameters']['nominal diffusion length'],
+            1/result_dictionary['run results'][run]['run parameters']['noise stdev'], 
+            result_dictionary['run results'][run]['cnr_0 estimate'],
+            result_dictionary['run results'][run]['nominal profiles']['parameters_t']['sigma^2_t'][0],
+            result_dictionary['run results'][run]['noisy profile fits']['sigma^2_t estimates'][0],
+            result_dictionary['run results'][run]['diffusion']['unweighted fit']['MSD_t slope estimate'],
+            result_dictionary['run results'][run]['diffusion']['unweighted fit']['MSD_t slope std error'],
+            result_dictionary['run results'][run]['diffusion']['unweighted fit']['intercept estimate'],
+            result_dictionary['run results'][run]['diffusion']['unweighted fit']['intercept standard error'],
+            result_dictionary['run results'][run]['diffusion']['weighted fit']['MSD_t slope estimate'],
+            result_dictionary['run results'][run]['diffusion']['weighted fit']['MSD_t slope std error'],
+            result_dictionary['run results'][run]['diffusion']['weighted fit']['intercept estimate'],
+            result_dictionary['run results'][run]['diffusion']['weighted fit']['intercept standard error'],
+            ] 
+            for run in result_dictionary['run results'].keys()
             ]),
             columns=['run number', 
-                     'nominal diffusion', 'nominal lifetime', 'nominal diffusion length', 
-                     'nominal CNR', 'estimated CNR', 
-                     'nominal initial sigma', 'estimated initial sigma',
-                     'OLS fit diffusion', 'WLS fit diffusion'])
-    
+                    'nominal diffusion coeff', 'nominal lifetime', 'nominal diffusion length', 
+                    'nominal CNR', 'estimated CNR', 
+                    'nominal sigma^2_0', 'estimated sigma^2_0',
+                    'unweighted fit diffusion slope', 'unweighted fit diffusion slope stderr', 
+                    'unweighted fit intercept', 'unweighted fit intercept stderr', 
+                    'weighted fit diffusion slope', 'weighted fit diffusion slope stderr',
+                    'weighted fit intercept', 'weighted fit intercept stderr', 
+                    ]
+        )
 
     print_and_append(summary_filename, 'Converting diffusion constants to conventional units')
     print_and_append(summary_filename,'')
-    # convert diffusion to constant in cm^2 s^-1
-    ureg = UnitRegistry()
 
-    true_slopes = [slope * ureg(l_unit) ** 2 / ureg(t_unit) for slope in collated_results['nominal diffusion']]
-    true_dcs = [slope.to(ureg('centimeter squared') / ureg('second')) for slope in true_slopes]
-    true_dcs_mag = [true_dc.magnitude for true_dc in true_dcs]
+    # convert the nominal diffusion coefficient to a MSD(t) slope
+    nom_slopes = [diff * 2. for diff in collated_results['nominal diffusion coeff']]
 
-    collated_results['nominal diffusion in cm2/s'] = true_dcs_mag
+    # get the fitted slopes with user defined units
+    fit_wls_slopes = [slope for slope in collated_results['weighted fit diffusion slope']]
+    fit_wls_slope_stderrs = [stderr for stderr in collated_results['weighted fit diffusion slope stderr']]
+    fit_ols_slopes = [slope for slope in collated_results['unweighted fit diffusion slope']]
+    fit_ols_slope_stderrs = [stderr for stderr in collated_results['unweighted fit diffusion slope stderr']]
 
-    fit_wls_slopes = [slope * ureg(l_unit) ** 2 / ureg(t_unit) for slope in collated_results['WLS fit diffusion']]
-    fit_wls_dcs = [slope.to(ureg('centimeter squared') / ureg('second')) / 2. for slope in fit_wls_slopes]
-    fit_wls_dcs_mag = [fit_dc.magnitude for fit_dc in fit_wls_dcs]
+    # convert to diffusion constant in conventional units of cm^2 s^-1
+    collated_results['nominal diffusion coeff [cm^2/s]'] = [
+        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in nom_slopes
+    ]
+    collated_results['unweighted fit diffusion coeff [cm^2/s]'] = [
+        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slopes
+    ]
+    collated_results['unweighted fit diffusion stderr [cm^2/s]'] = [
+        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slope_stderrs
+    ]
+    collated_results['weighted fit diffusion coeff [cm^2/s]'] = [
+        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_wls_slopes
+    ]
+    collated_results['weighted fit diffusion stderr [cm^2/s]'] = [
+        slope_to_diffusion_constant(stderr, l_unit, t_unit) for stderr in fit_wls_slope_stderrs
+    ]
 
-    fit_ols_slopes = [slope * ureg(l_unit) ** 2 / ureg(t_unit) for slope in collated_results['OLS fit diffusion']]
-    fit_ols_dcs = [slope.to(ureg('centimeter squared') / ureg('second')) / 2. for slope in fit_ols_slopes]
-    fit_ols_dcs_mag = [fit_dc.magnitude for fit_dc in fit_ols_dcs]
-
-    collated_results['WLS fit diffusion in cm2/s'] = fit_wls_dcs_mag
-    collated_results['OLS fit diffusion in cm2/s'] = fit_ols_dcs_mag
-
-    print_and_append(summary_filename, 'Analyzing precision')
-    result_dictionary['analysis'] = estimates_precision(collated_results, precision_level)
-    wls_proxpct = result_dictionary['analysis']['WLS % fits within proximity']
-    ols_proxpct = result_dictionary['analysis']['OLS % fits within proximity']
-    print_and_append(summary_filename,'Portion of fits where D_fit / D_nominal = 1 ± ' + str(precision_level) + ': ')
-    print_and_append(summary_filename,'----- from WLS: ' + str(round(wls_proxpct, decimals=2)))
-    print_and_append(summary_filename,'----- from OLS: ' + str(round(ols_proxpct, decimals=2)))
+    print_and_append(summary_filename, 'Analyzing precision and accuracy')
+    result_dictionary['analysis'] = estimates_precision(collated_results, proximity_level)
+    ols_proxpct = result_dictionary['analysis']['% fits within proximity']['unweighted fit']
+    wls_proxpct = result_dictionary['analysis']['% fits within proximity']['weighted fit']
+    print_and_append(summary_filename,'Portion of fits where D_fit / D_nominal = 1 ± ' + str(proximity_level) + ':')
+    print_and_append(summary_filename, '-- Unweighted fit: ' + str(round(ols_proxpct, 2)))
+    print_and_append(summary_filename, '-- Weighted fit: ' + str(round(wls_proxpct, 2)))
     print_and_append(summary_filename,'')
 
     #store collated results
@@ -422,87 +790,143 @@ def nds_runner(parameters_filename):
     # export file of collated results
     # filename includes several parameters for identification
     print_and_append(summary_filename, 'Exporting result data')
-    print_and_append(summary_filename, 'Filename: ' + result_filename)
+
+    print_and_append(summary_filename, 'Collated CSV: ' + result_filename)
     collated_results.to_csv(result_filename, index = False)
+
     print_and_append(summary_filename, '')
     print_and_append(summary_filename, 'Done!')
     return result_dictionary
 
 #################################################################################
-# Create one scan, generating Gaussian PSF fits and linear diffusion fits
-def scan_runner(indices, parameters, ld, this_diff, this_tau, this_noise, this_run, verbose_or_brief):
+# Create one temporal series of Gaussian profiles, 
+# add noise to each profile in the series,
+# perform Gaussian fits and extract the sigma^2 parameter and its stderr,
+# and perform a linear fit for the series of fitted sigma^2 parameters.
+def scan_runner(indices, parameters, ld, this_diff, this_tau, this_noise, this_run, retain_profile_data):
+    """
+    Execute a simulation scan and generate a dictionary of results including Gaussian sigma^2 fits
+    and linear MSD(t) fits for a given set of parameters.
+
+    A "scan" or "run" refers to a single run of the model, which produces a 
+    temporally evolved series of Gaussian distributions with decay, diffusion, and noise.
+
+    Parameters:
+    - indices (dict): A dictionary containing 'x axis' and 'time axis' as keys with corresponding values.
+    - parameters (dict): A dictionary with the initial simulation parameters such as 't0_sigma^2', 't0_amplitude', etc.
+    - ld (float): Nominal diffusion length for the current run.
+    - this_diff (float): Nominal diffusion coefficient for the current run.
+    - this_tau (float): Nominal lifetime for the current run.
+    - this_noise (float): Stdev of normally-distributed noise to be added to the simulated profiles.
+    - this_run (int): Identifier for the current simulation run.
+    - retain_profile_data (bool): Flag indicating whether to retain profile data in the results.
+
+    Returns:
+    - result_dictionary (dict): A comprehensive dictionary containing the results of the simulation
+                                run including profile fits, CNR estimates, and diffusion fits.
+
+    Raises:
+    - ValueError: If input parameters are out of the expected ranges or in incorrect formats.
+    - RuntimeError: If the computation fails due to external library errors or internal logic errors.
+
+    Notes:
+    - The function is part of a larger simulation suite and expects specific input formats.
+    - If 'retain_profile_data' is False, profile data will be removed from the result to save memory.
+    """
     # run a single scan and generate a comprehensive dictionary of results
     # result dictionary is produced for each scan and placed as a subdictionary for the run
 
     # alias for brevity
-    x_axis = indices['x_axis']
-    time_axis = indices['time_axis']
+    x_axis = indices['x axis']
+    time_axis = indices['time axis']
 
     # initialize the run subdictionary and store the parameters for this run
     result_dictionary = {'run_' + str(this_run): {
                             'run': this_run,
-                            'run_parameters': {
-                                'run_diff': this_diff,
-                                'run_tau': this_tau,
-                                'run_ld': ld, 
-                                'run_noise': this_noise
+                            'run parameters': {
+                                'nominal diffusion coefficient': this_diff,
+                                'nominal lifetime': this_tau,
+                                'nominal diffusion length': ld, 
+                                'noise stdev': this_noise
                             }
                             }
                         }
     
-    # make a dictrionary of parameters to pass for diffusion and decay generation
+    # make a dictionary of parameters to pass for diffusion and decay generation
     diff_decay_parameters = {
-        'x_axis': x_axis,
-        'time_axis': time_axis,
-        't0_sigma': parameters['t0_sigma'],
-        't0_amplitude': parameters['t0_amplitude'],
-        't0_mu': parameters['t0_mu'],
-        'diff': this_diff,
-        'tau': this_tau,
+        'x axis': x_axis,
+        'time axis': time_axis,
+        'sigma^2_0': parameters['sigma^2_0'],
+        'amplitude_0': parameters['amplitude_0'],
+        'mu_0': parameters['mu_0'],
+        'nominal diffusion coefficient': this_diff,
+        'nominal lifetime': this_tau,
     }
     # generate pure Gaussian PSF profiles
     nominal_profiles = make_diffusion_decay(diff_decay_parameters)
 
     # add noise to the profiles
-    noisy_profiles = add_noise(this_noise, nominal_profiles['y_values_tx'])
+    noisy_profiles = add_noise(this_noise, nominal_profiles['y_values_t'])
+    # estimate the CNR at t0
+    CNR_0_est = fft_cnr(noisy_profiles['y_values_t'][0])
 
     # fit the noisy profiles
-    noisy_profile_fits = gauss_fitting(x_axis, noisy_profiles['y_values_tx'])
+    noisy_profile_fits = gauss_fitting(x_axis, noisy_profiles['y_values_t'])
 
-    # get the fittted sigmas and stdevs of sigmas of the Gaussians
-    gaussfit_sigmas = noisy_profile_fits['parameter_estimates']['sigmas_t']
-    gaussfit_sigmas_stdevs = list(zip(
-        noisy_profile_fits['parameter_estimates']['sigmas_t'], 
-        noisy_profile_fits['parameter_stdevs']['sigma_stdevs']
+    # get the fittted sigmas and stderrs of sigmas of the Gaussians
+    gaussfit_sigma2_t = noisy_profile_fits['sigma^2_t estimates']
+    gaussfit_sigma2_t_stderrs = list(zip(
+        noisy_profile_fits['sigma^2_t estimates'], 
+        noisy_profile_fits['sigma^2_t standard errors']
     ))
 
     # calculate the weights for diffusion fitting
-    # zero weight if sigma or stdev are zero
-    # otherwise, weight is the reciprocal of the variance of the fitted variance, normalized
-    weights = [np.power(2. * sigma * stdev, -2.) if (sigma !=0 and stdev != 0) else 0 for sigma,stdev in gaussfit_sigmas_stdevs]
-    weights = [weight/np.max(weights) for weight in weights]
-    
-    fft_snr_hsc_dict = fft_snr_hsc(noisy_profiles['y_values_tx'])
-    # snrs = fft_snr_hsc_dict['snrs_float']
+    # -- if sigma or stdev are zero, that is bad, so give zero weight
+    # -- otherwise, weight is calculated as:
+    # -- normalized reciprocal of the relative variance of the fitted MSD
+    weights_rel = [np.power(stderr / sigma2, -2.) if (sigma2 !=0 and stderr != 0) else 0 for sigma2,stderr in gaussfit_sigma2_t_stderrs]
+    # normalize so the sum of the weights is unity
+    weights_rel = [weight/np.sum(weights_rel) for weight in weights_rel]
 
-    # get the OLS and WLS fits of the change in sigma^2
-    diff_ols_fit = diffusion_ols_fit(time_axis, gaussfit_sigmas)
-    diff_wls_fit = diffusion_wls_fit(time_axis, gaussfit_sigmas, weights)
+    # get the unweighted (OLS) and weighted (WLS) fits of the MSD (change in sigma^2)
+    ols_fit_covar = diffusion_ols_fit(time_axis, gaussfit_sigma2_t)
+    ols_fit = ols_fit_covar['MSD_t slope estimate']
+    ols_intercept = ols_fit_covar['intercept estimate']
+    ols_stderr = ols_fit_covar['MSD_t slope std error']
+    ols_intercept_stderr = ols_fit_covar['intercept standard error']
 
-    # delete the profile data if brief
-    if verbose_or_brief == 'brief':
-        del noisy_profiles['y_values_tx']
-        del nominal_profiles['y_values_tx']
+    wls_fit_covar = diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights_rel)
+    wls_fit = wls_fit_covar['MSD_t slope estimate']
+    wls_intercept = wls_fit_covar['intercept estimate']
+    wls_stderr = wls_fit_covar['MSD_t slope std error']
+    wls_intercept_stderr = wls_fit_covar['intercept standard error']
 
-    result_dictionary['run_' + str(this_run)].update({'nominal_profiles': nominal_profiles, 
-                              'noisy_profiles': noisy_profiles,
-                              'noisy_profile_fits': noisy_profile_fits,
-                              'fft_snr_hsc': fft_snr_hsc_dict,
-                              'diffusion': {'ols': diff_ols_fit,
-                                            'wls': diff_wls_fit,
-                                            'weights': weights}
-                              })
+    # delete the profile data if not retaining
+    if retain_profile_data != 1:
+        del noisy_profiles['y_values_t']
+        del nominal_profiles['y_values_t']
 
+    result_dictionary['run_' + str(this_run)].update({
+        'nominal profiles': nominal_profiles, 
+        'noisy profiles': noisy_profiles,
+        'noisy profile fits': noisy_profile_fits,
+        'cnr_0 estimate': CNR_0_est,
+        'diffusion': {
+            'unweighted fit': {
+                'MSD_t slope estimate': ols_fit,
+                'MSD_t slope std error': ols_stderr,
+                'intercept estimate': ols_intercept,
+                'intercept standard error': ols_intercept_stderr,
+                },
+            'weighted fit': {
+                'MSD_t slope estimate': wls_fit,
+                'MSD_t slope std error': wls_stderr,
+                'intercept estimate': wls_intercept,
+                'intercept standard error': wls_intercept_stderr,
+                'weights': weights_rel,
+                },
+            }
+        })
     return result_dictionary
 
 ############################################################
@@ -525,112 +949,156 @@ def scan_runner(indices, parameters, ld, this_diff, this_tau, this_noise, this_r
 #################################################################################
 # Make a temporal series of Gaussians with diffusion and decay
 def make_diffusion_decay(parameters):
+    """
+    Generate diffusion and decay profiles for Gaussian point spread functions (PSF) over time.
+
+    Parameters:
+    - parameters (dict): Dictionary containing the following keys:
+        'x axis': array_like, positions at which to evaluate the Gaussian.
+        'time axis': array_like, time points for the decay and diffusion simulation.
+        'sigma^2_0': float, initial variance of the Gaussian at t=0.
+        'amplitude_0': float, initial amplitude of the Gaussian at t=0.
+        'mu_0': float, initial mean position of the Gaussian at t=0.
+        'nominal diffusion coefficient': float, nominal diffusion coefficient.
+        'nominal lifetime': float, nominal lifetime.
+
+    Returns:
+    - result_dictionary (dict): Dictionary with the calculated parameters and profiles at each time point.
+
+    Raises:
+    - ValueError: If the input parameters are not in the expected ranges or missing required keys.
+    """
 
     # aliases of relevant parameters
-    x_axis = parameters['x_axis']
-    time_axis = parameters['time_axis']
+    x_axis = parameters['x axis']
+    time_axis = parameters['time axis']
 
-    t0_sigma = parameters['t0_sigma']
-    t0_amplitude = parameters['t0_amplitude']
-    t0_mu = parameters['t0_mu']
+    t0_sigma2 = parameters['sigma^2_0']
+    t0_amplitude = parameters['amplitude_0']
+    t0_mu = parameters['mu_0']
 
-    this_diff = parameters['diff']
-    this_tau = parameters['tau']
+    this_diff = parameters['nominal diffusion coefficient']
+    this_tau = parameters['nominal lifetime']
 
     # initialize result dictionary for this scan
     result_dictionary = {
         'parameters_t': {
-            'amplitudes': [], 'sigmas': [], 'fwhms': [], 'mus':[], 'integrated_intensities': []}
+            'amplitude_t': [], 'sigma^2_t': [], 'fwhm_t': [], 'mu_t':[], 'integrated intensity_t': []}
     }
     
     # calculate initial integrated intensity
-    t0_ii = integrated_intensity(t0_sigma, t0_amplitude)
+    t0_ii = integrated_intensity(t0_sigma2, t0_amplitude)
     
     # calculate integrated intensities with decay
-    kdis = kinetic_decay_intensities(t0_ii, this_tau, time_axis)
-    result_dictionary['parameters_t']['integrated_intensities'] = kdis
+    ii_t = kinetic_decay_intensities(t0_ii, this_tau, time_axis)
+    result_dictionary['parameters_t']['integrated intensity_t'] = ii_t
 
     # calculate sigmas with diffusion
-    dsigs = diffusion_sigmas(this_diff, t0_sigma, time_axis)
-    result_dictionary['parameters_t']['sigmas'] = dsigs
+    sig2_t = diffusion_sigma2_t(this_diff, t0_sigma2, time_axis)
+    result_dictionary['parameters_t']['sigma^2_t'] = sig2_t
 
     # calcuilate and store fwhms with diffusion
-    result_dictionary['parameters_t']['fwhms'] = [sigma_to_fwhm(this_sig) for this_sig in dsigs]
+    result_dictionary['parameters_t']['fwhm_t'] = [sigma2_to_fwhm(this_sig2) for this_sig2 in sig2_t]
 
     # calculate amplitudes from intensities and sigmas
-    intensity_sigs = list(zip(kdis,dsigs)) # array of decay intensities and diffusion sigmas for iterating
-    amps = [intensity / np.sqrt(2. * np.pi * np.power(sigma,2)) for (intensity,sigma) in intensity_sigs]
-    result_dictionary['parameters_t']['amplitudes'] = amps
+    intensity_sig2_t = list(zip(ii_t,sig2_t)) # array of decay intensities and diffusion sigmas for iterating
+    amp_t = [intensity / np.sqrt(2. * np.pi * sig2) for (intensity,sig2) in intensity_sig2_t]
+    result_dictionary['parameters_t']['amplitude_t'] = amp_t
 
     # calculate y-values of Gaussians for each time point
-    times_amps_sigs = list(zip(time_axis, amps, dsigs))     # array of times, amplitudes, and sigmas for iterating
-    y_values = []                                           # initialize y-values array
-    for this_time, this_amp, this_sig in times_amps_sigs:               # iterate over each time point
-        this_gaussian = gaussian_psf(x_axis, this_sig, t0_mu, this_amp) # make the gaussian for this time
+    time_amp_sig2_t = list(zip(time_axis, amp_t, sig2_t))               # array of times, amplitudes, and sigmas for iterating
+    y_values = []                                                       # initialize y-values array
+    for this_time, this_amp, this_sig2 in time_amp_sig2_t:              # iterate over each time point
+        this_gaussian = gaussian(x_axis, t0_mu, this_sig2, this_amp)    # make the gaussian for this time
         y_values.append(this_gaussian)                                  # store the gaussian profile
 
-    result_dictionary.update({'y_values_tx': y_values})
+    result_dictionary.update({'y_values_t': y_values})
 
     return result_dictionary
 
-#################################################################################
-# Create a Gaussian distribution:
-def gaussian_psf(x_axis, sigma, mu, amp):
-    y_values = gaussian(x_axis, mu, sigma, amp)
-    return y_values
-
-#################################################################################
-# Calculate integrated intensities with decay
 def kinetic_decay_intensities(initial_integrated_intensity, tau, t_values):
+    """
+    Calculate the kinetic decay of integrated intensities over time.
+    Integrated because it is the sum of intensity under the Gaussian curve.
+
+    Parameters:
+    - initial_integrated_intensity: float, the initial intensity value before decay.
+    - tau: float, the decay time constant. A value of 0 implies no decay.
+    - t_values: array_like, the time points at which to calculate the decayed intensities.
+
+    Returns:
+    - y_values: list, the intensities at each time point after applying the decay function.
+
+    Raises:
+    - ValueError: If `initial_integrated_intensity` is negative, or `tau` is negative.
+    """
+    if initial_integrated_intensity < 0:
+        raise ValueError("Initial integrated intensity must be non-negative.")
+    if tau < 0:
+        raise ValueError("Decay time constant (tau) must be non-negative.")
+
+    t_values = np.asarray(t_values)
     if tau == 0:
-        y_values = [initial_integrated_intensity + t * 0 for t in t_values]
+        y_values = np.full_like(t_values, initial_integrated_intensity)
     else:
-        y_values = [initial_integrated_intensity * np.exp(-t / tau) for t in t_values]
+        y_values = initial_integrated_intensity * np.exp(-t_values / tau)
 
     return y_values
 
-#################################################################################
-# Calculate Gaussian sigmas with diffusion
-def diffusion_sigmas(diffusion_constant, psf_sigma, t_values):
-    if diffusion_constant == 0: # diffusion of 0 means turn off diffusion
-        y_values = [psf_sigma + t * 0. for t in t_values]
+def diffusion_sigma2_t(diffusion_coeff, sigma2_0, t_values):
+    """
+    Calculate the variance of a Gaussian PSF over time considering diffusion.
+
+    Parameters:
+    - diffusion_coeff: float, the nominal diffusion coefficient.
+    - sigma2_0: float, the initial variance of the Gaussian PSF.
+    - t_values: array_like, the time points at which to calculate the time-evolved variance.
+
+    Returns:
+    - sig2_t: list, the variance at each time point accounting for diffusion.
+
+    Raises:
+    - ValueError: If `diffusion_coeff` or `sigma2_0` is negative.
+    """
+    if diffusion_coeff < 0:
+        raise ValueError("Diffusion coefficient must be non-negative.")
+    if sigma2_0 < 0:
+        raise ValueError("Initial PSF variance (sigma^2) must be non-negative.")
+
+    t_values = np.asarray(t_values)
+    if diffusion_coeff == 0:
+        sig2_t = np.full_like(t_values, sigma2_0)
     else:
-        y_values = [np.sqrt(np.power(psf_sigma,2.) + 2. * diffusion_constant * t) for t in t_values]
-    return y_values
+        sig2_t = sigma2_0 + 2 * diffusion_coeff * t_values
+
+    return sig2_t
  
 ####################################################
 # functions that add white noise to pure Gaussians #
 ####################################################
 
-#################################################################################
-# Add noise to pure Gaussian profiles
 def add_noise(noise_sigma, nominal_profiles):
-    # initialize array for resulting profiles
-    noisy_profiles = []
+    """
+    Add normally distributed noise to an array of nominal Gaussian profiles.
 
-    # generate noise and add it to the signal to make t-by-x noisy signal matrix
-    for this_gaussian in nominal_profiles: # each row is a profile
-        # get the width in pixels
-        pixels = len(this_gaussian)
+    Parameters:
+    - noise_sigma: float, standard deviation of the noise.
+    - nominal_profiles: array_like, the nominal Gaussian profiles without noise.
 
-        # calculate noise and add it to the profile
-        this_noise_profile = make_normal_noise(noise_sigma, pixels)            # get pseudorandom number for each pixel
-        noise_gauss = list(zip(this_noise_profile, this_gaussian))             # array of noise and signal profiles
-        this_noisy_profile = [noise + gauss for (noise, gauss) in noise_gauss] # add the noise to the signal
-        noisy_profiles.append(this_noisy_profile)                              # append the noisy Gaussian to the result array
+    Returns:
+    - noisy_signal: dict, containing the noisy profiles in 'y_values_t'.
+    """
+    # Convert nominal_profiles to a NumPy array if not already
+    nominal_profiles = np.array(nominal_profiles)
+    
+    # Generate noise for all profiles at once
+    noise = np.random.normal(0, noise_sigma, nominal_profiles.shape)
+    
+    # Add noise to the nominal profiles
+    noisy_profiles = nominal_profiles + noise
 
-    noisy_signal = {'y_values_tx': noisy_profiles}
+    noisy_signal = {'y_values_t': noisy_profiles}
     return noisy_signal
-
-#################################################################################
-# Using a given noise standard deviation and number of pixels, make an array of 
-# normally-distrributed values to be added to the pure Gaussian profiles.
-def make_normal_noise(sigma, pix):
-    # instantiate a PCG-64 pseudo-random number generator
-    # (with new seed from chaotic environment)
-    rng = default_rng()
-    # get random numbers in normal distribution
-    return rng.normal(loc=0, scale=sigma, size=pix)
 
 ##################################################
 # functions that analyze scans with fitting etc. #
@@ -639,17 +1107,32 @@ def make_normal_noise(sigma, pix):
 #################################################################################
 # Gaussian fitting of noisy PSFs
 def gauss_fitting(x_axis, noisy_profiles):
-    # this will fit each gaussian at every time point in a single run
+    """
+    Fits Gaussian function to noisy data at each time point.
+
+    This function takes a set of noisy Gaussian profiles and fits a Gaussian
+    function to each profile using non-linear least squares optimization. The
+    parameter estimates and their standard errors of the variance of the
+    Gaussian are stored and returned in a dictionary.
+
+    Parameters:
+    - x_axis: (array-like) The x-values over which the profiles are defined.
+    - noisy_profiles: (list of array-like) The y-values of the noisy profiles
+      for each time point to be fitted.
+
+    Returns:
+    - fit_dictionary: (dict) A dictionary containing the fitted parameter
+      estimates and the standard deviations for each time point.
+
+    Raises:
+    - ValueError: If any parameter bounds are invalid or inverted.
+    """
 
     # initialize results dictionary
     fit_dictionary = {
-        'parameter_estimates': {
-            'sigmas_t': [], 
-        },
-        'parameter_stdevs': {
-            'sigma_stdevs': [], 
-        },
-    } 
+        'sigma^2_t estimates': [], 
+        'sigma^2_t standard errors': [], 
+        } 
     
     # array of times and noisy gaussians
     profiles = list(noisy_profiles)
@@ -663,212 +1146,228 @@ def gauss_fitting(x_axis, noisy_profiles):
         
         # get x min, max and width
         xpix = len(x_axis)
-        xmin = np.min(x_axis)
-        xmax = np.max(x_axis)
+        xmin,xmax = np.min(x_axis), np.max(x_axis)
         xwid = np.abs(xmax - xmin)
 
         # get index of max abs amp
         max_amp_idx = np.argmax(this_profile)
 
         # guesses
-        mu0 = 0                                             # mu guess: 0
-        sigma0 = xwid / 4                                   # sigma guess: 1/4 of full scan width
-        a0 = this_profile[max_amp_idx]                      # amplitude guess: max value
+        mu0 = 0                         # mu guess: 0
+        sigma2_0 = np.power(xwid / 4,2) # sigma^2 guess: 1/16 of squared scan width
+        a0 = this_profile[max_amp_idx]  # amplitude guess: max value
 
         # set bounds of mu0 to the central fifth of the window
         fifthwidth = xwid / 5
         mu0_min = xmin + 2 * fifthwidth
-        mu0_max = xmin + (3 * fifthwidth)
+        mu0_max = xmin + 3 * fifthwidth
         if mu0_min > mu0_max:
             print('error: mu0 bounds are inverted')
             break
 
-        # set bounds of sigma0
-        sigma0_min = xwid / xpix                            # sigma minimum is 1 pixel
-        sigma0_max = xwid                                   # sigma maximum is the entire window width
-        if sigma0_min > sigma0_max:
-            print('error: sigma0 bounds are inverted')
+        # set bounds of sigma2_0
+        sigma2_min = np.power(xwid / xpix,2)                # sigma^2 minimum is 1 pixel
+        sigma2_max = np.power(xwid,2)                       # sigma^2 maximum is the entire window width
+        if sigma2_min > sigma2_max:
+            print('error: sigma^2 bounds are inverted')
             break
 
         # set bounds of amp0
-        a0_max = 2 * a0                                     # amplitude maximum is 2x the maximum y-value
-        a0_min = 0                                          # amplitude minimum is 0
+        a0_max = 2 * a0                             # maximum is 2x the max y-value
+        a0_min = 0                                  # minimum is 0
         if a0_min > a0_max:
             print('error: a0 bounds are inverted')
             break
 
+        p0 = [mu0, sigma2_0, a0]                    # guesses
+        bounds_min = [mu0_min, sigma2_min, a0_min]  # lower bounds
+        bounds_max = [mu0_max, sigma2_max, a0_max]  # upper bounds
         #############################################
-        # Do the fit and store results.            
-        parms, covars = curve_fit(
+        # Do the fit.
+        [parms, covars] = curve_fit(
             gaussian, x_axis, this_profile, 
-            p0 = [mu0, sigma0, a0],
-            bounds=(
-                (mu0_min, sigma0_min, a0_min),
-                (mu0_max, sigma0_max, a0_max)
-            ),
+            p0 = p0,
+            bounds=(bounds_min, bounds_max),
             maxfev=5000)
 
         ###################################################################
         # get the parameter estimates, covariances, variances, and stdevs
-        fit_dictionary['parameter_estimates']['sigmas_t'].append(parms[1])
+        fit_dictionary['sigma^2_t estimates'].append(parms[1])
 
         coefficient_variance_table = np.diag(covars) # diagonalize the covariance table to get parameter variances
-        coefficient_stdev_table = np.sqrt(coefficient_variance_table) # square root of variance is stdev
-        fit_dictionary['parameter_stdevs']['sigma_stdevs'].append(coefficient_stdev_table[1])
+        coefficient_stdev_table = np.sqrt(coefficient_variance_table) # stdev is square root of variance
+        fit_dictionary['sigma^2_t standard errors'].append(coefficient_stdev_table[1])
 
     return fit_dictionary
 
-#################################################################################
-# Estimate the SNRs and heteroscedasticisy (hsc) for a scan
-def fft_snr_hsc(input_noisy_profiles):
-    # get SNR and heteroscedascticity of a run
-    # input should be a matrix of time-evolved noisy profiles
+def fft_cnr(noisy_profile):
+    """
+    Estimates the Contrast-to-Noise Ratio (CNR) for a noisy profile using FFT.
 
-    # fft_moduli = []      # moduli of fourier transforms
-    # peak_indices = []    # indices of the peak maximum of the moduli
-    # peak_bases = []      # indices of the first minimum of the moduli
-    # signal_amps = []     # mean value of signal regime
-    # noise_amps = []      # mean value of noise regime
-    snrs_float = []      # SNR at each time point
-    # snrs_rounded = []    # SNR rounded to nearest multiple of snr_round
+    The CNR is estimated by transforming the normalized profile using FFT,
+    identifying peaks and minima, and calculating the noise level from the
+    RMS of the modulus of the FFT beyond the first minimum following the first peak.
 
-    for this_profile in input_noisy_profiles:
-        # fourier transform this profile
-        transform = np.fft.rfft(this_profile)       # single-sided fft
-        fft_modulus =  list(np.abs(transform))      # abs gives the modulus of complex values
+    Parameters:
+    - noisy_profile: (array-like) The noisy profile to analyze.
 
-        # prep the moduli for peak finding
-        fft_modulus.insert(0,0)                           # insert a zero at the beginning so that the edge peak can be found
-        neg_fft_modulus = [-1 * n for n in fft_modulus]   # negative modulus for finding minima
+    Returns:
+    - cnr_estimate: (float) The estimated CNR for the profile.
+    """
 
-        peaks, _ = find_peaks(fft_modulus)          # get the peaks
-        minima, _ = find_peaks(neg_fft_modulus)     # get the minima
+    # normalize against peak maximum
+    profile_max = np.max(noisy_profile)
+    this_profile_norm = [yval / profile_max for yval in noisy_profile]
 
-        # corrections based on preparatory changes    
-        peaks = [peak - 1 for peak in peaks]        # subtract 1 from peaks indices
-        minima = [peak - 1 for peak in minima]      # subtract 1 from minima indices
-        fft_modulus.pop(0)                          # remove leading 0 from modulus
+    # FFT transform
+    transform = np.fft.rfft(this_profile_norm, norm='ortho')  # Orthogonally normalized single-sided FFT
+    fft_modulus = np.abs(transform)                           # Modulus of complex FFT values
 
-        # get the index of the first peak
-        first_peak_idx = peaks[0]
+    # Prepend zero to ensure the first peak is found if it is at the edge
+    fft_modulus = np.insert(fft_modulus, 0, 0)
 
-        # get the indices of all minima to the right of the first peak
-        first_min_idx = np.min([b for b in minima if b - first_peak_idx >= 0])
+    # Find peaks and minima in the FFT modulus
+    peaks, _ = find_peaks(fft_modulus)
+    neg_fft_modulus = -fft_modulus
+    minima, _ = find_peaks(neg_fft_modulus)
 
-        # get the peak mean from zero to the base, not including the first minimum
-        signal_amp = sum(fft_modulus[0:first_min_idx]) / len(fft_modulus[0:first_min_idx])
+    # undo preparatory changes    
+    peaks = [peak - 1 for peak in peaks]        # subtract 1 from peaks indices
+    minima = [peak - 1 for peak in minima]      # subtract 1 from minima indices
+    fft_modulus = np.delete(fft_modulus, 0)     # remove leading 0 from modulus
 
-        # get the noise mean from the first minimum (inclusive) to the end
-        noise_amp = sum(fft_modulus[first_min_idx:]) / len(fft_modulus[first_min_idx:])
+    # get the index of the first minimum to the right of the first peak
+    first_peak_idx = peaks[0]
+    noise_start_idx = np.min([a for a in minima if a - first_peak_idx >= 0])
 
-        # calculate and bin the snr
-        snr_float = signal_amp / noise_amp
-        # snr = snr_round * round(snr_float / snr_round)
+    # make noise array from first minimum to the end
+    noise_regime = fft_modulus[noise_start_idx:]
 
-        # fft_moduli.append(fft_modulus)
-        # peak_indices.append(first_peak_idx)
-        # peak_bases.append(first_min_idx)
-        # signal_amps.append(signal_amp)
-        # noise_amps.append(noise_amp)
-        snrs_float.append(snr_float)
-        # snrs_rounded.append(snr)
+    # get the noise estimate as root mean squared displacement
+    noise_est = np.sqrt(np.sum([np.power(a, 2.) for a in noise_regime]) / len(noise_regime))
+
+    # calculate and store cnr estimate
+    cnr_estimate = 1 / noise_est
         
-    # calculate heteroscedasticisy as a ratio of snrs start to finish
-    # hsc_float = snrs_float[-1] / snrs_float[0]
-    # hsc_rounded = hsc_round * round(hsc_float / hsc_round)
+    return cnr_estimate
+
+def diffusion_ols_fit(time_axis, gaussfit_sigma2_t):
+    """
+    Estimates the Mean Squared Displacement (MSD) over time for a scan using 
+    Ordinary Least Squares (OLS). This is useful in diffusion studies, where 
+    the MSD is expected to linearly increase with time for a diffusive process.
+
+    Parameters:
+    - time_axis: (array-like) The time points for each measurement. These should 
+                 be evenly spaced for accurate OLS fitting.
+    - gaussfit_sigma2_t: (array-like) Squared width (variance) from Gaussian fits 
+                         at each time point. This represents the displacement data 
+                         for OLS fitting.
+
+    Returns:
+    - result: (dict) A dictionary containing key results from the OLS fit:
+        'MSD_t slope estimate': The slope of the MSD versus time plot, which is 
+                                an estimate proportional to the diffusion coefficient
+                                in a linear diffusion process.
+        'intercept estimate': The intercept of the MSD versus time plot, typically 
+                              close to zero for a well-centered diffusion process.
+        'MSD_t slope std error': The standard error of the slope estimate, 
+                                 proportional to the uncertainty in the diffusion 
+                                 coefficient estimate.
+        'intercept standard error': The standard error of the intercept estimate, 
+                                    providing a measure of the fit's precision 
+                                    at the origin (time = 0).
+    """
+    if len(gaussfit_sigma2_t) < 2:
+        raise ValueError("gaussfit_sigma2_t must contain multiple variances to fit.")
+    if len(time_axis) != len(gaussfit_sigma2_t):
+        raise ValueError("time_axis and gaussfit_sigma2_t must be of the same length.")
     
-    result_dictionary = {
-        # 'fft_moduli': fft_moduli, 
-        # 'peak_indices': peak_indices, 
-        # 'noise_start_indices': peak_bases,
-        # 'signal_amps': signal_amps,
-        # 'noise_amps': noise_amps,
-        'snrs_float': snrs_float,
-        # 'snrs_rounded': snrs_rounded,
-        # 'hsc_float': hsc_float,
-        # 'hsc_rounded': hsc_rounded
+    # get delta of variances of Gaussian fits
+    delta_vars = gaussfit_sigma2_t - gaussfit_sigma2_t[0]
+
+    # Prepare the design matrix for OLS by adding a constant term for intercept
+    design_matrix = sm.add_constant(time_axis)
+
+    # Fit the model
+    ols_model = sm.OLS(delta_vars, design_matrix).fit()
+
+    return {
+        'MSD_t slope estimate': ols_model.params[1],
+        'intercept estimate': ols_model.params[0],
+        'MSD_t slope std error': ols_model.bse[1],
+        'intercept standard error': ols_model.bse[0],
     }
 
-    return result_dictionary
+def diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights):
+    """
+    Estimates the diffusion coefficient for a scan using Weighted Least Squares (WLS).
 
-#################################################################################
-# Estimate the diffusion coefficient for a scan using ordinary least squares
-def diffusion_ols_fit(time_axis, gaussfit_sigmas):
+    Parameters:
+    - time_axis: (array-like) The time points for each measurement.
+    - gaussfit_sigma2_t: (array-like) Variances of Gaussian fits at each time point.
+    - weights: (array-like) Weights to apply to each measurement.
 
-    # get delta of variances of Gaussian fits
-    fit_vars = np.array([np.power(sigma, 2.) for sigma in gaussfit_sigmas])
-    delta_vars = np.array([var - fit_vars[0] for var in fit_vars])
-
-    # alias time values
-    times_b0 = time_axis
-
-    # add a constant column for nonzero intercept (b1) fitting
-    times_b1 = sm.add_constant(times_b0)
+    Returns:
+    - result: (dict) A dictionary containing the slope ('slope') and the standard error
+                     of the slope ('std error') as the estimation of the diffusion coefficient.
+    """
+    if len(time_axis) != len(weights):
+        raise ValueError("The length of weights must match the number of measurements.")
     
-    # do the fit with zero intercept (b0)
-    # ols_b0_model = sm.OLS(delta_vars, times_b0).fit()
-    # ols_b0_slope = ols_b0_model.params[0]
-
-    # do the fit with nonzero intercept (b1)
-    ols_b1_model = sm.OLS(delta_vars, times_b1).fit()
-    ols_b1_slope = ols_b1_model.params[1]
-
-    # return ols_b0_slope
-    return ols_b1_slope
-
-#################################################################################
-# Estimate the diffusion coefficient for a scan using weighted least squares
-# Weights are square of SNR, nomralized as SNR_0 = 1
-def diffusion_wls_fit(time_axis, gaussfit_sigmas, weights):
-
-    # weight fits 
-    these_weights = weights
-
     # get delta of variances of Gaussian fits
-    fit_vars = np.array([np.power(sigma, 2.) for sigma in gaussfit_sigmas])
-    delta_vars = np.array([var - fit_vars[0] for var in fit_vars])
+    delta_vars = gaussfit_sigma2_t - gaussfit_sigma2_t[0]
 
-    # get time values
-    times_b0 = time_axis
+    # Prepare the design matrix for WLS by adding a constant term for intercept
+    design_matrix = sm.add_constant(time_axis)
 
-    # add a constant column for nonzero intercept (b1) fitting
-    times_b1 = sm.add_constant(times_b0)
-
-    # do the fit with zero intercept (b0)
-    # wls_b0_model = sm.WLS(delta_vars, times_b0, weights=these_weights).fit()
-    # wls_b0_slope = wls_b0_model.params[0]
-  
-    # do the fit with nonzero intercept (b1)
-    wls_b1_model = sm.WLS(delta_vars, times_b1, weights=these_weights).fit()
-    wls_b1_slope = wls_b1_model.params[1]
-
-    return wls_b1_slope
-    # return wls_b0_slope
-
-#################################################################################
-# Get ratio of fit to nominal diffusion value
-def estimates_precision(df, precision_level):
-
-    total_sims = len(df)
-    p_low = 1 - precision_level
-    p_high = 1 + precision_level
-
-    d_nom = df['nominal diffusion in cm2/s']
-    d_wls = df['WLS fit diffusion in cm2/s']
-    d_ols = df['OLS fit diffusion in cm2/s']
-
-    d_wls_over_d_nom = [d_wls[i] / d_nom[i] for i in range(total_sims)]
-    d_ols_over_d_nom = [d_ols[i] / d_nom[i] for i in range(total_sims)]
-
-    wls_within = [d for d in d_wls_over_d_nom if p_low <= d <= p_high]
-    ols_within = [d for d in d_ols_over_d_nom if p_low <= d <= p_high]
-
-    wls_portion_pct = 100 * len(wls_within) / total_sims
-    ols_portion_pct = 100 * len(ols_within) / total_sims
+    # Fit the model using WLS
+    wls_model = sm.WLS(delta_vars, design_matrix, weights=weights).fit()
 
     result = {
-        'WLS % fits within proximity': wls_portion_pct,
-        'OLS % fits within proximity': ols_portion_pct,
+        'MSD_t slope estimate': wls_model.params[1],
+        'intercept estimate': wls_model.params[0],
+        'MSD_t slope std error': wls_model.bse[1],
+        'intercept standard error': wls_model.bse[0],
+    }
+
+    return result
+
+def estimates_precision(df, proximity_level):
+    """
+    Calculate the percentage of simulations where the estimated diffusion fits
+    are within a specified proximity to the nominal diffusion value.
+
+    Parameters:
+    - df: (DataFrame) DataFrame containing diffusion data.
+    - proximity_level: (float) The acceptable proximity level around the nominal value.
+
+    Returns:
+    - result: (dict) Dictionary with the percentage of fits within the specified proximity.
+    """
+    if len(df) == 0:
+        raise ValueError("The DataFrame is empty.")
+
+    p_low = 1 - proximity_level
+    p_high = 1 + proximity_level
+
+    # Vectorized operations to calculate ratios
+    df['d_wls_over_d_nom'] = df['weighted fit diffusion coeff [cm^2/s]'] / df['nominal diffusion coeff [cm^2/s]']
+    df['d_ols_over_d_nom'] = df['unweighted fit diffusion coeff [cm^2/s]'] / df['nominal diffusion coeff [cm^2/s]']
+
+    # Conditions to check if values are within the proximity level
+    wls_within = df['d_wls_over_d_nom'].between(p_low, p_high)
+    ols_within = df['d_ols_over_d_nom'].between(p_low, p_high)
+
+    # Calculate percentages
+    wls_portion_pct = 100 * wls_within.sum() / len(df)
+    ols_portion_pct = 100 * ols_within.sum() / len(df)
+
+    result = {
+        '% fits within proximity': {
+            'weighted fit': wls_portion_pct,
+            'unweighted fit': ols_portion_pct,
+        }
     }
 
     return result
@@ -876,16 +1375,16 @@ def estimates_precision(df, precision_level):
 #################################################################################
 # Load a file of results and analyze it
 
-def loadfile(filename, snr_low, snr_high, precision_levels, num_bins):
+def loadfile(filename, cnr_low, cnr_high, proximity_levels, num_bins):
 
-    precision_levels = [round(pl * 100) for pl in precision_levels]
+    proximity_levels = [round(pl * 100) for pl in proximity_levels]
 
     # load the file as a data frame
     df_this_file = pd.read_csv(filename)
   
     # make columns of true vs estimate diffusion coefficients
-    true_vs_wlsfit = np.asarray(list(zip(df_this_file['true diff cm2/s'], df_this_file['wls diff cm2/s'])))
-    true_vs_olsfit = np.asarray(list(zip(df_this_file['true diff cm2/s'], df_this_file['ols diff cm2/s'])))
+    true_vs_wlsfit = np.asarray(list(zip(df_this_file['nominal diffusion in cm^2/s'], df_this_file['WLS fit diffusion in cm^2/s'])))
+    true_vs_olsfit = np.asarray(list(zip(df_this_file['nominal diffusion in cm^2/s'], df_this_file['OLS fit diffusion in cm^2/s'])))
 
     # relative proximity of fit to actual diffusion constant, as percent of true value
     df_this_file['wls proximity'] = [100 * np.abs(true - fit) / true for true, fit in true_vs_wlsfit]
@@ -895,40 +1394,40 @@ def loadfile(filename, snr_low, snr_high, precision_levels, num_bins):
     df_this_file['wls D/D0'] = [fit / true for true, fit in true_vs_wlsfit]
     df_this_file['ols D/D0'] = [fit / true for true, fit in true_vs_olsfit]
 
-    # put SNR estimates outside the range of bins in the extreme bins
-    # set all snrs > 100 to 100 and snrs < 3.333334 to 3.333334
-    snrs_est_groomed = []
-    for snr in df_this_file['snr est']:
-        if snr_low <= snr <= snr_high:
-            snrs_est_groomed.append(snr)
-        elif snr < snr_low:
-            snrs_est_groomed.append(snr_low + snr_low/1000000)
+    # put CNR estimates outside the range of bins in the extreme bins
+    # set all cnrs > 100 to 100 and cnrs < 3.333334 to 3.333334
+    cnrs_est_groomed = []
+    for cnr in df_this_file['cnr est']:
+        if cnr_low <= cnr <= cnr_high:
+            cnrs_est_groomed.append(cnr)
+        elif cnr < cnr_low:
+            cnrs_est_groomed.append(cnr_low + cnr_low/1000000)
         else:
-            snrs_est_groomed.append(snr_high - snr_high/1000000)
-    df_this_file['snrs_est_groomed'] = snrs_est_groomed
+            cnrs_est_groomed.append(cnr_high - cnr_high/1000000)
+    df_this_file['cnrs_est_groomed'] = cnrs_est_groomed
     
-    snrs_true_groomed = []
-    for snr in df_this_file['snr true']:
-        if snr_low <= snr <= snr_high:
-            snrs_true_groomed.append(snr)
-        elif snr < snr_low:
-            snrs_true_groomed.append(snr_low)
+    cnrs_true_groomed = []
+    for cnr in df_this_file['cnr true']:
+        if cnr_low <= cnr <= cnr_high:
+            cnrs_true_groomed.append(cnr)
+        elif cnr < cnr_low:
+            cnrs_true_groomed.append(cnr_low)
         else:
-            snrs_true_groomed.append(snr_high)
-    df_this_file['snrs_true_groomed'] = snrs_true_groomed
+            cnrs_true_groomed.append(cnr_high)
+    df_this_file['cnrs_true_groomed'] = cnrs_true_groomed
 
-    # make SNR bins that are uniformly distributed in log scale
-    snr_bins = [np.power(10, this_bin) for this_bin in np.linspace(np.log10(snr_low),np.log10(snr_high),num_bins)]
+    # make CNR bins that are uniformly distributed in log scale
+    cnr_bins = [np.power(10, this_bin) for this_bin in np.linspace(np.log10(cnr_low),np.log10(cnr_high),num_bins)]
 
     # put the data in intervals defined by the bins
-    df_this_file['snrs_est_bin'] = pd.cut(
-        df_this_file['snrs_est_groomed'], 
-        bins = snr_bins, 
+    df_this_file['cnrs_est_bin'] = pd.cut(
+        df_this_file['cnrs_est_groomed'], 
+        bins = cnr_bins, 
         include_lowest=True)
     
-    df_this_file['snrs_true_bin'] = pd.cut(
-        df_this_file['snrs_true_groomed'], 
-        bins = snr_bins, 
+    df_this_file['cnrs_true_bin'] = pd.cut(
+        df_this_file['cnrs_true_groomed'], 
+        bins = cnr_bins, 
         include_lowest=True)
 
     # filtering out data that did not fit in a bin (thus gave NAN for bin)
@@ -937,23 +1436,21 @@ def loadfile(filename, snr_low, snr_high, precision_levels, num_bins):
     print('after filtering: ' + str(df_est_bin_filtered.shape))
 
     # get the mid values of the bin intervals
-    df_this_file['snrs_est_bin_mid'] = [ival.mid for ival in df_this_file['snrs_est_bin']]
-    df_this_file['snrs_true_bin_mid'] = [ival.mid for ival in df_this_file['snrs_true_bin']]
+    df_this_file['cnrs_est_bin_mid'] = [ival.mid for ival in df_this_file['cnrs_est_bin']]
+    df_this_file['cnrs_true_bin_mid'] = [ival.mid for ival in df_this_file['cnrs_true_bin']]
 
     # collate for precision counts
-    snr_est_bin_mids_unique = np.unique(df_this_file['snrs_est_bin_mid'])
-    snr_true_bin_mids_unique = np.unique(df_this_file['snrs_true_bin_mid'])
+    cnr_est_bin_mids_unique = np.unique(df_this_file['cnrs_est_bin_mid'])
+    cnr_true_bin_mids_unique = np.unique(df_this_file['cnrs_true_bin_mid'])
     dl_list = np.unique(df_this_file['true dl'])
     
-    results_snr_est = df_this_file[['snrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-    results_snr_true = df_this_file[['snrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-
-    # print([results_snr_est, snr_bin_mids_unique, dl_list, precision_levels])
+    results_cnr_est = df_this_file[['cnrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
+    results_cnr_true = df_this_file[['cnrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
 
     # precision counts for all DLs
     precision_counts_data = {
-        'snr_est precision counts': precision_counts(results_snr_est, snr_est_bin_mids_unique, dl_list, precision_levels),
-        'snr_true precision counts': precision_counts(results_snr_true, snr_true_bin_mids_unique, dl_list, precision_levels)
+        'cnr_est precision counts': precision_counts(results_cnr_est, cnr_est_bin_mids_unique, dl_list, proximity_levels),
+        'cnr_true precision counts': precision_counts(results_cnr_true, cnr_true_bin_mids_unique, dl_list, proximity_levels)
     }
 
     # initialize a diffusion length dictionary
@@ -971,16 +1468,16 @@ def loadfile(filename, snr_low, snr_high, precision_levels, num_bins):
         # each subdictionary should have its own index starting with 0
         these_dls.reset_index(inplace = True)
 
-        # collate results for estimated and true snrs
-        these_dls_snr_est = these_dls[['snrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-        these_dls_snr_true = these_dls[['snrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
+        # collate results for estimated and true cnrs
+        these_dls_cnr_est = these_dls[['cnrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
+        these_dls_cnr_true = these_dls[['cnrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
 
         # get the precision counts for these dls
         dl_dict.update({
             this_dltxt_str: {
                 'data': these_dls, 
-                'snr_est precision counts': precision_counts(these_dls_snr_est, snr_est_bin_mids_unique, [this_dl], precision_levels),
-                'snr_true precision counts': precision_counts(these_dls_snr_true, snr_true_bin_mids_unique, [this_dl], precision_levels)
+                'cnr_est precision counts': precision_counts(these_dls_cnr_est, cnr_est_bin_mids_unique, [this_dl], proximity_levels),
+                'cnr_true precision counts': precision_counts(these_dls_cnr_true, cnr_true_bin_mids_unique, [this_dl], proximity_levels)
             }
         })
 
@@ -989,38 +1486,38 @@ def loadfile(filename, snr_low, snr_high, precision_levels, num_bins):
 
     return result
  
-def precision_counts(snr_dl_prox, snrs_bin_mid_unique, dls_unique, precision_levels):
+def precision_counts(cnr_dl_prox, cnrs_bin_mid_unique, dls_unique, proximity_levels):
 
     # initialize counts dictionary
-    snr_dl_prox = snr_dl_prox.values.tolist()
+    cnr_dl_prox = cnr_dl_prox.values.tolist()
     counts = {
         'wls counts': {},
         'ols counts': {}
     }
 
     # step through the precision levels 
-    for pl in precision_levels:
+    for pl in proximity_levels:
         plstr = str(pl)     # string to label the precision level
         these_wls_counts = []   # initialize array of counts for wls fit
         these_ols_counts = []   # initialize array of counts for ols fit
-        for snr in snrs_bin_mid_unique:
+        for cnr in cnrs_bin_mid_unique:
             for dl in dls_unique:
                 wls_proxcount = 0
                 ols_proxcount = 0
-                snr_dl_match = 0
-                for snr1, dl1, wls_prox, ols_prox in snr_dl_prox:
-                    if snr1 == snr and dl1 == dl:
-                        snr_dl_match += 1
+                cnr_dl_match = 0
+                for cnr1, dl1, wls_prox, ols_prox in cnr_dl_prox:
+                    if cnr1 == cnr and dl1 == dl:
+                        cnr_dl_match += 1
                         if wls_prox <= pl:
                             wls_proxcount += 1
                         if ols_prox <= pl:
                             ols_proxcount += 1
-                if snr_dl_match != 0:
-                    these_wls_counts.append({'snr': snr, 'dl': dl, 'wls proximity portion': 100 * wls_proxcount/snr_dl_match})
-                    these_ols_counts.append({'snr': snr, 'dl': dl, 'ols proximity portion': 100 * ols_proxcount/snr_dl_match})
+                if cnr_dl_match != 0:
+                    these_wls_counts.append({'cnr': cnr, 'dl': dl, 'wls proximity portion': 100 * wls_proxcount/cnr_dl_match})
+                    these_ols_counts.append({'cnr': cnr, 'dl': dl, 'ols proximity portion': 100 * ols_proxcount/cnr_dl_match})
                 else:
-                    these_wls_counts.append({'snr': snr, 'dl': dl, 'wls proximity portion': -1})
-                    these_ols_counts.append({'snr': snr, 'dl': dl, 'ols proximity portion': -1})
+                    these_wls_counts.append({'cnr': cnr, 'dl': dl, 'wls proximity portion': -1})
+                    these_ols_counts.append({'cnr': cnr, 'dl': dl, 'ols proximity portion': -1})
 
         counts['wls counts'][plstr] = pd.DataFrame(these_wls_counts)
         counts['ols counts'][plstr] = pd.DataFrame(these_ols_counts)
@@ -1033,137 +1530,8 @@ def precision_counts(snr_dl_prox, snrs_bin_mid_unique, dls_unique, precision_lev
 
 def colordefs():
     dictionary = {
-    'msu_blue': '#003f7f',
-    'msu_gold': '#f7941e',
+    'dice_blue': '#003f7f',
+    'dice_gold': '#f7941e',
+    'dice_green': '#0cce6b'
     }
     return dictionary
-
-def diffusion_plot(sim_result, filename, filetype):
-    cd = colordefs()
-    msu_blue = cd['msu_blue']
-    msu_gold = cd['msu_gold']
-
-    # aliases for brevity
-    time_axis = sim_result['indices']['time_axis']
-    total_runs = sim_result['indices']['total_runs']
-
-    # select a random run to show the fit
-    import random
-    run_select = random.randint(0, total_runs-1)
-
-    # get fitted sigma parameters and standard errors
-    sigma_unc = list(zip(
-        sim_result['run_results']['run_' + str(run_select)]['noisy_profile_fits']['parameter_estimates']['sigmas_t'],
-        sim_result['run_results']['run_0']['noisy_profile_fits']['parameter_stdevs']['sigma_stdevs']
-    ))
-    # calculate relative uncertainty
-    sigma_rel_err = [unc/sigma for sigma, unc in sigma_unc]
-    # calculate variances of Gaussians (the variance parameter, not the uncertainty variance)
-    fit_vars = np.array([np.power(sigma, 2.) for sigma in simulation_result['run_results']['run_' + str(run_select)]['noisy_profile_fits']['parameter_estimates']['sigmas_t']])
-    true_vars = np.array([np.power(sigma, 2.) for sigma in simulation_result['run_results']['run_' + str(run_select)]['nominal_profiles']['parameters_t']['sigmas']])
-    # collate the fit variances with the relative error of the sigma parameter
-    fitvars_sigre = list(zip(fit_vars, sigma_rel_err))
-    # propagate the relative error to the variance of the variance and apply multiplier for 90% confidence
-    vars_abs_err = [1.64485 * 2 * sig_rel_err * var for var, sig_rel_err in fitvars_sigre]
-
-    # get the y values based on the slopes
-    y_values = np.array([var - fit_vars[0] for var in fit_vars])
-    y_true = np.array([var - true_vars[0] for var in true_vars])
-
-    # get the slope and the y-values for the selected example fit
-    fit_slope0 = sim_result['run_results']['run_' + str(run_select)]['diffusion']['wls']
-    y_fit0 = np.array([time * fit_slope0 for time in time_axis])
-
-    fig, axes = plt.subplots(
-        nrows=1, ncols=3, figsize=(10,6), 
-        gridspec_kw={'width_ratios': [3, 3, 1]},
-        sharey = 'all', constrained_layout=True)
-
-    axes[0].errorbar(time_axis, y_values, yerr=vars_abs_err, 
-                    color=msu_blue, ecolor=msu_blue, 
-                    elinewidth=2, alpha = 0.5, fmt='o', zorder=1, 
-                    label='_nolegend_')
-    axes[0].plot(time_axis, y_fit0, color=msu_blue, linewidth=3, label='fit')
-    axes[0].plot(time_axis, y_true, color=msu_gold, linewidth=3, label='nominal')
-
-    # axes[0].set_ylim([-1,1])
-    # axes[1].set_ylim(top=0.026)
-
-    axes[0].set_xticks([0, 1])
-    axes[0].set_xticklabels(['0', '$\\tau$'])
-
-    axes[0].tick_params(
-        left=False,
-        direction='in', length=6, width=2,
-        which='both', labelsize=16,
-        labelleft=False)
-
-    axes[0].legend(fontsize=16, loc='upper left') # fancybox=True,
-    # axes[0].text(1, 0, '(a)', horizontalalignment='right', verticalalignment='center', fontsize=12)
-
-    for i in range(total_runs):
-        fit_slope = sim_result['run_results']['run_' + str(i)]['diffusion']['wls']
-        y_fit = np.array([time * fit_slope for time in time_axis])
-        axes[1].plot(time_axis, y_fit, color=msu_blue, linewidth=1, alpha = 0.1, label='_nolegend_') # 'diffusion fits' if i == 0 else '_nolegend_'
-
-    axes[1].plot(time_axis, y_true, color=msu_gold, linewidth=3, label='_nolegend')
-
-    axes[1].set_xticks([0, 1])
-    axes[1].set_xticklabels(['0', '$\\tau$'])
-
-    axes[1].tick_params(
-        left=False,
-        direction='in', length=6, width=2,
-        which='both', labelsize=16)
-
-    # axes[1].text(1, 0, '(b)', horizontalalignment='right', verticalalignment='center', fontsize=12)
-
-    # number of bins for histogram of D fits
-    bins = 12
-
-    # get slopes of linear fits in given units
-    d_slope = [diff for diff in sim_result['collated results']['WLS fit diffusion']]
-
-    # get position of final value in each fitted slope
-    dwls_pos = [d_slope[i] * time_axis[-1] for i in range(total_runs)]
-
-    n, bins, patches = axes[2].hist(dwls_pos, bins=bins, density = True, color=msu_blue, orientation='horizontal')
-    binspace = np.linspace(bins[0], bins[-1], 100)
-
-    # axes[2].set_yticks([y_true_0p9, y_true_1p1])
-    # axes[2].set_yticklabels([str(0.9) + '$D_0$', str(1.1) + '$D_0$'])
-    axes[2].tick_params(
-        left= False, bottom = False,
-        direction='in', length=6, width=2,
-        which='both', labelsize=16, color='w',
-        labelleft = False, labelbottom = False,
-        )
-
-    # axes[2].text(np.max(n), 0, '(c)', horizontalalignment='right', verticalalignment='center', fontsize=12)
-    # axes[2].axis('off')
-
-    (mu, sigma) = norm.fit(dwls_pos)
-    y = norm.pdf(binspace, mu, sigma)
-    axes[2].plot(y, binspace, color = msu_gold, linewidth=3)
-
-    # fig.supylabel('$\\sigma_t^2 - \\sigma_0^2$ (arb. units)', fontsize=12)
-    axes[0].set_ylabel('$\\sigma_t^2 - \\sigma_0^2$ (arb. units)', fontsize=20)
-    fig.supxlabel('t (arb. units)', fontsize=20)
-
-    if filetype == 'none':
-        pass
-    else:
-        fig.savefig(filename + '.' + filetype, format=filetype)
-
-    fig.show()
-
-###############################################################
-# The following lines run the simulations and produce a plot. # 
-# You could remove these lines if you prefer to define the    #
-# functions without running the simulations immediately.      #
-###############################################################
-
-# run it
-simulation_result = nds_runner('parameters.txt')
-# plot the results
-diffusion_plot(simulation_result, simulation_result['filename slug'], simulation_result['image type'])
