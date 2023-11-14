@@ -11,18 +11,18 @@ Updates to this software can be found at [the DICE GitHub repository](https://gi
 
 ### How it works
 
-1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states in the form of a Gaussian distribution profile that undergoes decay and diffusion. The *initial profile* has an amplitude of unity, width parameterized by either the full-width half-maximum or the Gaussian standard deviation, mean position of zero, and baseline background of zero.
+1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states as a Gaussian distribution profile that undergoes decay and diffusion. The *initial profile* has an amplitude of unity, a width parameterized by either the full-width half-maximum or the Gaussian standard deviation, a mean position of zero, and a baseline background of zero.
 2. **Noise addition:** DICE incorporates white noise into the generated profiles to better resemble real-world scenarios. The magnitude of the noise is the same for every time frame and is parameterized by its standard deviation.
-3. **Gaussian fit:** The time-evolved noisy profiles are fitted with Gaussian functions, deriving the estimated Mean Squared Displacement (*MSD*) at each time point.
-4. **Linear fit and diffusion coefficient estimation:** The *MSD* values are fitted to a linear function using a weighted least squares method. The weights are assigned as the normalized inverse of the relative variance of the squared width parameter reported by the Gaussian fit. The slope of the linear fit is proportional to the estimated diffusion coefficient.
-5. **Analysis:** DICE compares the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical overview of the precision and accuracy of the diffusion estimate.
+3. **Gaussian fit:** The time-evolved noisy profiles are fitted with Gaussian functions, estimating the Mean Squared Displacement (*MSD*) at each time point.
+4. **Linear fit and diffusion coefficient estimation:** The *MSD* values are fitted to a linear function using a weighted least squares method. The slope of the linear fit is proportional to the estimated diffusion coefficient.
+5. **Analysis:** DICE compares the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical view of the precision and accuracy of diffusion estimates.
 6. **Presentation:** Several customizable plotting functions are provided to present the results. 
 
-DICE's primary advantage lies in its ability to quantify the precision and accuracy of diffusion estimates. This is accomplished by reporting the fraction of the diffusion estimates within a user-specified proximity to the nominal diffusion parameter. 
+DICE's primary advantage lies in its ability to quantify the precision and accuracy of diffusion estimates. This is accomplished by reporting the fraction of the diffusion estimates that are found within a user-specified proximity to the nominal diffusion parameter. 
 
-For example: "50% of the diffusion coefficient estimates are within $\pm 10 \\%$ of the nominal value." 
+For example: "50% of the diffusion coefficient estimates are within ±10% of the nominal value."
 
-Thus, DICE provides a measure of the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations based on your experimental parameters, such as the initial spot width, decay lifetime, and contrast-to-noise ratio. Other traditional quantifications of precision and accuracy, such as mean and standard deviation of estimated diffusion coefficients, are also reported.
+Thus, DICE measures the likelihood that your estimated diffusion coefficient will attain the precision required for your investigations based on your experimental parameters, such as the initial spot width, decay lifetime, and contrast-to-noise ratio.
 
 DICE aims to support ongoing improvements in the reliability and reproducibility of diffusion coefficient estimates derived from time-resolved microscopy methods.
 
@@ -59,11 +59,12 @@ Here are the packages required:
 - **[NumPy](https://numpy.org/)**: Fundamental package for numerical computation in Python.
 - **[Pandas](https://pandas.pydata.org/)**: Provides high-performance, easy-to-use data structures and data analysis tools.
 - **[Matplotlib](https://matplotlib.org/)**: A comprehensive library for creating static, animated, and interactive visualizations in Python.
-- **[SciPy](https://www.scipy.org/)**: A Python library used for scientific and technical computing.
-- **[Statsmodels](https://www.statsmodels.org/stable/index.html)**: A Python module that provides classes and functions for the estimation of many different statistical models.
-- **[Pint](https://pint.readthedocs.io/en/stable/)**: A Python package to define, operate and manipulate physical quantities (*i.e.*, units).
+- **[SciPy](https://www.scipy.org/)**: A Python library for scientific and technical computing.
+- **[Statsmodels](https://www.statsmodels.org/stable/index.html)**: A Python module that provides classes and functions for estimating many different statistical models.
+- **[typing](https://docs.python.org/3/library/typing.html)**: A built-in Python library to support type hints.
+- **[joblib](https://joblib.readthedocs.io/en/latest/)**: A set of tools to provide lightweight pipelining in Python.
 
-Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, feel free to contact us or raise an issue on GitHub.
+Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, please **[contact the author](http://thiebes.org/contact)** or raise an issue on GitHub.
 
 ## Quick Start
 
