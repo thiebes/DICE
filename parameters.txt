@@ -21,7 +21,7 @@
     ##### Filename slug #####
     # use whatever text you want to add as a prefix
     # for the filename of exported result data
-    'filename slug': 'test',
+    'filename slug': 'test-nov13',
 
     ##### Image type #####
     # use 'none' to avoid saving a plot of the results
@@ -29,17 +29,19 @@
     # e.g., 'svg', 'png', etc.
     'image type': 'svg',
 
-    ##### Verbose or brief #####
-    # Uncomment only one of the following lines:
-    # 'verbose or brief': 'verbose',
-    'verbose or brief': 'brief',
+    ##### Retain profile data? Keeping it can be memory-intensive. #####
+    'retain profile data': False,
+
+    ##### Parallel processing? #####
+    'multiprocessing': True,
 
     ##### Units #####
-    'length unit': 'micrometers',
-    'time unit': 'nanoseconds',
+    # use singular unit, e.g., 'micrometer' and 'nanosecond'
+    'length unit': 'micrometer',
+    'time unit': 'nanosecond',
 
-    ##### Number of simulation iterations per diffusion length #####
-    'number of runs': 100,
+    ##### Number of simulation iterations per unique parameter set #####
+    'number of runs': 1000,
 
     ##### Spatial parameters #####
     'spatial width': 5,
@@ -48,29 +50,39 @@
     ##### Time axis parameter #####
     # Uncomment only one of the following lines:
     'time range': [0, 1, 10], # start, stop, steps (inclusive)
-    # 'time series': [0,0.003,0.005,0.010,0.020,0.050,0.150],
+    # 'time series': [1,3,5,10,15,25,60,100],
 
     ##### Initial profile parameters #####
-    't0 amplitude': 1,
-    't0 mean': 0,
-    
+    'amplitude_0': 1,
+    'mean_0': 0,
     # Uncomment either FWHM or sigma:
-    't0 FWHM': 1,
-    # 't0 sigma': 1,
+    'FWHM_0': 1,
+    # 'sigma_0': 0.4032,
 
-    ##### Diffusion length #####
-    # Remember to use values that correspond to the length and time units
-    # specified above (or squared units in the case of diffusion).
+    ##### Nominal diffusion length #####
+    # Remember to use values that correspond to the length and/or time units
+    # you specified above (or squared units in the case of diffusion).
     #
     # Uncomment only one of the following lines:
-    'diffusion coefficient': 0.1, 'lifetime (tau)': 1, 
-    # 'diffusion length': 1,
+    # 'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 1, 
+    'nominal diffusion length': 0.1,
 
     ##### Noise standard deviation #####
+    # See readme file for complete explanation
+
     # Uncomment only one of the following lines:
     'noise value': 0.05,
     # 'estimate noise from data': 'example_profile.csv',
+    # 'noise range, reciprocal log': [0.01, 0.3],   # create a distribution of noise values
+    # 'noise range, reciprocal': [0.01, 0.3],       # create a distribution of noise values
 
-    ##### Precision level #####
-    'precision level': 0.1,
+    # If a noise range is selected, indicate the number of values to calculate in the range.
+    # This will be ignored if either 'noise value' or 'estimate noise from data' is selected, 
+    # since in those cases there is only one noise value.
+    'noise range, number of values': 1,
+
+    ##### estimate/nominal proximity to 1 #####
+    # e.g., proximity level of 0.5 means:
+    # diffusion estimate/nominal = 1 +/- 0.5
+    'proximity level': 0.5,
 }
