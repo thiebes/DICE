@@ -114,20 +114,20 @@ The file type for the default plot image to be saved as. For example, `'jpg'`
 
 ### Retain profile data?
 You may or may not care about keeping all the profile data. If you are generating a large number of profiles, keeping all that data may become a performance or memory issue. 
-- To keep all profile data (needed for *e.g.*, plotting profiles), choose `1`
-- To discard profile data and only retain the fitting results, choose `0`
+- To keep all profile data (needed for *e.g.*, plotting profiles), choose `True`
+- To discard profile data and only retain the fitting results, choose `False`
 
 ### Parallel processing
-It is possible to take advantage of parallel processing with this program. To do so, select `1` for this parameter. 
+It is possible to take advantage of parallel processing with this program. To do so, select `True` for this parameter. 
 
 ### Units
-Provide the length and time units that apply to all length and time parameter values. For example, `'micrometers'` and `'nanoseconds'`. **Important!** The units you enter here for length and time will be applied to ***all parameters*** that represent physical quantities of length and/or time, respectively. Therefore, ensure that the magnitudes you enter for all parameters are appropriately scaled to match your specified units.
+Provide the (singular) length and time units for all length and time parameter values. For example, `'micrometer'` and `'nanosecond'`. **Important!** The units you enter here for length and time will be applied to ***all parameters*** that represent physical quantities of length and/or time, respectively. Therefore, ensure that the magnitudes you enter for all parameters are appropriately scaled to match your specified units.
 
 ### Number of simulation iterations
-Specify a number of simulations to run for each set of parameters. 
+Specify a number of simulations to run for each unique set of parameters. 
 
 ### Spatial parameters
-Provide the spatial width and number of pixels for the simulated scan. Note that the value given for spatial width here will be assumed to be in the units of length specified above. 
+Provide the spatial width and number of pixels for the simulated scan. Note that the value given for spatial width here is assumed to be in the units of length specified above. 
 
 ### Temporal parameters
 Provide time axis information to be used in each simulation. You can provide:
@@ -144,9 +144,8 @@ Provide the amplitude, mean (*i.e.,* center), and width of the initial Gaussian 
 Provide *one* of the following:
 - the diffusion coefficient and lifetime, or
 - the diffusion length
+**Note**: the length units here (or squared length in the case of the diffusion coefficient) should be as a fraction of the initial FWHM. For example, a diffusion length of 100 nm, for a FWHM of 1 micron, should be entered as 0.1.
 If you enter diffusion length, the script will generate corresponding nominal values for the diffusion and lifetime (and *vice-versa*).
-
-***Remember to use the units you specified in the unit parameters.*** For example, if your unit parameters are micrometers and nanoseconds, then the units for the diffusion coefficient will be assumed as \[$`\text{µm}^2`$ $`\text{ns}^{-1} `$\]. Thus, ensure that all the magnitudes you enter are appropriately scaled to correspond to the units you have specified.
 
 ### Noise standard deviation
 Provide the standard deviation of the white noise to be added to each profile pixel in a simulation. You can provide:
@@ -168,15 +167,7 @@ In other words:
 
 # Functions
 
-The source code contains extensive documentation at almost every line, describing the functions and how they work. Therefore, the following will describe a few of the main functions that you may want to use from the command line:
-
-- ```nds_runner(parameters_filename)```
-  - this will run the simulations according to the parameters stored in a parameters text file
-  - it outputs a dictionary with the results of each simulation, along with a table of results from all simulations
-  - Example: 
-  ```
-  my_simulation_result = scan_iterator(my_parameters.txt)
-  ```
+The source code contains extensive documentation describing the functions and how they work. 
 
 [Back to table of contents](table-of-contents)
 
