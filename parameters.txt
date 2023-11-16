@@ -21,7 +21,7 @@
     ##### Filename slug #####
     # use whatever text you want to add as a prefix
     # for the filename of exported result data
-    'filename slug': 'test-nov13',
+    'filename slug': 'test',
 
     ##### Image type #####
     # use 'none' to avoid saving a plot of the results
@@ -36,7 +36,7 @@
     'multiprocessing': True,
 
     ##### Units #####
-    # use singular unit, e.g., 'micrometer' and 'nanosecond'
+    # use the singular unit, e.g., 'micrometer' and 'nanosecond'
     'length unit': 'micrometer',
     'time unit': 'nanosecond',
 
@@ -68,7 +68,7 @@
     'nominal diffusion length': 0.1,
 
     ##### Noise standard deviation #####
-    # See readme file for complete explanation
+    # See the readme file for a complete explanation
 
     # Uncomment only one of the following lines:
     'noise value': 0.05,
