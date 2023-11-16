@@ -72,16 +72,23 @@ Here are some steps to quickly get started with DICE:
 2. **Edit Parameters**: Open the `parameters.txt` file and adjust the values to match your experimental parameters. This file serves as the primary means of input to the simulation.
 
 3. **Run the Simulation**: Execute the `main.py` script in your Python environment to start the simulation. The script initializes all necessary functions and runs the simulation based on the parameters specified in `parameters.txt`.
-
+   **From the console**:
     ```bash
     python main.py
     ```
+   - `python main.py`: This command is used in the console (like Command Prompt, PowerShell, or a terminal in Linux/Mac). It tells Python to execute the script named `main.py`. This is a common way to run Python scripts.
    
-    You can run the script immediately after downloading if you want to get a feel of the simulation before editing the parameters. It is set to work with default parameters that serve as an example.
+   **From within a Jupyter-like environment**:
+    ```
+    import main
+    main
+    ```
+   - `import main`: This line imports the `main` module into the Jupyter notebook or similar interactive environment.
+   - `main`: After importing, this line calls the main function or the main executable part of your main.py script.
 
-4. **View the Results**: Upon successful execution, the simulation results will be displayed.
+   You can run the script immediately after downloading if you want to get a feel of the simulation before editing the parameters. It is set to work with default parameters that serve as an example.
 
-5. **Modifying the Simulation**: If you wish to use the functions without automatically running a simulation, you can comment or remove the lines in `main.py` that execute the simulation. This can be useful if you want to load data from a previous simulation or if you wish to create a separate script for running the simulation.
+5. **View the Results**: Upon successful execution, the simulation results will be displayed and saved.
 
 [Back to table of contents](table-of-contents)
 
