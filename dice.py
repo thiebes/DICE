@@ -26,6 +26,8 @@
 
 # Library imports
 import ast
+import os
+import re
 from typing import Any, Dict, List, Tuple
 import numpy as np
 from numpy.random import default_rng
@@ -1373,154 +1375,208 @@ def estimates_precision(df, proximity_level):
     return result
     
 #################################################################################
-# Load a file of results and analyze it
+# Load result files, collate, and analyze precision
+def load_files(file_path, file_match, cnr_low, cnr_high, precision_levels, num_bins):
+    """
+    Loads, collates, and analyzes precision from diffusion study result files.
 
-def loadfile(filename, cnr_low, cnr_high, proximity_levels, num_bins):
+    Parameters:
+    - file_path: Path to the directory containing files.
+    - file_match: String to match the beginning of filenames.
+    - cnr_low: Low end of CNR range for these files.
+    - cnr_high: High end of CNR range for these files.
+    - precision_levels: Array of proximities to nominal values as a fraction.
+    - num_bins: Number of CNR bins for sorting.
 
-    proximity_levels = [round(pl * 100) for pl in proximity_levels]
+    Returns:
+    - Dictionary with keys 'all' for full DataFrame and 'precision counts' for precision analysis.
+    """
 
-    # load the file as a data frame
-    df_this_file = pd.read_csv(filename)
-  
-    # make columns of true vs estimate diffusion coefficients
-    true_vs_wlsfit = np.asarray(list(zip(df_this_file['nominal diffusion in cm^2/s'], df_this_file['WLS fit diffusion in cm^2/s'])))
-    true_vs_olsfit = np.asarray(list(zip(df_this_file['nominal diffusion in cm^2/s'], df_this_file['OLS fit diffusion in cm^2/s'])))
+    # get the directory listing
+    try:
+        dir_list = os.listdir(file_path)
+    except FileNotFoundError:
+        return {'error': 'Directory not found'}
 
-    # relative proximity of fit to actual diffusion constant, as percent of true value
-    df_this_file['wls proximity'] = [100 * np.abs(true - fit) / true for true, fit in true_vs_wlsfit]
-    df_this_file['ols proximity'] = [100 * np.abs(true - fit) / true for true, fit in true_vs_olsfit]
+    # find matching files and report how many were found
+    these_files = [re.findall('(?:^'+file_match+'.+)', s) for s in dir_list]
+    these_files = [x[0] for x in these_files if x != []]
+    print(f'Found {len(these_files)} matching files.')
 
-    # relative proximity as quotient of fit to actual diffusion constant
-    df_this_file['wls D/D0'] = [fit / true for true, fit in true_vs_wlsfit]
-    df_this_file['ols D/D0'] = [fit / true for true, fit in true_vs_olsfit]
+    # initialize result dataframe
+    df = pd.DataFrame()
 
-    # put CNR estimates outside the range of bins in the extreme bins
-    # set all cnrs > 100 to 100 and cnrs < 3.333334 to 3.333334
-    cnrs_est_groomed = []
-    for cnr in df_this_file['cnr est']:
-        if cnr_low <= cnr <= cnr_high:
-            cnrs_est_groomed.append(cnr)
-        elif cnr < cnr_low:
-            cnrs_est_groomed.append(cnr_low + cnr_low/1000000)
+    # load the file(s) and label pixels and time frames
+    for filename in these_files:
+        # load each file as a data frame
+        try:
+            df_this_file = pd.read_csv(os.path.join(file_path, filename))
+        except Exception as e:
+            print(f'Error reading {filename}: {e}')
+            continue
+        # get the number of pixels and time frames from the filename
+        this_pix = re.findall("px-(\d+)", filename)
+        this_tix = re.findall("tx-(\d+)", filename)
+        if this_pix and this_tix:
+            df_this_file['number of pixels'] = int(this_pix[0])
+            df_this_file['number of time frames'] = int(this_tix[0])
         else:
-            cnrs_est_groomed.append(cnr_high - cnr_high/1000000)
-    df_this_file['cnrs_est_groomed'] = cnrs_est_groomed
-    
-    cnrs_true_groomed = []
-    for cnr in df_this_file['cnr true']:
-        if cnr_low <= cnr <= cnr_high:
-            cnrs_true_groomed.append(cnr)
-        elif cnr < cnr_low:
-            cnrs_true_groomed.append(cnr_low)
-        else:
-            cnrs_true_groomed.append(cnr_high)
-    df_this_file['cnrs_true_groomed'] = cnrs_true_groomed
+            print(f'Filename format incorrect: {filename}')
+            continue
+        # append the result dataframe with this file data
+        df = pd.concat([df, df_this_file], ignore_index=True)
 
-    # make CNR bins that are uniformly distributed in log scale
-    cnr_bins = [np.power(10, this_bin) for this_bin in np.linspace(np.log10(cnr_low),np.log10(cnr_high),num_bins)]
+    # fix older format
+    if 'diff nom cm2/s' in df.columns:
+       df = df.rename(
+           columns={
+               'run num': 'run number',
+               'diff nom': 'nominal diffusion coeff',
+               'tau nom': 'nominal lifetime',
+               'ld nom': 'nominal diffusion length',
+               'cnr': 'nominal CNR',
+               'sigma2_0 nom': 'nominal sigma^2_0',
+               'sigma2_0 est': 'estimated sigma^2_0',
+               'ols fit': 'unweighted fit diffusion slope',
+               'wls fit': 'weighted fit diffusion slope',
+               'diff nom cm2/s': 'nominal diffusion coeff [cm^2/s]', 
+               'wls diff cm2/s': 'weighted fit diffusion coeff [cm^2/s]',
+               'ols diff cm2/s': 'unweighted fit diffusion coeff [cm^2/s]',
+               }
+            )
 
-    # put the data in intervals defined by the bins
-    df_this_file['cnrs_est_bin'] = pd.cut(
-        df_this_file['cnrs_est_groomed'], 
-        bins = cnr_bins, 
-        include_lowest=True)
-    
-    df_this_file['cnrs_true_bin'] = pd.cut(
-        df_this_file['cnrs_true_groomed'], 
-        bins = cnr_bins, 
-        include_lowest=True)
+    # Calculations for relative proximity
+    df['d_wls_over_d_nom'] = df['weighted fit diffusion coeff [cm^2/s]'] / df['nominal diffusion coeff [cm^2/s]']
+    df['d_ols_over_d_nom'] = df['unweighted fit diffusion coeff [cm^2/s]'] / df['nominal diffusion coeff [cm^2/s]']
 
-    # filtering out data that did not fit in a bin (thus gave NAN for bin)
-    print('before filtering out NANs: ' + str(df_this_file.shape))
-    df_est_bin_filtered = df_this_file.dropna()
-    print('after filtering: ' + str(df_est_bin_filtered.shape))
+    # Verify CNR range
+    if df['nominal CNR'].min() < cnr_low or df['nominal CNR'].max() > cnr_high:
+        return {'error': 'nominal CNR values exist outside the expected range'}
 
-    # get the mid values of the bin intervals
-    df_this_file['cnrs_est_bin_mid'] = [ival.mid for ival in df_this_file['cnrs_est_bin']]
-    df_this_file['cnrs_true_bin_mid'] = [ival.mid for ival in df_this_file['cnrs_true_bin']]
+    # CNR bin calculations
+    cnr_bins = np.power(10, np.linspace(np.log10(cnr_low), np.log10(cnr_high), num_bins))
+    df['CNR bins'] = pd.cut(df['nominal CNR'], bins=cnr_bins, include_lowest=True)
+    df['CNR bin mid'] = [ival.mid for ival in df['CNR bins']]
 
-    # collate for precision counts
-    cnr_est_bin_mids_unique = np.unique(df_this_file['cnrs_est_bin_mid'])
-    cnr_true_bin_mids_unique = np.unique(df_this_file['cnrs_true_bin_mid'])
-    dl_list = np.unique(df_this_file['true dl'])
-    
-    results_cnr_est = df_this_file[['cnrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-    results_cnr_true = df_this_file[['cnrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
+    # Unique values for precision counts
+    cnr_bin_mid_unique = df['CNR bin mid'].unique()
+    ld_unique = df['nominal diffusion length'].unique()
 
-    # precision counts for all DLs
-    precision_counts_data = {
-        'cnr_est precision counts': precision_counts(results_cnr_est, cnr_est_bin_mids_unique, dl_list, proximity_levels),
-        'cnr_true precision counts': precision_counts(results_cnr_true, cnr_true_bin_mids_unique, dl_list, proximity_levels)
+    # Abbreviated results for speed
+    results_brief = df[['CNR bin mid', 'nominal diffusion length', 'd_wls_over_d_nom', 'd_ols_over_d_nom']]
+
+    # Get counts of results within precision proximity using precision_counts function
+    precision_counts_data = precision_counts(
+        results_brief, 
+        cnr_bin_mid_unique, 
+        ld_unique,
+        precision_levels)
+
+    # Return full results and precision counts
+    result = {
+        'all': df, 
+        'precision counts': precision_counts_data
     }
-
-    # initialize a diffusion length dictionary
-    dl_dict = {}
-
-    # sort data into subdictionaries by diffusion length
-    for this_dl in dl_list:
-        # make a string to label this subdictionary
-        dlstr = str(np.round(this_dl, 4))
-        this_dltxt_str = 'dl = ' + dlstr
-
-        # get the results for matching DLs
-        these_dls = df_this_file[(df_this_file['true dl'] == this_dl)]
-
-        # each subdictionary should have its own index starting with 0
-        these_dls.reset_index(inplace = True)
-
-        # collate results for estimated and true cnrs
-        these_dls_cnr_est = these_dls[['cnrs_est_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-        these_dls_cnr_true = these_dls[['cnrs_true_bin_mid', 'true dl', 'wls proximity', 'ols proximity']]
-
-        # get the precision counts for these dls
-        dl_dict.update({
-            this_dltxt_str: {
-                'data': these_dls, 
-                'cnr_est precision counts': precision_counts(these_dls_cnr_est, cnr_est_bin_mids_unique, [this_dl], proximity_levels),
-                'cnr_true precision counts': precision_counts(these_dls_cnr_true, cnr_true_bin_mids_unique, [this_dl], proximity_levels)
-            }
-        })
-
-    # initialize result dictionary
-    result = {'all': df_this_file, 'all precision counts': precision_counts_data, 'by dl': dl_dict}
 
     return result
- 
-def precision_counts(cnr_dl_prox, cnrs_bin_mid_unique, dls_unique, proximity_levels):
 
-    # initialize counts dictionary
-    cnr_dl_prox = cnr_dl_prox.values.tolist()
-    counts = {
-        'wls counts': {},
-        'ols counts': {}
-    }
+# count the number of scans that fall within the designated precision levels
+def precision_counts(cnr_ld_prox, cnr_bin_mid_unique, ld_unique, precision_levels):
+    """
+    Analyzes the precision of weighted and unweighted fits in diffusion studies by 
+    calculating the proximity of estimated diffusion coefficients to their nominal values.
 
-    # step through the precision levels 
-    for pl in proximity_levels:
-        plstr = str(pl)     # string to label the precision level
-        these_wls_counts = []   # initialize array of counts for wls fit
-        these_ols_counts = []   # initialize array of counts for ols fit
-        for cnr in cnrs_bin_mid_unique:
-            for dl in dls_unique:
-                wls_proxcount = 0
-                ols_proxcount = 0
-                cnr_dl_match = 0
-                for cnr1, dl1, wls_prox, ols_prox in cnr_dl_prox:
-                    if cnr1 == cnr and dl1 == dl:
-                        cnr_dl_match += 1
-                        if wls_prox <= pl:
-                            wls_proxcount += 1
-                        if ols_prox <= pl:
-                            ols_proxcount += 1
-                if cnr_dl_match != 0:
-                    these_wls_counts.append({'cnr': cnr, 'dl': dl, 'wls proximity portion': 100 * wls_proxcount/cnr_dl_match})
-                    these_ols_counts.append({'cnr': cnr, 'dl': dl, 'ols proximity portion': 100 * ols_proxcount/cnr_dl_match})
+    Parameters:
+    - cnr_ld_prox: DataFrame containing data for analysis. It should have four columns:
+                  'CNR bin mid', 'nominal diffusion length', 'd_wls_over_d_nom', and 
+                  'd_ols_over_d_nom', where the last two columns represent the proximity 
+                  values (D_est/D_nom) for weighted (WLS) and unweighted (OLS) fits.
+    - cnr_bin_mid_unique: List of unique middle values of CNR bins. These values are used 
+                          to categorize the data into different CNR ranges.
+    - ld_unique: List of unique diffusion lengths. These are used to categorize the data 
+                 based on the diffusion length.
+    - precision_levels: List of precision levels to analyze. These are fractions representing 
+                        how close the estimated diffusion coefficient needs to be to the nominal 
+                        value to be considered precise. For example, 0.1 (or 10%) means the 
+                        estimated value should be within 10% of the nominal value.
+
+    Returns:
+    - A dictionary with keys formatted as 'precision proximity < X%', where X is the precision 
+      level percentage. Each key maps to a DataFrame containing the analysis results for that 
+      precision level. The DataFrames include counts and statistics (mean, standard deviation, 
+      and difference in standard deviations between WLS and OLS fits) of the fits that fall within 
+      the specified precision proximity for each combination of CNR bin middle value and diffusion length.
+    """
+
+    # initialize counts dictionary and subdictionaries to store results
+    counts = {}
+
+    # step through the precision levels to collate results
+    # by precision level, cnr, ld, pix, and tix values
+    for p in precision_levels:
+        p_str = str(np.round(100*p))          # string to label the precision level
+        print('Counting for precision within ' + p_str + '% of nominal value')
+        these_counts = []   # initialize array of counts
+
+        for cnr in cnr_bin_mid_unique:
+            for ld in ld_unique:
+                # store the records matching precision level, cnr, ld, pix, and tix value
+                these_matches = cnr_ld_prox[
+                    (cnr_ld_prox['CNR bin mid'] == cnr) & 
+                    (cnr_ld_prox['nominal diffusion length'] == ld)
+                    ]
+
+                this_total = len(these_matches) # total number of matches
+                ols_proxcount = len(these_matches[np.abs(these_matches['d_ols_over_d_nom'] - 1) < p])
+                wls_proxcount = len(these_matches[np.abs(these_matches['d_wls_over_d_nom'] - 1) < p])
+
+                # Calculations for mean and standard deviation of proximity ratios
+                wls_prox_mean = np.mean(these_matches['d_wls_over_d_nom'])
+                wls_prox_std  = np.std(these_matches['d_wls_over_d_nom'])
+                ols_prox_mean = np.mean(these_matches['d_ols_over_d_nom'])
+                ols_prox_std  = np.std(these_matches['d_ols_over_d_nom'])
+
+                # Calculate the difference between the stdevs of wls and ols D/D0 values.
+                # Higher values indicate that weighted fits are more precise than unweighted.
+                # Negative values would indicate that unweighted fit is more precise than weighted.
+                # - Note that better precision doesn't necessarily mean better accuracy:
+                # - If there is bias, a more precise distribution may nevertheless be
+                # - far from the nominal value, and may evben have fewer fits within proximity
+                # - of the nominal value than a wider distribution would. Evaluation of the 
+                # - spread of fits along with the mean D_est/D_nom is thus warranted.
+                difference_ols_wls_std = ols_prox_std - wls_prox_std
+
+                if this_total == 0:
+                    # if none matched within precision proximity, report error
+                    print('No results found for CNR = ' + str(cnr) + ', LD = ' + str(ld))
+                    # flag the record for no matches
+                    these_counts.append(
+                        {'nominal CNR': cnr, 
+                            'nominal diffusion length': ld, 
+                            'weighted fits percent in proximity': -1, 
+                            'unweighted fits percent in proximity': -1, 
+                            'total in bin': -1,
+                            'weighted fits mean D_est/D_nom': -1,
+                            'unweighted fits mean D_est/D_nom': -1,
+                            'weighted fits stdev D_est/D_nom':  -1,
+                            'unweighted fits stdev D_est/D_nom':  -1,
+                            'difference in weighted and unweighted stdev': -1,
+                            })
                 else:
-                    these_wls_counts.append({'cnr': cnr, 'dl': dl, 'wls proximity portion': -1})
-                    these_ols_counts.append({'cnr': cnr, 'dl': dl, 'ols proximity portion': -1})
+                    these_counts.append(
+                        {'nominal CNR': cnr, 
+                            'nominal diffusion length': ld, 
+                            'weighted fits percent in proximity': 100 * wls_proxcount/this_total, 
+                            'unweighted fits percent in proximity': 100 * ols_proxcount/this_total, 
+                            'total in bin': this_total,
+                            'weighted fits mean D_est/D_nom': wls_prox_mean,
+                            'unweighted fits mean D_est/D_nom': ols_prox_mean,
+                            'weighted fits stdev D_est/D_nom':  wls_prox_std,
+                            'unweighted fits stdev D_est/D_nom':  ols_prox_std,
+                            'difference in weighted and unweighted stdev': difference_ols_wls_std,
+                            })
 
-        counts['wls counts'][plstr] = pd.DataFrame(these_wls_counts)
-        counts['ols counts'][plstr] = pd.DataFrame(these_ols_counts)
+        counts[f'precision proximity < {p_str}%'] = pd.DataFrame(these_counts)
 
     return counts
 
@@ -1529,9 +1585,17 @@ def precision_counts(cnr_dl_prox, cnrs_bin_mid_unique, dls_unique, proximity_lev
 ##########################
 
 def colordefs():
-    dictionary = {
-    'dice_blue': '#003f7f',
-    'dice_gold': '#f7941e',
-    'dice_green': '#0cce6b'
+    """
+    Defines a set of colors for plotting purposes. The color choices are made with 
+    considerations for color blindness accessibility and clarity in black & white printing.
+    The selection includes 'dice_blue' and 'dice_gold', representing Montana State University's 
+    colors, in acknowledgment of the institution where the author is pursuing their Ph.D. 
+
+    Returns:
+    - A dictionary of color names mapped to their hexadecimal color codes.
+    """
+    return {
+        'dice_blue': '#003f7f',    # MSU Blue, good contrast and colorblind safe
+        'dice_gold': '#f7941e',    # MSU Gold, vibrant and distinguishable in grayscale
+        'dice_green': '#0cce6b',   # Bright green, good visibility and colorblind safe
     }
-    return dictionary
