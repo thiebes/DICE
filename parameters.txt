@@ -1,88 +1,70 @@
 ################################################################
-# Change the below parameters according to your desired setup. 
-#
-# Be sure that every line has the following format, 
-# including the comma at the end of the line:
-#
-# 'label': value,
-#
-# Any line that starts with the pound sign (#) is "commented" and
-# will be ignored. To "uncomment" means to remove the pound sign. 
-# For many parameters, there are more than one option, but only one
-# should be uncommented. 
-#
-# After editing the file, save it. Each time you run the program, it
-# will read this parameters.txt file.
-#
-# See README.md for explanation of each parameter.
+# DICE Parameter Configuration - Version 1.0.0
+# Last updated: Nov 29, 2023
+# GitHub Repository: https://github.com/thiebes/DICE
+
+# Instructions:
+# - Modify values in the format: 'setting name': value,
+# - Include the comma at the end of each line.
+# - Comments (text following #) are ignored by the program.
+# - Uncomment a setting by removing the # at the beginning.
+# - Only one option per choice should be active (uncommented).
+# - Save changes before running the program.
+# - For detailed setting explanations, see the README at the GitHub link above.
+
 ################################################################
 
 {
-    ##### Filename slug #####
-    # use whatever text you want to add as a prefix
-    # for the filename of exported result data
-    'filename slug': 'test',
+    ### Filename settings ###
+    'filename slug': 'example',  # Prefix for exported data filenames.
 
-    ##### Image type #####
-    # use 'none' to avoid saving a plot of the results
-    # to make a plot and save the image, specify the file type
-    # e.g., 'svg', 'png', etc.
-    'image type': 'svg',
+    ### Image parameters ###
+    'image type': 'png',         # Options: 'jpg', 'png', 'svg', 'tif'.
+    'image width': 8.5,          # Width in cm. 
+    'image height': 5,           # Height in cm. 
+    'image dpi': 300,            # Resolution in DPI. 
+    'image font size': 8,        # Font size in points.
+    'image numbins': 35,         # Number of histogram bins.
+    'image x_lim': None,         # X-axis limits. Default if None: 3 sigma.
 
-    ##### Retain profile data? Keeping it can be memory-intensive. #####
-    'retain profile data': False,
+    ### Performance settings ###
+    'retain profile data': False, # Retaining profile data can be memory-intensive.
+    'multiprocessing': True,      # Enable/disable parallel processing.
 
-    ##### Parallel processing? #####
-    'multiprocessing': True,
+    ### Units ###
+    'length unit': 'micrometer',  # Options: 'micrometer', 'angstrom', etc.
+    'time unit': 'nanosecond',    # Options: 'nanosecond', 'picosecond', etc.
 
-    ##### Units #####
-    # use the singular unit, e.g., 'micrometer' and 'nanosecond'
-    'length unit': 'micrometer',
-    'time unit': 'nanosecond',
+    ### Simulation settings ###
+    'number of runs': 1000,       # How many iterations of the simulation to run.
 
-    ##### Number of simulation iterations per unique parameter set #####
-    'number of runs': 1000,
+    ### Spatial parameters ###
+    'spatial width': 5,           # Spatial width (units parameterized above).
+    'pixel width': 100,           # Pixel width across entire x-axis of profiles.
 
-    ##### Spatial parameters #####
-    'spatial width': 5,
-    'pixel width': 100,
-
-    ##### Time axis parameter #####
-    # Uncomment only one of the following lines:
-    'time range': [0, 1, 10], # start, stop, steps (inclusive)
+    ### Time axis parameters ###
+    # Choose one:
+    'time range': [0, 1, 10],     # Format: [start, stop, steps].
     # 'time series': [1,3,5,10,15,25,60,100],
 
-    ##### Initial profile parameters #####
-    'amplitude_0': 1,
-    'mean_0': 0,
-    # Uncomment either FWHM or sigma:
-    'FWHM_0': 1,
-    # 'sigma_0': 0.4032,
+    ### Initial profile parameters ###
+    # Initial profile width (choose one):
+    'FWHM_0': 1,                  # Full Width at Half Maximum.
+    # 'sigma_0': 0.4032,           # Standard deviation.
 
-    ##### Nominal diffusion length #####
-    # Remember to use values that correspond to the length and/or time units
-    # you specified above (or squared units in the case of diffusion).
-    #
-    # Uncomment only one of the following lines:
-    # 'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 1, 
-    'nominal diffusion length': 0.1,
+    # Initial amplitude and mean:
+    'amplitude_0': 1,             # Initial amplitude.
+    'mean_0': 0,                  # Initial mean.
 
-    ##### Noise standard deviation #####
-    # See the readme file for a complete explanation
+    ### Nominal diffusion and lifetime parameters ###
+    # Provide either diffusion length OR both diffusion coefficient and lifetime:
+    'nominal diffusion length': 0.01,
+    # 'nominal diffusion coefficient': 0.01, 
+    # 'nominal lifetime (tau)': 1, 
 
-    # Uncomment only one of the following lines:
-    'noise value': 0.05,
-    # 'estimate noise from data': 'example_profile.csv',
-    # 'noise range, reciprocal log': [0.01, 0.3],   # create a distribution of noise values
-    # 'noise range, reciprocal': [0.01, 0.3],       # create a distribution of noise values
+    ### Noise parameter ###
+    'noise value': 0.1,           # Standard deviation of noise.
 
-    # If a noise range is selected, indicate the number of values to calculate in the range.
-    # This will be ignored if either 'noise value' or 'estimate noise from data' is selected, 
-    # since in those cases there is only one noise value.
-    'noise range, number of values': 1,
-
-    ##### estimate/nominal proximity to 1 #####
-    # e.g., proximity level of 0.5 means:
-    # diffusion estimate/nominal = 1 +/- 0.5
-    'proximity level': 0.5,
+    ### Diffusion coefficient proximity threshold ###
+    'proximity level': 0.5,       # Threshold for diffusion estimate analysis.
 }
