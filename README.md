@@ -63,32 +63,47 @@ Here's a brief overview of what each package is used for:
 
 Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, please **[contact the author](http://thiebes.org/contact)** or raise an issue on GitHub.
 
+[Back to table of contents](table-of-contents)
+
+---
+
 ## Quick Start
 
-Here are some steps to quickly get started with DICE:
+Follow these steps to get started with DICE quickly:
 
-1. **Download the Repository**: Clone or download this repository and navigate to the project directory in your Python environment.
+1. **Download the Repository**: 
+   Clone or download this repository to your local machine and navigate to the project directory in your Python environment.
 
-2. **Edit Parameters**: Open the `parameters.txt` file and adjust the values to match your experimental parameters. This file serves as the primary means of input to the simulation.
+2. **Edit Parameters**: 
+   Modify the `parameters.txt` file to align with your experimental parameters. This file is the primary input for the simulation.
 
-3. **Run the Simulation**: Execute the `main.py` script in your Python environment to start the simulation. The script initializes all necessary functions and runs the simulation based on the parameters specified in `parameters.txt`.
-   **From the console**:
-    ```bash
-    python main.py
-    ```
-   - `python main.py`: This command is used in the console (like Command Prompt, PowerShell, or a terminal in Linux/Mac). It tells Python to execute the script named `main.py`. This is a common way to run Python scripts.
+3. **Run the Simulation**: 
+   The DICE module can be used in two different environments: the command line and a Jupyter-like environment.
    
-   **From within a Jupyter-like environment**:
-    ```
-    import main
-    main
-    ```
-   - `import main`: This line imports the `main` module into the Jupyter notebook or similar interactive environment.
-   - `main`: After importing, this line calls the main function or the main executable part of your main.py script.
+   - **From the command line/console**:
+     Utilize the `run_dice.py` script to run the DICE module. This script requires the parameters file as an argument.
+       - Open your console or terminal.
+       - Navigate to the directory containing `run_dice.py`.
+       - Execute the script with your parameters file:
+         ```bash
+         python run_dice.py parameters.txt
+         ```
 
-   You can run the script immediately after downloading if you want to get a feel of the simulation before editing the parameters. It is set to work with default parameters that serve as an example.
+   - **From within a Jupyter-like environment**:
+     - Import the DICE module.
+     - Invoke the `dice_runner` function, passing the filename of your parameters.
+       ```python
+       import dice
 
-5. **View the Results**: Upon successful execution, the simulation results will be displayed and saved.
+       # Replace "parameters.txt" with your parameters file
+       result = dice.dice_runner("parameters.txt")
+       ```
+     This function processes the parameters from the specified file and returns the results in a dictionary named `result`.
+
+   *Note:* The script can be executed immediately after downloading to experience the simulation with default parameters, which serve as an illustrative example.
+
+4. **View the Results**: 
+   After the simulation completes, the results will be summarized and saved, including a histogram plot for visual analysis.
 
 [Back to table of contents](table-of-contents)
 
