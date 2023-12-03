@@ -1,6 +1,6 @@
 ################################################################
 # DICE Parameter Configuration - Version 1.0.0
-# Last updated: Nov 29, 2023
+# Last updated: Dec 1, 2023
 # GitHub Repository: https://github.com/thiebes/DICE
 
 # Instructions:
@@ -15,56 +15,54 @@
 ################################################################
 
 {
-    ### Filename settings ###
-    'filename slug': 'example',  # Prefix for exported data filenames.
-
-    ### Image parameters ###
-    'image type': 'png',         # Options: 'jpg', 'png', 'svg', 'tif'.
-    'image width': 8.5,          # Width in cm. 
-    'image height': 5,           # Height in cm. 
-    'image dpi': 300,            # Resolution in DPI. 
-    'image font size': 8,        # Font size in points.
-    'image numbins': 35,         # Number of histogram bins.
-    'image x_lim': None,         # X-axis limits. Default if None: 3 sigma.
-
-    ### Performance settings ###
-    'retain profile data': False, # Retaining profile data can be memory-intensive.
+    ### General settings ###
+    'filename slug': 'example',   # Prefix for exported data filenames.
+    'retain profile data': False, # Memory impact consideration.
     'multiprocessing': True,      # Enable/disable parallel processing.
+    'number of runs': 1000,       # Iterations count.
 
     ### Units ###
-    'length unit': 'micrometer',  # Options: 'micrometer', 'angstrom', etc.
-    'time unit': 'nanosecond',    # Options: 'nanosecond', 'picosecond', etc.
+    'length unit': 'micrometer',  # Length options: 'micrometer', 'angstrom', etc.
+    'time unit': 'nanosecond',    # Time options: 'nanosecond', 'picosecond', etc.
 
-    ### Simulation settings ###
-    'number of runs': 1000,       # How many iterations of the simulation to run.
+    ### Spatial axis parameters ###
+    'spatial width': 5,           # Spatial width of x-axis in units defined above.
+    'pixel width': 100,           # Pixel width across x-axis.
 
-    ### Spatial parameters ###
-    'spatial width': 5,           # Spatial width (units parameterized above).
-    'pixel width': 100,           # Pixel width across entire x-axis of profiles.
-
-    ### Time axis parameters ###
-    # Choose one:
+    ### Temporal axis parameters ###
+    # Choose (uncomment) one time setting:
     'time range': [0, 1, 10],     # Format: [start, stop, steps].
     # 'time series': [1,3,5,10,15,25,60,100],
 
-    ### Initial profile parameters ###
-    # Initial profile width (choose one):
+    ### Initial profile width parameter ###
+    # Choose (uncomment) one profile width setting:
     'FWHM_0': 1,                  # Full Width at Half Maximum.
     # 'sigma_0': 0.4032,           # Standard deviation.
 
-    # Initial amplitude and mean:
+    ### Initial amplitude and mean ###
     'amplitude_0': 1,             # Initial amplitude.
     'mean_0': 0,                  # Initial mean.
 
-    ### Nominal diffusion and lifetime parameters ###
-    # Provide either diffusion length OR both diffusion coefficient and lifetime:
+    ### Diffusion parameters ###
+    # Choose (uncomment) one diffusion setting -- 
+    #   either diffusion length, or both diffusion coefficient and lifetime:
     'nominal diffusion length': 0.01,
-    # 'nominal diffusion coefficient': 0.01, 
-    # 'nominal lifetime (tau)': 1, 
+    # 'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 1,
 
-    ### Noise parameter ###
-    'noise value': 0.1,           # Standard deviation of noise.
+    ### Noise and analysis parameters ###
+    # Choose (uncomment) one noise option:
+    'noise value': 0.05,           # Standard deviation of noise.
+    # 'estimate noise from data': 'example_profile.csv',
+    #
+    # Set the proximity level for analysis:
+    'proximity level': 0.5,       # Diffusion estimate accuracy threshold.
 
-    ### Diffusion coefficient proximity threshold ###
-    'proximity level': 0.5,       # Threshold for diffusion estimate analysis.
+    ### Plot image parameters ###
+    'image type': 'png',         # File type: 'jpg', 'png', 'svg', 'tif'.
+    'image width': 8.5,          # Width in cm.
+    'image height': 5,           # Height in cm.
+    'image dpi': 300,            # Resolution in DPI.
+    'image font size': 8,        # Font size in points.
+    'image numbins': 35,         # Histogram bins count.
+    'image x_lim': None,         # X-axis limits (default: 3 sigma if None).
 }
