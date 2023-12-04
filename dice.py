@@ -6,6 +6,12 @@
 #                                                                       #
 # Copyright (C) 2023 Joseph J. Thiebes                                  #
 #                                                                       #
+# This material is based upon work supported by the National Science    #
+# Foundation under Grant No. 2154448. Any opinions, findings, and       #
+# conclusions or recommendations expressed in this material are those   #
+# of the author(s) and do not necessarily reflect the views of the      #
+# National Science Foundation.                                          #
+#                                                                       #
 # This work is licensed under the Creative Commons Attribution 4.0      #
 # International License. To view a copy of this license, visit          #
 # http://creativecommons.org/licenses/by/4.0/ or send a letter to       #
@@ -20,15 +26,10 @@
 # including a link to the license in your README.md file or             #
 # documentation.                                                        #
 #########################################################################
-# See the README.md file for information about how to use this tool     #
-# and to cite it in publications.                                       #
+# See the README.md file for information about how to use this tool.    #
 #########################################################################
 
 # Library imports
-import ast
-import os
-import re
-from typing import Any, Dict, List, Tuple
 import numpy as np
 from numpy.random import default_rng
 import pandas as pd
@@ -39,14 +40,20 @@ from scipy.optimize import curve_fit
 import statsmodels.api as sm
 from joblib import Parallel, delayed
 
-def make_x_axis(scan_width: float, scan_width_pixels: int, psf_mu: float) -> np.ndarray:
+# Standard Python libraries
+import ast
+import os
+import re
+from typing import Any, Dict, List, Tuple
+
+def make_x_axis(scan_width: float, scan_width_pixels: int, mu: float) -> np.ndarray:
     """
     Create an array representing an x-axis.
 
     Parameters:
     scan_width (float): Total width of x-axis in spatial units.
     scan_width_pixels (int): Total width of x-axis in pixels.
-    psf_mu (float): Center of x-axis aligned with center of point spread function.
+    mu (float): Center of x-axis aligned with center of point spread function.
 
     Returns:
     np.ndarray: Array of x-axis values.
@@ -56,30 +63,29 @@ def make_x_axis(scan_width: float, scan_width_pixels: int, psf_mu: float) -> np.
     if scan_width <= 0:
         raise ValueError("scan_width must be a positive number")
     
-    x_start = psf_mu - scan_width / 2
-    x_end = psf_mu + scan_width / 2
+    x_start = mu - scan_width / 2
+    x_end = mu + scan_width / 2
     x_values = np.linspace(x_start, x_end, scan_width_pixels)
     return x_values
 
-def make_time_axis(t_start: float, t_end: float, tix: int) -> np.ndarray:
+def make_time_axis(t_start: float, t_end: float, t_frames: int) -> np.ndarray:
     """
     Create an array representing a time axis.
 
     Parameters:
     t_start (float): Start timestamp.
     t_end (float): End timestamp.
-    tix (int): Number of time frames.
+    t_frames (int): Number of time frames.
 
     Returns:
     np.ndarray: Array of time frame values.
     """
-    if tix <= 0:
+    if t_frames <= 0:
         raise ValueError("Number of time frames must be a positive integer")
     if t_start >= t_end:
         raise ValueError("Start timestamp must be less than the end timestamp")
     
-    time_frames = np.linspace(t_start, t_end, tix)
-    return time_frames
+    return np.linspace(t_start, t_end, t_frames)
 
 def sigma_to_fwhm(sigma: float) -> float:
     """
@@ -141,9 +147,9 @@ def gaussian(x: np.ndarray, mu: float, sig2: float, amp: float) -> np.ndarray:
 
     Parameters:
     x (np.ndarray): Array of x values.
-    mu (float): Mean value of the Gaussian.
-    sig2 (float): Variance of the Gaussian.
-    amp (float): Amplitude of the Gaussian.
+    mu (float): Mean value of the Gaussian. Default: 0
+    sig2 (float): Variance (sigma^2) of the Gaussian.
+    amp (float): Amplitude of the Gaussian. Default: 1
 
     Returns:
     np.ndarray: Gaussian function y-values.
@@ -155,12 +161,12 @@ def gaussian(x: np.ndarray, mu: float, sig2: float, amp: float) -> np.ndarray:
 
     return amp * np.exp(-1 * np.power(x - mu, 2) / (2 * sig2))
 
-def integrated_intensity(sig2, amp):
+def integrated_intensity(sig2: float, amp: float) -> float:
     """
     Calculate the integrated intensity (area under the curve) of a Gaussian function.
 
     Parameters:
-    - sig2 (float): The variance of the Gaussian (sigma squared).
+    - sig2 (float): The variance of the Gaussian (sigma^2).
     - amp (float): The amplitude of the Gaussian peak.
 
     Returns:
@@ -179,10 +185,10 @@ def integrated_intensity(sig2, amp):
     return amp * np.sqrt(2 * np.pi * sig2)
 
 
-def slope_to_diffusion_constant(slope, l_unit, t_unit):
+def slope_to_diffusion_constant(slope: float, l_unit: str, t_unit: str) -> float:
     """
     Convert the slope from a linear fit of mean squared displacement vs. time 
-    -- i.e., MSD(t) = sigma^2_t - sigma^2_0 --
+    -- (i.e., MSD(t) = sigma^2_t - sigma^2_0) --
     to a diffusion coefficient in conventional units [cm^2/s].
 
     Parameters:
@@ -230,12 +236,10 @@ def slope_to_diffusion_constant(slope, l_unit, t_unit):
                          f"{', '.join(conversion_factors['time'].keys())}.")
 
     # Convert the slope to cm^2/s (note that 1 cm = 0.01 m)
-    slope_cm2_s = slope * conversion_factors['length'][l_unit] ** 2 / conversion_factors['time'][t_unit]
+    slope_cm2_per_s = slope * conversion_factors['length'][l_unit] ** 2 / conversion_factors['time'][t_unit]
 
     # Divide by 2 to get the diffusion coefficient in one dimension
-    diffusion_coefficient = slope_cm2_s / 2
-
-    return diffusion_coefficient
+    return slope_cm2_per_s / 2
 
 def make_noise_distribution(noise_low, noise_high, num, logarithmic=False):
     """
@@ -381,7 +385,7 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
     
     # Else if 'time series' is provided, it's assumed to be valid and no action is taken.
 
-def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int) -> None:
+def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int = 1) -> None:
     """
     Processes noise-related parameters in the provided dictionary based on the unique noise key.
 
@@ -407,19 +411,7 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
             raise ValueError(f"Invalid noise range {noise_range}. It must be a sequence of two numeric values.")
 
     try:
-        if unique_noise_key == 'noise range, reciprocal log':
-            noise_range = parameters_dictionary[unique_noise_key]
-            validate_noise_range(noise_range)
-            parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=True
-            )
-        elif unique_noise_key == 'noise range, reciprocal':
-            noise_range = parameters_dictionary[unique_noise_key]
-            validate_noise_range(noise_range)
-            parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=False
-            )
-        elif unique_noise_key == 'noise value':
+        if unique_noise_key == 'noise value':
             noise_value = parameters_dictionary[unique_noise_key]
             if not isinstance(noise_value, (int, float)):
                 raise ValueError(f"Invalid noise value {noise_value}. It must be a numeric value.")
@@ -434,6 +426,18 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
             cnr_est = fft_cnr(t0_profile_y)
             sigma_n = np.power(cnr_est, -1)
             parameters_dictionary['noise series'] = [sigma_n]
+        elif unique_noise_key == 'noise range, reciprocal log':
+            noise_range = parameters_dictionary[unique_noise_key]
+            validate_noise_range(noise_range)
+            parameters_dictionary['noise series'] = make_noise_distribution(
+                noise_range[0], noise_range[1], num_vals, logarithmic=True
+            )
+        elif unique_noise_key == 'noise range, reciprocal':
+            noise_range = parameters_dictionary[unique_noise_key]
+            validate_noise_range(noise_range)
+            parameters_dictionary['noise series'] = make_noise_distribution(
+                noise_range[0], noise_range[1], num_vals, logarithmic=False
+            )
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
 
@@ -526,13 +530,13 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     - ValueError: If there are conflicting or incorrect types of parameters.
     """
     # Ensure that these required keys are present 
-    required_keys = ['number of runs', 'spatial width', 'pixel width', 'mean_0', 'amplitude_0', 'noise range, number of values']
+    required_keys = ['number of runs', 'spatial width', 'pixel width', 'mean_0', 'amplitude_0']
     for key in required_keys:
         if key not in parameters_dictionary:
             raise KeyError(f"The required parameter '{key}' is missing from the parameters dictionary.")
     # Further checks for required parameters are performed within each helper function called below.
 
-    num_noise = parameters_dictionary['noise range, number of values']
+    num_noise = 1 # future use: parameters_dictionary['noise range, number of values']
     parameters_dictionary['x array'] = make_x_axis(
         parameters_dictionary['spatial width'], 
         parameters_dictionary['pixel width'], 
@@ -603,6 +607,17 @@ def dice_runner(parameters_filename):
 
     # open and process the parameters
     parameters_dictionary = open_parameters(parameters_filename)
+
+    # image parameters
+    image_type = parameters_dictionary['image type']
+    image_width = parameters_dictionary['image width']
+    image_height = parameters_dictionary['image height']
+    image_dpi = parameters_dictionary['image dpi']
+    image_font_size = parameters_dictionary['image font size']
+    image_tick_l = parameters_dictionary['image tick length']
+    image_tick_w = parameters_dictionary['image tick width']
+    image_numbins = parameters_dictionary['image numbins']
+    image_x_lim = parameters_dictionary['image x_lim']
 
     # Units
     l_unit = parameters_dictionary['length unit']
@@ -675,17 +690,21 @@ def dice_runner(parameters_filename):
     runs_txt = str(parameters_dictionary['number of runs'])
 
     # the filename incorporates user-specified text along with several parameters for reference
-    filename_slug = file_prefix + '_LD-' + ld_txt + '_CNR-' + cnr_txt + "_px-" + pix_txt.rjust(4, "0") + "_tx-" + tix_txt.rjust(3,"0") + '_runs-' + runs_txt
+    filename_slug = file_prefix + '_LD-' + ld_txt + '_CNR-' + cnr_txt + "_px-" + pix_txt + "_tx-" + tix_txt + '_runs-' + runs_txt
     result_dictionary['filename slug'] = filename_slug
+    
     summary_filename = filename_slug + '_summary.txt'
     result_dictionary['parameters']['summary filename'] = summary_filename
+    
     result_filename = filename_slug + '_results.csv'
     result_dictionary['parameters']['result filename'] = result_filename
 
-    result_dictionary['image type'] = parameters_dictionary['image type']
+    image_type = parameters_dictionary['image type']
+    image_filename = filename_slug + '_histogram.' + image_type
+    result_dictionary['parameters']['image type'] = image_type
     
     # Make array of parameters for iterative simulations, indexed by run number.
-    # This is only currently set up for handling multiple noise values.
+    # For future use handling multiple noise values.
     run_numbers = list(range(runs_total))
     noise_list = np.concatenate([np.repeat(noise, numruns) for noise in noise_series])
     parameter_sets = zip(run_numbers, noise_list)
@@ -705,15 +724,19 @@ def dice_runner(parameters_filename):
     print_and_append(summary_filename, '')
 
     if parameters_dictionary['multiprocessing'] == 1:
+        print_and_append(summary_filename, 'Starting simulation with multiprocessing')
+        print_and_append(summary_filename, '')
         result = Parallel(n_jobs=-1)(delayed(scan_runner)(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data) for this_run, this_noise_sigma in parameter_sets)
-    else:    
+    else:
+        print_and_append(summary_filename, 'Starting simulation without multiprocessing')
+        print_and_append(summary_filename, '')
         result = [scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data) for this_run, this_noise_sigma in parameter_sets]
  
     # update the result dictionary
     [result_dictionary['run results'].update(this_result) for this_result in result]
 
     # Collate data from runs
-    print_and_append(summary_filename, 'Model runs completed. Collating results.')
+    print_and_append(summary_filename, 'Simulation completed. Collating results.')
     print_and_append(summary_filename, '')
     collated_results = pd.DataFrame(
         np.asarray(
@@ -748,55 +771,77 @@ def dice_runner(parameters_filename):
                     ]
         )
 
-    print_and_append(summary_filename, 'Converting diffusion constants to conventional units')
-    print_and_append(summary_filename,'')
+    if len(t_axis) > 1:
+        print_and_append(summary_filename, 'Converting diffusion constants to conventional units')
+        print_and_append(summary_filename,'')
 
-    # convert the nominal diffusion coefficient to a MSD(t) slope
-    nom_slopes = [diff * 2. for diff in collated_results['nominal diffusion coeff']]
+        # get the fitted slopes with user defined units
+        fit_wls_slopes = [slope for slope in collated_results['weighted fit diffusion slope']]
+        fit_wls_slope_stderrs = [stderr for stderr in collated_results['weighted fit diffusion slope stderr']]
+        fit_ols_slopes = [slope for slope in collated_results['unweighted fit diffusion slope']]
+        fit_ols_slope_stderrs = [stderr for stderr in collated_results['unweighted fit diffusion slope stderr']]
 
-    # get the fitted slopes with user defined units
-    fit_wls_slopes = [slope for slope in collated_results['weighted fit diffusion slope']]
-    fit_wls_slope_stderrs = [stderr for stderr in collated_results['weighted fit diffusion slope stderr']]
-    fit_ols_slopes = [slope for slope in collated_results['unweighted fit diffusion slope']]
-    fit_ols_slope_stderrs = [stderr for stderr in collated_results['unweighted fit diffusion slope stderr']]
+        # convert the nominal diffusion coefficient to a MSD(t) slope, and then
+        # convert to diffusion constant in conventional units of cm^2 s^-1
+        nom_slopes = [diff * 2. for diff in collated_results['nominal diffusion coeff']]
+        collated_results['nominal diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in nom_slopes
+        ]
+        # convert fitted slopes and std errors to cm^2/s
+        collated_results['unweighted fit diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slopes
+        ]
+        collated_results['unweighted fit diffusion stderr [cm^2/s]'] = [
+            slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slope_stderrs
+        ]
+        collated_results['weighted fit diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_wls_slopes
+        ]
+        collated_results['weighted fit diffusion stderr [cm^2/s]'] = [
+            slope_to_diffusion_constant(stderr, l_unit, t_unit) for stderr in fit_wls_slope_stderrs
+        ]
 
-    # convert to diffusion constant in conventional units of cm^2 s^-1
-    collated_results['nominal diffusion coeff [cm^2/s]'] = [
-        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in nom_slopes
-    ]
-    collated_results['unweighted fit diffusion coeff [cm^2/s]'] = [
-        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slopes
-    ]
-    collated_results['unweighted fit diffusion stderr [cm^2/s]'] = [
-        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_ols_slope_stderrs
-    ]
-    collated_results['weighted fit diffusion coeff [cm^2/s]'] = [
-        slope_to_diffusion_constant(slope, l_unit, t_unit) for slope in fit_wls_slopes
-    ]
-    collated_results['weighted fit diffusion stderr [cm^2/s]'] = [
-        slope_to_diffusion_constant(stderr, l_unit, t_unit) for stderr in fit_wls_slope_stderrs
-    ]
+        print_and_append(summary_filename, 'Analyzing precision and accuracy')
+        print_and_append(summary_filename,'')
+        result_dictionary['analysis'] = estimates_precision(collated_results, proximity_level)
+        ols_proxpct = result_dictionary['analysis']['% fits within proximity']['unweighted fit']
+        wls_proxpct = result_dictionary['analysis']['% fits within proximity']['weighted fit']
+        print_and_append(summary_filename,'Portion of fits where D_estimate / D_nominal = 1 ± ' + str(proximity_level) + ':')
+        print_and_append(summary_filename, '-- Unweighted fit: ' + str(round(ols_proxpct, 2)))
+        print_and_append(summary_filename, '-- Weighted fit: ' + str(round(wls_proxpct, 2)))
+        print_and_append(summary_filename,'')
 
-    print_and_append(summary_filename, 'Analyzing precision and accuracy')
-    result_dictionary['analysis'] = estimates_precision(collated_results, proximity_level)
-    ols_proxpct = result_dictionary['analysis']['% fits within proximity']['unweighted fit']
-    wls_proxpct = result_dictionary['analysis']['% fits within proximity']['weighted fit']
-    print_and_append(summary_filename,'Portion of fits where D_fit / D_nominal = 1 ± ' + str(proximity_level) + ':')
-    print_and_append(summary_filename, '-- Unweighted fit: ' + str(round(ols_proxpct, 2)))
-    print_and_append(summary_filename, '-- Weighted fit: ' + str(round(wls_proxpct, 2)))
-    print_and_append(summary_filename,'')
+    else:
+        print_and_append(summary_filename, 'No diffusion estimates: only one time frame')
 
     #store collated results
     result_dictionary['collated results'] = collated_results
 
     # export file of collated results
     # filename includes several parameters for identification
-    print_and_append(summary_filename, 'Exporting result data')
+    print_and_append(summary_filename, 'Exporting result data and histogram.')
 
-    print_and_append(summary_filename, 'Collated CSV: ' + result_filename)
     collated_results.to_csv(result_filename, index = False)
+    plot_accuracy_histogram(
+        result_dictionary,
+        proximity = proximity_level,
+        filename = image_filename,
+        image_type = image_type,
+        width = image_width,
+        height = image_height,
+        dpi = image_dpi,
+        font_size = image_font_size,
+        tick_length = image_tick_l,
+        tick_width = image_tick_w,
+        num_bins = image_numbins,
+        x_lim = image_x_lim
+    )
 
-    print_and_append(summary_filename, '')
+    print_and_append(summary_filename, '-- Summary file: ' + summary_filename)
+    print_and_append(summary_filename, '-- Collated CSV file: ' + result_filename)
+    print_and_append(summary_filename, '-- Histogram image file ' + image_filename)
+    print_and_append(summary_filename,'')
+
     print_and_append(summary_filename, 'Done!')
     return result_dictionary
 
@@ -882,26 +927,42 @@ def scan_runner(indices, parameters, ld, this_diff, this_tau, this_noise, this_r
         noisy_profile_fits['sigma^2_t standard errors']
     ))
 
-    # calculate the weights for diffusion fitting
-    # -- if sigma or stdev are zero, that is bad, so give zero weight
-    # -- otherwise, weight is calculated as:
-    # -- normalized reciprocal of the relative variance of the fitted MSD
-    weights_rel = [np.power(stderr / sigma2, -2.) if (sigma2 !=0 and stderr != 0) else 0 for sigma2,stderr in gaussfit_sigma2_t_stderrs]
-    # normalize so the sum of the weights is unity
-    weights_rel = [weight/np.sum(weights_rel) for weight in weights_rel]
+    if len(time_axis) > 1:
+        # calculate the weights for diffusion fitting
+        # -- if sigma or stdev are zero, that is bad, so give zero weight
+        # -- otherwise, weight is calculated as:
+        # -- normalized reciprocal of the relative variance of the fitted MSD
+        weights = [np.power(stderr / sigma2, -2.) if (sigma2 !=0 and stderr != 0) else 0 for sigma2,stderr in gaussfit_sigma2_t_stderrs]
+        # normalize so the sum of the weights is unity
+        weights = [weight/np.sum(weights) for weight in weights]
 
-    # get the unweighted (OLS) and weighted (WLS) fits of the MSD (change in sigma^2)
-    ols_fit_covar = diffusion_ols_fit(time_axis, gaussfit_sigma2_t)
-    ols_fit = ols_fit_covar['MSD_t slope estimate']
-    ols_intercept = ols_fit_covar['intercept estimate']
-    ols_stderr = ols_fit_covar['MSD_t slope std error']
-    ols_intercept_stderr = ols_fit_covar['intercept standard error']
+        # get the unweighted (OLS) and weighted (WLS) fits of the MSD (change in sigma^2)
+        ols_fit = diffusion_ols_fit(time_axis, gaussfit_sigma2_t)
+        ols_slope_est = ols_fit['MSD_t slope estimate']
+        ols_intercept_est = ols_fit['intercept estimate']
+        ols_slope_stderr = ols_fit['MSD_t slope std error']
+        ols_intercept_stderr = ols_fit['intercept standard error']
 
-    wls_fit_covar = diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights_rel)
-    wls_fit = wls_fit_covar['MSD_t slope estimate']
-    wls_intercept = wls_fit_covar['intercept estimate']
-    wls_stderr = wls_fit_covar['MSD_t slope std error']
-    wls_intercept_stderr = wls_fit_covar['intercept standard error']
+        wls_fit = diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights)
+        wls_slope_est = wls_fit['MSD_t slope estimate']
+        wls_intercept_est = wls_fit['intercept estimate']
+        wls_slope_stderr = wls_fit['MSD_t slope std error']
+        wls_intercept_stderr = wls_fit['intercept standard error']
+
+    else:
+        weights = 'N/A'
+        weights = 'N/A'
+        ols_fit = 'N/A'
+        ols_slope_est = 'N/A'
+        ols_intercept_est = 'N/A'
+        ols_slope_stderr = 'N/A'
+        ols_intercept_stderr = 'N/A'
+
+        wls_fit = 'N/A'
+        wls_slope_est = 'N/A'
+        wls_intercept_est = 'N/A'
+        wls_slope_stderr = 'N/A'
+        wls_intercept_stderr = 'N/A'
 
     # delete the profile data if not retaining
     if retain_profile_data != 1:
@@ -915,17 +976,17 @@ def scan_runner(indices, parameters, ld, this_diff, this_tau, this_noise, this_r
         'cnr_0 estimate': CNR_0_est,
         'diffusion': {
             'unweighted fit': {
-                'MSD_t slope estimate': ols_fit,
-                'MSD_t slope std error': ols_stderr,
-                'intercept estimate': ols_intercept,
+                'MSD_t slope estimate': ols_slope_est,
+                'MSD_t slope std error': ols_slope_stderr,
+                'intercept estimate': ols_intercept_est,
                 'intercept standard error': ols_intercept_stderr,
                 },
             'weighted fit': {
-                'MSD_t slope estimate': wls_fit,
-                'MSD_t slope std error': wls_stderr,
-                'intercept estimate': wls_intercept,
+                'MSD_t slope estimate': wls_slope_est,
+                'MSD_t slope std error': wls_slope_stderr,
+                'intercept estimate': wls_intercept_est,
                 'intercept standard error': wls_intercept_stderr,
-                'weights': weights_rel,
+                'weights': weights,
                 },
             }
         })
@@ -1588,14 +1649,106 @@ def colordefs():
     """
     Defines a set of colors for plotting purposes. The color choices are made with 
     considerations for color blindness accessibility and clarity in black & white printing.
-    The selection includes 'dice_blue' and 'dice_gold', representing Montana State University's 
-    colors, in acknowledgment of the institution where the author is pursuing their Ph.D. 
 
     Returns:
     - A dictionary of color names mapped to their hexadecimal color codes.
     """
     return {
-        'dice_blue': '#003f7f',    # MSU Blue, good contrast and colorblind safe
-        'dice_gold': '#f7941e',    # MSU Gold, vibrant and distinguishable in grayscale
+        'dice_blue': '#003f7f',    # Montana State blue, good contrast and colorblind safe
+        'dice_gold': '#f7941e',    # Montana State gold, vibrant and distinguishable in grayscale
         'dice_green': '#0cce6b',   # Bright green, good visibility and colorblind safe
     }
+
+def plot_accuracy_histogram(
+        simulation_result: dict, # Results from the simulation
+        proximity: float,        # Accuracy & precision: nominal proximity threshold 
+        filename: str,           # Base name for the output file
+        image_type: str,         # Image format (e.g., 'png', 'jpg')
+        width: float,            # Width of the image in cm
+        height: float,           # Height of the image in cm
+        dpi:float,               # Resolution of the image in dots per inch
+        font_size: float,        # Font size in points, for labels
+        tick_length: float,      # tick length in points
+        tick_width: float,       # tick width in points
+        num_bins: int,           # Number of bins in the histogram
+        x_lim=None               # Optional x-axis limits
+    ):
+    
+    """
+    Exports a histogram of diffusion accuracy values (D_est/D_nom) from simulation results. 
+    """
+
+    # convert width and height from cm to inches
+    inch = 1/2.54
+    width, height = width * inch, height * inch
+
+    # colors
+    color_definitions = colordefs()
+    dice_blue = color_definitions['dice_blue']
+    dice_gold = color_definitions['dice_gold']
+    
+    # Verify required data is present
+    if 'collated results' not in simulation_result or 'd_wls_over_d_nom' not in simulation_result['collated results']:
+        raise ValueError("Required data not found in simulation_result.")
+
+    # Convert list of values to NumPy array
+    dest_over_d0 = np.array(simulation_result['collated results']['d_wls_over_d_nom'])
+    
+    # Initialize array to flag accuracy ratio values in proximity
+    dest_d0_proximity_flag = np.abs(dest_over_d0 - 1) <= proximity
+
+    # Calculate and report percentage of values that are within proximity threshold
+    proxpct = 100 * np.sum(dest_d0_proximity_flag) / len(dest_d0_proximity_flag)
+    print(f'Percent of D estimates within {proximity * 100:.2f}% of nominal: {proxpct:.1f}')
+
+    fig, ax = plt.subplots(layout='constrained', figsize = (width,height))
+
+    n_dd0, bins_dd0, patches_dd0 = ax.hist(
+        dest_over_d0,
+        bins=num_bins, density = True,
+        color=dice_gold, edgecolor='w',
+        )
+
+    binspace_dd0 = np.linspace(bins_dd0[0], bins_dd0[-1], 100)
+    mu_dd0 = np.mean(dest_over_d0)
+    sigma_dd0 = np.std(dest_over_d0)
+    y_dd0 = norm.pdf(binspace_dd0, mu_dd0, sigma_dd0)
+
+    ax.set_xlabel('$D_{est}/D_{nom}$', fontsize = font_size)
+    ax.set_ylabel('Probability density', fontsize = font_size)
+
+    # default limits of x: 99.97% confidence interval
+    if x_lim is None:
+        x_lim = [mu_dd0 - 3 * sigma_dd0, mu_dd0 + 3 * sigma_dd0]
+    ax.set_xlim(x_lim)
+    
+    ax.tick_params(axis='both', which='both', 
+                   labelsize=font_size,
+                   direction='in', 
+                   length=tick_length, 
+                   width=tick_width,
+                   # left=False, labelleft=False,
+                )
+
+    ax.plot(binspace_dd0, y_dd0, 
+            color = dice_blue, linewidth=2,
+            label = 'mean ' + str(np.round(mu_dd0,3)) + 
+                    '\nmedian ' + str(np.round(np.median(dest_over_d0),3)) + 
+                    '\nstdev ' + str(np.round(sigma_dd0,3))
+            )
+
+    ax.legend(fontsize=font_size, handlelength=0, 
+            labelspacing = 2, frameon=False)
+
+    # make the image background white and opaque
+    fig.patch.set_facecolor('w')
+    fig.patch.set_alpha(1)
+
+    try:
+        # Export the image
+        export_file = f"{filename}"
+        plt.savefig(export_file, dpi=dpi, format=image_type)
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
+    plt.close(fig)  # Close the figure to free up memory
