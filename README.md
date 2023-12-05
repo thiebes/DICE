@@ -1,6 +1,8 @@
 # Diffusion Insight Computation Engine (DICE)
 ![DICE logo](logo/dice_logo_640w.png)
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10258192.svg)](https://doi.org/10.5281/zenodo.10258192)
+
 ## Introduction
 
 DICE is an open-source tool for researchers in time-resolved microscopy and related fields. It evaluates the precision and accuracy of diffusion coefficient estimates derived from optical measures of excited state transport. DICE provides a robust method for assessing experimental accuracy and precision by simulating parameters that mirror your experimental setup.
