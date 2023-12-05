@@ -134,38 +134,13 @@ The parameters in the above examples include:
 - `tx-10` means that there are 10 time frames in each simulated experiment.
 - `runs-1000` means the file contains the results from 1000 simulation runs.
 
-### Image type
-Choose the file type for the default plot image. Options include `'jpg'`, `'png'`, `'svg'`, `'tif'`.
-
-### Retain profile data?
-Decide whether to retain all profile data. Note that keeping profile data may impact performance, depending on the number of profiles generated. 
-- `True`: Keep all data (necessary for plotting individual profiles).
-- `False`: Discard raw data (retain only the fitting results).
-
-### Parallel processing
-Enable parallel processing by setting this parameter to `True`.
+### Number of simulation iterations
+Specify the number of simulations to run. 
 
 ### Units
 Specify the singular units for length and time, like `'micrometer'` and `'nanosecond'`. These units apply to all parameters representing physical quantities of length and time. Ensure that all parameter magnitudes are appropriately scaled.
 
-### Number of simulation iterations
-Specify the number of simulations to run. 
-
-### Spatial parameters
-Set the spatial width and pixel number for the scan. The spatial width should align with the length unit specified.
-
-### Temporal parameters
-Provide time-axis information using one of the following forms:
-- `'time range'`: Format `[start, stop, steps]` for evenly timed frames.
-- `'time series'`: Specific time values like `[0.1, 0.3, 0.5, 0.7, 0.9]`.
-
-### Initial profile parameters
-Configure the amplitude, mean, and width of the initial Gaussian profile. Note: Amplitudes other than unity have not been tested.
-- The amplitude is usually unity, but it can be changed here if needed. Other amplitude values have not been tested, however.
-- For profiles centered at the origin, the mean should be set to zero.
-- The width may be given as sigma (the standard deviation) or FWHM (full-width, half-maximum).
-
-### Diffusion length parameters
+### Nominal diffusion and lifetime parameters
 Provide either:
 - Nominal diffusion coefficient $D$ and lifetime $\tau$, or
 - Nominal diffusion length $\sqrt{D\tau}$
@@ -177,11 +152,25 @@ Provide either:
 - For a nominal diffusion coefficient of 1.0 cm<sup>2</sup>/s, but your length unit parameter is `'micrometer'` and your time unit is `'nanosecond'`, scale to μm<sup>2</sup>/ns as follows:
   - `'nominal diffusion coefficient': 0.1,` and
   - `'nominal lifetime (tau)': 1,`
+ 
+### Initial profile parameters
+Configure the amplitude, mean, and width of the initial Gaussian profile. Note: Amplitudes other than unity have not been tested.
+- The amplitude is usually unity, but it can be changed here if needed. Other amplitude values have not been tested, however.
+- For profiles centered at the origin, the mean should be set to zero.
+- The width may be given as sigma (the standard deviation) or FWHM (full-width, half-maximum).
 
-### Noise standard deviation
+### Noise value
 Set the standard deviation of noise added to each profile pixel. You can provide:
 - A single value for all runs, or
 - An initial profile as a text file; the script will estimate the noise.
+
+- ### Spatial axis parameters
+Set the spatial width and pixel number for the scan. The spatial width should align with the length unit specified.
+
+### Temporal axis parameters
+Provide time-axis information using one of the following forms:
+- `'time range'`: Format `[start, stop, steps]` for evenly timed frames.
+- `'time series'`: Specific time values like `[0.1, 0.3, 0.5, 0.7, 0.9]`.
 
 ### Proximity level
 This parameter determines the accuracy threshold. For instance, a 0.1 proximity level means the program will evaluate how many estimates are within $\pm 10$% of the nominal value.
@@ -195,8 +184,24 @@ In other words:
 
 *For example,* if you enter 0.1 for your precision level, the program will tell you what portion of all the estimates were within $\pm 10$% of the nominal value.
 
-*Note:* Conventional statistical methods of characterizing precision and accuracy are to report the standard deviation and the mean, median, and mode, respectively. The portion of estimates that are within proximity to the nominal value, reported by this script, offers a single evaluation of the impact of both precision and accuracy on the results. In some ways, this figure may be more intuitive and practical in experimental settings. 
+*Note:* Conventional statistical methods of characterizing precision and accuracy are to report the standard deviation and the mean, median, and mode, respectively. The portion of estimates that are within proximity to the nominal value, reported by this script, offers a single evaluation of the impact of both precision and accuracy on the results. In some ways, this figure may be more intuitive and practical in experimental settings.
 
+### Plotting (image) parameters
+- Choose the file type for the default plot image. Options include `'jpg'`, `'png'`, `'svg'`, `'tif'`.
+- Choose the width and height of the overall plot image in cm.
+- Specify resolution in DPI. 
+- Indicate the font size, tick length, and tick width in points.
+- Select the number of bins to use in your histogram.
+- Set limits for the x-axis, e.g., [0,20]. If 'None' is chosen, the script will estimate 3 standard deviations of the data and use the negative and positive of that value to set the x-axis limits. 
+
+### Data retention
+Decide whether to retain all profile data. Note that keeping profile data may impact performance, depending on the number of profiles generated. 
+- `True`: Keep all data (necessary for plotting individual profiles).
+- `False`: Discard raw data (retain only the fitting results).
+
+### Parallel processing
+Enable parallel processing by setting this parameter to `True`.
+ 
 [Back to table of contents](table-of-contents)
 
 # Functions
