@@ -238,7 +238,7 @@ This material is based upon work supported by the National Science Foundation un
 [Back to table of contents](table-of-contents)
 
 # How to cite
-See full citation information at the [Zenodo archive](HTTP://10.5281/zenodo.8302537) of this software. 
+See full citation information at the [Zenodo archive](https://zenodo.org/doi/10.5281/zenodo.10258191) of this software. 
 
 [Back to table of contents](table-of-contents)
 
