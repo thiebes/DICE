@@ -419,7 +419,9 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
         elif unique_noise_key == 'estimate noise from data':
             try:
                 # Assuming 'estimate noise from data' is a file path to the CSV
-                t0_profile_strings = pd.read_csv(parameters_dictionary[unique_noise_key], squeeze=True)
+                noise_filename = parameters_dictionary[unique_noise_key]
+                t0_profile_strings = np.loadtxt(noise_filename, delimiter=',')
+                print(t0_profile_strings)
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
                 raise ValueError("Error reading CSV for noise estimation.") from e
