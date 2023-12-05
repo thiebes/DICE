@@ -164,7 +164,7 @@ Set the standard deviation of noise added to each profile pixel. You can provide
 - A single value for all runs, or
 - An initial profile as a text file; the script will estimate the noise.
 
-- ### Spatial axis parameters
+### Spatial axis parameters
 Set the spatial width and pixel number for the scan. The spatial width should align with the length unit specified.
 
 ### Temporal axis parameters
