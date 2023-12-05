@@ -236,7 +236,7 @@ This material is based upon work supported by the National Science Foundation un
 [Back to table of contents](table-of-contents)
 
 # How to cite
-Coming soon.
+See full citation information at the [Zenodo archive](HTTP://10.5281/zenodo.8302537) of this software. 
 
 [Back to table of contents](table-of-contents)
 
