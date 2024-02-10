@@ -34,7 +34,7 @@
 # The app uses the Flask framework to serve the function to web users.
 
 from flask import Flask, request, render_template_string
-from calculator import calculate_contrast_to_noise_ratio  # Import your function
+from dice import fft_cnr
 
 app = Flask(__name__)
 
@@ -43,7 +43,7 @@ def home():
     if request.method == 'POST':
         values = request.form['values']
         values_list = list(map(float, values.split(',')))
-        result = calculate_contrast_to_noise_ratio(values_list)  # Use the imported function
+        result = fft_cnr(values_list)  # Use the imported function
         return render_template_string('''<h1>Result: {{result}}</h1>
                                          <a href="/">Try again</a>''', result=result)
     return '''
