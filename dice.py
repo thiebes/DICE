@@ -1312,7 +1312,7 @@ def fft_cnr(noisy_profile):
     noise_est = np.sqrt(np.sum([np.power(a, 2.) for a in noise_regime]) / len(noise_regime))
 
     # calculate and store cnr estimate
-    cnr_estimate = 1 / noise_est
+    cnr_estimate = int(np.round(1 / noise_est))
         
     return cnr_estimate
 
