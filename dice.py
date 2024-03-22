@@ -4,7 +4,21 @@
 # using experimental parameters, and evaluates the precision of         #
 # composite fitting methods of estimating the diffusion coefficient.    #
 #                                                                       #
-# Copyright (C) 2023 Joseph J. Thiebes                                  #
+# Copyright (C) 2023-2024 Joseph J. Thiebes                             #
+#                                                                       #
+# This software may be cited as follows:                                #
+# Joseph J. Thiebes. (2024). DICE. Zenodo. DOI:10.5281/zenodo.10258192  #
+#                                                                       #
+# The concepts and methodologies underpinning this software were        #
+# developed concurrently with the research findings presented in the    #
+# paper referenced below. We strongly encourage users to consult the    #
+# paper to gain comprehensive insights into the scientific and          #
+# statistical principles that inform the functionality and application  #
+# of this software.                                                     #
+#                                                                       #
+# Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in    #
+# optical measures of excited state transport. J. Chem. Phys. 28 March  #
+# 2024; 160 (12): 124201. https://doi.org/10.1063/5.0190347             #
 #                                                                       #
 # This material is based upon work supported by the National Science    #
 # Foundation under Grant No. 2154448. Any opinions, findings, and       #
@@ -33,6 +47,7 @@
 import numpy as np
 from numpy.random import default_rng
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from scipy.signal import find_peaks
@@ -1312,7 +1327,7 @@ def fft_cnr(noisy_profile):
     noise_est = np.sqrt(np.sum([np.power(a, 2.) for a in noise_regime]) / len(noise_regime))
 
     # calculate and store cnr estimate
-    cnr_estimate = int(np.round(1 / noise_est))
+    cnr_estimate = np.round(1 / noise_est, 2)
         
     return cnr_estimate
 
@@ -1489,6 +1504,11 @@ def load_files(file_path, file_match, cnr_low, cnr_high, precision_levels, num_b
         # append the result dataframe with this file data
         df = pd.concat([df, df_this_file], ignore_index=True)
 
+    # older format has columns:
+    # ['run num', 'diff nom', 'tau nom', 'ld nom', 'cnr', 'sigma2_0 nom',
+    #    'sigma2_0 est', 'ols fit', 'wls fit', 'diff nom cm2/s',
+    #    'wls diff cm2/s', 'ols diff cm2/s'],
+
     # fix older format
     if 'diff nom cm2/s' in df.columns:
        df = df.rename(
@@ -1659,6 +1679,7 @@ def colordefs():
         'dice_blue': '#003f7f',    # Montana State blue, good contrast and colorblind safe
         'dice_gold': '#f7941e',    # Montana State gold, vibrant and distinguishable in grayscale
         'dice_green': '#0cce6b',   # Bright green, good visibility and colorblind safe
+        'dice_gradient': sns.cubehelix_palette(start=1, rot=0.9, gamma=1.0, hue=1, light=0.75, dark=0.20, reverse=True, as_cmap=True)
     }
 
 def plot_accuracy_histogram(
