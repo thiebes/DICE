@@ -6,8 +6,22 @@ app = Flask(__name__)
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'POST':
-        values = request.form['values']
-        values_list = list(map(float, values.split(',')))
+        values = request.form.get('values', '')
+        if values:
+            try:
+                # Attempt to split by commas first
+                values_list = list(map(float, values.split(',')))
+            except ValueError:
+                try:
+                    # If that fails, attempt to split by spaces
+                    values_list = list(map(float, values.split()))
+                except ValueError:
+                    return render_template_string('''
+                    <div style="margin: auto; width: 50%; padding: 10px;">
+                        <h3>Error: Please enter a valid list of comma-separated or space-separated numbers.</h3>
+                        <p><a href="/">Try again</a></p>
+                    </div>
+                    ''')
         result = fft_cnr(values_list)  # Use the imported function
         return render_template_string('''
         <div style="margin: auto; width: 50%; padding: 10px;">
