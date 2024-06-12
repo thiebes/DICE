@@ -113,7 +113,7 @@ Here's a brief overview of what each package is used for, and the version of eac
 - **`numpy v1.24.0`**: Fundamental package for scientific computing with Python.
 - **`pandas v1.5.3`**: Library providing high-performance, easy-to-use data structures.
 - **`matplotlib 3.6.3`**: Plotting library for creating static, animated, and interactive visualizations.
-- ** `seaborn 0.11.2` **: Statistical data visualization library based on matplotlib.
+- **`seaborn 0.11.2`**: Statistical data visualization library based on matplotlib.
 - **`scipy 1.9.3`**: Used for scientific and technical computing.
 - **`statsmodels 0.13.5`**: Provides classes and functions for estimating many different statistical models.
 - **`joblib 1.3.2`**: Used for lightweight pipelining in Python.
@@ -294,7 +294,9 @@ This material is based upon work supported by the National Science Foundation un
 [Back to table of contents](table-of-contents)
 
 # How to cite
-See full citation information at the [Zenodo archive](https://zenodo.org/doi/10.5281/zenodo.10258191) of this software. 
+```
+Joseph J. Thiebes. 2023. thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10258191 
+```
 
 [Back to table of contents](table-of-contents)
 
