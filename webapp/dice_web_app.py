@@ -40,7 +40,7 @@ def home():
                     <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
                     <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
                     <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
-                    <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                    <meta name="msapplication-TileImage" content="./static/mstile-144x144.png">
                     <link rel="manifest" href="./static/site.webmanifest">
                 </head>
                 <body>
@@ -73,7 +73,7 @@ def home():
                     <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
                     <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
                     <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
-                    <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                    <meta name="msapplication-TileImage" content="./static/mstile-144x144.png">
                     <link rel="manifest" href="./static/site.webmanifest">
                 </head>
                 <body>
@@ -100,7 +100,7 @@ def home():
                 <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
                 <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
                 <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
-                <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                <meta name="msapplication-TileImage" content="./static/mstile-144x144.png">
                 <link rel="manifest" href="./static/site.webmanifest">
             </head>
             <body>
@@ -126,7 +126,7 @@ def home():
             <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
             <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
             <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
-            <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+            <meta name="msapplication-TileImage" content="./static/mstile-144x144.png">
             <link rel="manifest" href="./static/site.webmanifest">
         </head>
         <body>
