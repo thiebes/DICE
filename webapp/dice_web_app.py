@@ -32,13 +32,16 @@ def home():
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
                     <title>Estimate Contrast-to-Noise Ratio (CNR)</title>
-                    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-                    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-                    <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
-                    <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon-64x64.png">
-                    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-                    <link rel="icon" type="image/png" sizes="192x192" href="/static/android-chrome-192x192.png">
+                    <link rel="icon" href="./static/favicon.ico" type="image/x-icon">
+                    <link rel="icon" href="./static/favicon-16x16.png" sizes="16x16" type="image/png">
+                    <link rel="icon" href="./static/favicon-32x32.png" sizes="32x32" type="image/png">
+                    <link rel="icon" href="./static/favicon-64x64.png" sizes="64x64" type="image/png">
+                    <link rel="apple-touch-icon" href="./static/apple-touch-icon.png" sizes="180x180">
+                    <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
+                    <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
+                    <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
                     <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                    <link rel="manifest" href="./static/site.webmanifest">
                 </head>
                 <body>
                     <div style="margin: auto; width: 50%; padding: 10px;">
@@ -62,13 +65,16 @@ def home():
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
                     <title>Estimate Contrast-to-Noise Ratio (CNR)</title>
-                    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-                    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-                    <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
-                    <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon-64x64.png">
-                    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-                    <link rel="icon" type="image/png" sizes="192x192" href="/static/android-chrome-192x192.png">
+                    <link rel="icon" href="./static/favicon.ico" type="image/x-icon">
+                    <link rel="icon" href="./static/favicon-16x16.png" sizes="16x16" type="image/png">
+                    <link rel="icon" href="./static/favicon-32x32.png" sizes="32x32" type="image/png">
+                    <link rel="icon" href="./static/favicon-64x64.png" sizes="64x64" type="image/png">
+                    <link rel="apple-touch-icon" href="./static/apple-touch-icon.png" sizes="180x180">
+                    <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
+                    <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
+                    <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
                     <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                    <link rel="manifest" href="./static/site.webmanifest">
                 </head>
                 <body>
                     <div style="margin: auto; width: 50%; padding: 10px;">
@@ -86,13 +92,16 @@ def home():
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Estimate Contrast-to-Noise Ratio (CNR)</title>
-                <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-                <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-                <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
-                <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon-64x64.png">
-                <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-                <link rel="icon" type="image/png" sizes="192x192" href="/static/android-chrome-192x192.png">
+                <link rel="icon" href="./static/favicon.ico" type="image/x-icon">
+                <link rel="icon" href="./static/favicon-16x16.png" sizes="16x16" type="image/png">
+                <link rel="icon" href="./static/favicon-32x32.png" sizes="32x32" type="image/png">
+                <link rel="icon" href="./static/favicon-64x64.png" sizes="64x64" type="image/png">
+                <link rel="apple-touch-icon" href="./static/apple-touch-icon.png" sizes="180x180">
+                <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
+                <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
+                <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
                 <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+                <link rel="manifest" href="./static/site.webmanifest">
             </head>
             <body>
                 <div style="margin: auto; width: 50%; padding: 10px;">
@@ -109,13 +118,16 @@ def home():
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Estimate Contrast-to-Noise Ratio (CNR)</title>
-            <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-            <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-            <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
-            <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon-64x64.png">
-            <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-            <link rel="icon" type="image/png" sizes="192x192" href="/static/android-chrome-192x192.png">
+            <link rel="icon" href="./static/favicon.ico" type="image/x-icon">
+            <link rel="icon" href="./static/favicon-16x16.png" sizes="16x16" type="image/png">
+            <link rel="icon" href="./static/favicon-32x32.png" sizes="32x32" type="image/png">
+            <link rel="icon" href="./static/favicon-64x64.png" sizes="64x64" type="image/png">
+            <link rel="apple-touch-icon" href="./static/apple-touch-icon.png" sizes="180x180">
+            <link rel="icon" href="./static/android-chrome-192x192.png" sizes="192x192" type="image/png">
+            <link rel="icon" href="./static/android-chrome-512x512.png" sizes="512x512" type="image/png">
+            <link rel="icon" href="./static/mstile-144x144.png" sizes="144x144" type="image/png">
             <meta name="msapplication-TileImage" content="/static/mstile-144x144.png">
+            <link rel="manifest" href="./static/site.webmanifest">
         </head>
         <body>
             <div style="margin: auto; width: 50%; padding: 10px;">
