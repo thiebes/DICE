@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Result{% endblock %}
+
+{% block content %}
+<h3>Contrast-to-noise estimate: {{ result }}</h3>
+<p><a href="/">Try again</a></p>
+<p>Download the open-source code for the full DICE application here:<br />
+<a href="https://github.com/thiebes/DICE" target="_blank">https://github.com/thiebes/DICE</a></p>
+<p>Citation for this code:</br>
+<textarea rows="4" cols="50" readonly>Joseph J. Thiebes. 2023. thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10258191</textarea></p>
+<p>Citation for the paper about the research that this code was used to perform:</p>
+<textarea rows="4" cols="50" readonly>Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in optical measures of excited state transport. <i>J. Chem. Phys.</i> 28 March 2024; 160 (12): 124201. https://doi.org/10.1063/5.0190347</textarea></p>
+{% endblock %}
