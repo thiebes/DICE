@@ -1,7 +1,15 @@
-from flask import Flask, request, render_template
+from flask import Flask, send_from_directory, render_template, request
 from dice import fft_cnr
 
 app = Flask(__name__)
+
+@app.route('/robots.txt')
+def robots_txt():
+    return send_from_directory(app.static_folder, 'robots.txt')
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    return send_from_directory(app.static_folder, 'sitemap.xml')
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
