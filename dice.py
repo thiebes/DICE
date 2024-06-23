@@ -1493,8 +1493,8 @@ def load_files(file_path, file_match, cnr_low, cnr_high, precision_levels, num_b
             print(f'Error reading {filename}: {e}')
             continue
         # get the number of pixels and time frames from the filename
-        this_pix = re.findall("px-(\d+)", filename)
-        this_tix = re.findall("tx-(\d+)", filename)
+        this_pix = re.findall(r"px-(\d+)", filename)
+        this_tix = re.findall(r"tx-(\d+)", filename)
         if this_pix and this_tix:
             df_this_file['number of pixels'] = int(this_pix[0])
             df_this_file['number of time frames'] = int(this_tix[0])
