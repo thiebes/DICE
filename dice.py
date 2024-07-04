@@ -1297,11 +1297,12 @@ def fft_cnr(noisy_profile):
 
     # normalize against peak maximum
     profile_max = np.max(noisy_profile)
-    this_profile_norm = [yval / profile_max for yval in noisy_profile]
+    this_profile_norm = noisy_profile / profile_max
 
     # FFT transform
     transform = np.fft.rfft(this_profile_norm, norm='ortho')  # Orthogonally normalized single-sided FFT
     fft_modulus = np.abs(transform)                           # Modulus of complex FFT values
+    fft_modulus /= 2                                          # correct for the double counting of noise power
 
     # Prepend zero to ensure the first peak is found if it is at the edge
     fft_modulus = np.insert(fft_modulus, 0, 0)
@@ -1324,7 +1325,7 @@ def fft_cnr(noisy_profile):
     noise_regime = fft_modulus[noise_start_idx:]
 
     # get the noise estimate as root mean squared displacement
-    noise_est = np.sqrt(np.sum([np.power(a, 2.) for a in noise_regime]) / len(noise_regime))
+    noise_est = np.sqrt(np.mean(np.power(noise_regime, 2.)))
 
     # calculate and store cnr estimate
     cnr_estimate = np.round(1 / noise_est, 2)
