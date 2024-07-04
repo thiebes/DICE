@@ -28,6 +28,7 @@
             <li>Within this transformed data set, the signal is positioned at zero frequency, whereas the noise predominantly occupies higher spatial frequencies.</li>
         </ul>
         <li>The modulus of each complex value in the transformed data is calculated.</li>
+        <li>The modulus is divided by two to correct for the fact that the frequency component in the one sided real FFT spectrum combines the power from both the positive and negative frequencies in the original signal.</li>
         <li>The first local minimum subsequent to the signal peak is found.</li>
         <li>The noise level is determined by calculating the root mean squared (RMS) amplitude for frequencies above the initial local minimum</li>
         <li>Since the normalized peak amplitude was unity, the CNR is simply the reciprocal of the noise level.</li>
