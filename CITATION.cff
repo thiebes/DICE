@@ -5,20 +5,20 @@ authors:
     given-names: "Joseph J."
     orcid: "https://orcid.org/0000-0002-7456-3952"
 title: "Diffusion Insight Computation Engine (DICE)"
-version: 1.1.4
-doi: 10.5281/zenodo.10258191
-date-released: 2024-07-04
+version: "1.1.4"
+doi: "10.5281/zenodo.10258191"
+date-released: "2024-07-04"
 url: "https://github.com/thiebes/DICE"
 repository-code: "https://github.com/thiebes/DICE"
 keywords:
-  - time-resolved microscopy
-  - diffusion coefficient
-  - excited states
-  - transport
-  - optics
-  - simulation
-  - microscopy
-  - photonics
+  - "time-resolved microscopy"
+  - "diffusion coefficient"
+  - "excited states"
+  - "transport"
+  - "optics"
+  - "simulation"
+  - "microscopy"
+  - "photonics"
 license: "CC-BY-4.0"
 license-url: "https://creativecommons.org/licenses/by/4.0/"
 contact: "joseph@thiebes.org"
