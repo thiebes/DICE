@@ -13,12 +13,3 @@ repository-code: "https://github.com/thiebes/DICE"
 license: "CC-BY-4.0"
 license-url: "https://creativecommons.org/licenses/by/4.0/"
 contact: "joseph@thiebes.org"
-preferred-citation: 
-  authors:
-    - family-names: "Thiebes"
-      given-names: "Joseph J."
-  title: "Diffusion Insight Computation Engine (DICE)"
-  version: "1.1.4"
-  doi: "10.5281/zenodo.10258191"
-  url: "https://github.com/thiebes/DICE"
-  date-released: "2024-07-04"
