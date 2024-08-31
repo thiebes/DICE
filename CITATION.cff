@@ -1,11 +1,33 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite it as below. Citations should be included in the References section of any published work."
 authors:
-- family-names: "Thiebes"
-  given-names: "Joseph J."
-  orcid: "https://orcid.org/0000-0002-7456-3952"
+  - family-names: "Thiebes"
+    given-names: "Joseph J."
+    orcid: "https://orcid.org/0000-0002-7456-3952"
 title: "Diffusion Insight Computation Engine (DICE)"
-version: 1.1.2
+version: 1.1.4
 doi: 10.5281/zenodo.10258191
-date-released: 2024-03-22
+date-released: 2024-07-04
 url: "https://github.com/thiebes/DICE"
+repository-code: "https://github.com/thiebes/DICE"
+keywords:
+  - time-resolved microscopy
+  - diffusion coefficient
+  - excited states
+  - transport
+  - optics
+  - simulation
+  - microscopy
+  - photonics
+license: "CC-BY-4.0"
+license-url: "https://creativecommons.org/licenses/by/4.0/"
+contact: "joseph@thiebes.org"
+preferred-citation: 
+  authors:
+    - family-names: "Thiebes"
+      given-names: "Joseph J."
+  title: "Diffusion Insight Computation Engine (DICE)"
+  version: "1.1.4"
+  doi: "10.5281/zenodo.10258191"
+  url: "https://github.com/thiebes/DICE"
+  date-released: "2024-07-04"
