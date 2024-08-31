@@ -12,6 +12,7 @@ url: "https://github.com/thiebes/DICE"
 license: "CC-BY-4.0"
 license-url: "https://creativecommons.org/licenses/by/4.0/"
 repository-code: "https://github.com/thiebes/DICE"
+description: "DICE is an open-source tool for researchers in time-resolved microscopy and related fields. It evaluates the precision and accuracy of diffusion coefficient estimates derived from optical measures of excited state transport. DICE provides a robust method for assessing experimental accuracy and precision by simulating parameters that mirror your experimental setup."
 keywords:
   - "time-resolved microscopy"
   - "diffusion coefficient"
