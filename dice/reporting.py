@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 
-from utils import colordefs
+from dice.utils import colordefs
 
 def plot_accuracy_histogram(
         simulation_result: dict,                        # Results from the simulation
@@ -103,13 +103,68 @@ def plot_accuracy_histogram(
 
     plt.close(fig)  # Close the figure to free up memory
 
-def summarize_results():
-    # placeholder for refactoring
-    return
+def summarize_results(result_dict):
+    """
+    Return summary lines from the simulation for CLI or GUI display.
+    """
+    p = result_dict['parameters']
+    i = result_dict['indices']
 
-def export_results():
-    # placeholder for refactoring
-    return
+    lines = []
+    lines.append(f"Running {i['total runs']} simulations with the following parameters (rounded):\n")
+    lines.append(f"Spatial width: {p['scan width']} {p['length units']}")
+    lines.append(f"Pixel width: {p['scan pixels']} pixels")
+    lines.append(f"Number of time frames: {len(i['time axis'])} frames")
+    lines.append(f"Noise stdev: {round(i['noise sigmas'][0], 3)}")
+    lines.append(f"Initial CNR: {round(1 / i['noise sigmas'][0], 3)}")
+    lines.append(f"Initial profile sigma^2: {round(p['sigma^2_0'], 3)} {p['length units']}²")
+    lines.append(f"Nominal diffusion length: {round(p['nominal diffusion length'], 3)} {p['length units']}")
+    lines.append(f"Nominal diffusion coeff: {round(p['nominal diffusion coeff'], 5)} {p['length units']}² per {p['time units']}")
+    lines.append(f"Nominal lifetime: {p['nominal lifetime']} {p['time units']}\n")
+
+    if 'analysis' in result_dict:
+        proximity = result_dict['parameters']['proximity level']
+        ols_pct = result_dict['analysis']['% fits within proximity']['unweighted fit']
+        wls_pct = result_dict['analysis']['% fits within proximity']['weighted fit']
+        lines.append(f"Portion of fits where D_est / D_nom = 1 ± {proximity}:")
+        lines.append(f"-- Unweighted fit: {round(ols_pct, 2)}%")
+        lines.append(f"-- Weighted fit: {round(wls_pct, 2)}%\n")
+    else:
+        lines.append("Only one time frame; diffusion fits not computed.\n")
+
+    lines.append("Exporting result data and histogram.")
+    lines.append(f"-- Summary file: {p['summary filename']}")
+    lines.append(f"-- Collated CSV file: {p['result filename']}")
+    lines.append(f"-- Histogram image file: {p['image filename']}")
+    lines.append("Done!\n")
+
+    return lines
+
+def export_results(result_dict):
+    """
+    Save the collated CSV and accuracy histogram image to disk.
+    """
+    df = result_dict['collated results']
+    p = result_dict['parameters']
+
+    # Write CSV
+    df.to_csv(p['result filename'], index=False)
+
+    # Write image
+    plot_accuracy_histogram(
+        simulation_result=result_dict,
+        proximity=result_dict['parameters']['proximity level'],
+        filename=p['image filename'],
+        image_type=p['image type'],
+        width=result_dict['parameters']['image width'],
+        height=result_dict['parameters']['image height'],
+        dpi=result_dict['parameters']['image dpi'],
+        font_size=result_dict['parameters']['image font size'],
+        tick_length=result_dict['parameters']['image tick length'],
+        tick_width=result_dict['parameters']['image tick width'],
+        num_bins=result_dict['parameters']['image numbins'],
+        x_lim=result_dict['parameters']['image x_lim']
+    )
 
 '''
 Potential future additions to this module:

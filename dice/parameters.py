@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
-from utils import (
+from dice.utils import (
     make_x_axis,            make_time_axis,         make_noise_distribution,
     fwhm_to_sigma2,         fft_cnr,                
 )

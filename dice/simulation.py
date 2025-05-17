@@ -53,19 +53,199 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-# app specific imports
-from utils import (
-    print_and_append,       slope_to_diffusion_constant,        make_diffusion_decay,
+from dice.utils import (
+    print_and_append,      slope_to_diffusion_constant,       make_diffusion_decay,
     add_noise,             gauss_fitting,                     fft_cnr,
     diffusion_ols_fit,     diffusion_wls_fit,                 slope_to_diffusion_constant,
 )
-from parameters import open_parameters
-from analysis import (
+from dice.parameters import open_parameters
+from dice.analysis import (
     estimates_precision, 
 )
-from reporting import (
-    plot_accuracy_histogram,
+from dice.reporting import (
+    plot_accuracy_histogram,        summarize_results,        export_results,
 )
+
+def run_simulation(parameters_dictionary):
+    """Run DICE simulations using parsed parameters."""
+
+    # Extract parameters
+    image_type = parameters_dictionary['image type']
+    l_unit = parameters_dictionary['length unit']
+    t_unit = parameters_dictionary['time unit']
+    numruns = parameters_dictionary['number of runs']
+    wid = parameters_dictionary['spatial width']
+    pix = parameters_dictionary['pixel width']
+    x_axis = parameters_dictionary['x array']
+    t_axis = parameters_dictionary['time series']
+    tix = len(t_axis)
+    sig2_0, amp_0, mu_0 = parameters_dictionary['t0 Gaussian sigma^2, amplitude, mean']
+    ld = parameters_dictionary['nominal diffusion length']
+    diff = parameters_dictionary['nominal diffusion coefficient']
+    tau = parameters_dictionary['nominal lifetime (tau)']
+    noise_series = parameters_dictionary['noise series']
+    noise_num = len(noise_series)
+    runs_total = numruns * noise_num
+    retain_profile_data = parameters_dictionary['retain profile data']
+    proximity_level = parameters_dictionary['proximity level']
+
+    result_dictionary = {
+        'indices': {
+            'time axis': t_axis,
+            'x axis': x_axis,
+            'noise sigmas': noise_series,
+            'total runs': runs_total
+        },
+        'parameters': {
+            'sigma^2_0': sig2_0,
+            'amplitude_0': amp_0,
+            'mu_0': mu_0,
+            'scan width': wid,
+            'scan pixels': pix,
+            'nominal diffusion length': ld,
+            'nominal diffusion coeff': diff,
+            'nominal lifetime': tau,
+            'length units': l_unit,
+            'time units': t_unit,
+            'proximity level': proximity_level,
+            'image width': parameters_dictionary['image width'],
+            'image height': parameters_dictionary['image height'],
+            'image dpi': parameters_dictionary['image dpi'],
+            'image font size': parameters_dictionary['image font size'],
+            'image tick length': parameters_dictionary['image tick length'],
+            'image tick width': parameters_dictionary['image tick width'],
+            'image numbins': parameters_dictionary['image numbins'],
+            'image x_lim': parameters_dictionary['image x_lim'],
+        },
+        'run results': {},
+    }
+
+    # Aliases
+    indices = result_dictionary['indices']
+    parameters = result_dictionary['parameters']
+
+    # Build filename slug and attach to result dict
+    file_prefix = parameters_dictionary['filename slug']
+    ld_txt = str(round(ld, 3))
+    cnr_txt = str(round(1 / noise_series[0], 3))
+    pix_txt = str(pix)
+    tix_txt = str(tix)
+    runs_txt = str(numruns)
+    filename_slug = f"{file_prefix}_LD-{ld_txt}_CNR-{cnr_txt}_px-{pix_txt}_tx-{tix_txt}_runs-{runs_txt}"
+    result_dictionary['filename slug'] = filename_slug
+
+    summary_filename = f"{filename_slug}_summary.txt"
+    result_filename = f"{filename_slug}_results.csv"
+    image_filename = f"{filename_slug}_histogram.{image_type}"
+
+    result_dictionary['parameters']['summary filename'] = summary_filename
+    result_dictionary['parameters']['result filename'] = result_filename
+    result_dictionary['parameters']['image type'] = image_type
+    result_dictionary['parameters']['image filename'] = image_filename
+
+    # Create simulation parameter sets
+    run_numbers = list(range(runs_total))
+    noise_list = np.concatenate([np.repeat(noise, numruns) for noise in noise_series])
+    parameter_sets = zip(run_numbers, noise_list)
+
+    # Run simulations
+    if parameters_dictionary['multiprocessing']:
+        result = Parallel(n_jobs=-1)(
+            delayed(scan_runner)(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data)
+            for this_run, this_noise_sigma in parameter_sets
+        )
+    else:
+        result = [
+            scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data)
+            for this_run, this_noise_sigma in parameter_sets
+        ]
+
+    # Store scan results
+    [result_dictionary['run results'].update(this_result) for this_result in result]
+
+    # Collate results
+    collated_results = pd.DataFrame([
+        [
+            run_data['run'],
+            run_data['run parameters']['nominal diffusion coefficient'],
+            run_data['run parameters']['nominal lifetime'],
+            run_data['run parameters']['nominal diffusion length'],
+            1 / run_data['run parameters']['noise stdev'],
+            run_data['cnr_0 estimate'],
+            run_data['nominal profiles']['parameters_t']['sigma^2_t'][0],
+            run_data['noisy profile fits']['sigma^2_t estimates'][0],
+            run_data['diffusion']['unweighted fit']['MSD_t slope estimate'],
+            run_data['diffusion']['unweighted fit']['MSD_t slope std error'],
+            run_data['diffusion']['unweighted fit']['intercept estimate'],
+            run_data['diffusion']['unweighted fit']['intercept standard error'],
+            run_data['diffusion']['weighted fit']['MSD_t slope estimate'],
+            run_data['diffusion']['weighted fit']['MSD_t slope std error'],
+            run_data['diffusion']['weighted fit']['intercept estimate'],
+            run_data['diffusion']['weighted fit']['intercept standard error'],
+        ]
+        for run_data in result_dictionary['run results'].values()
+    ], columns=[
+        'run number',
+        'nominal diffusion coeff', 'nominal lifetime', 'nominal diffusion length',
+        'nominal CNR', 'estimated CNR',
+        'nominal sigma^2_0', 'estimated sigma^2_0',
+        'unweighted fit diffusion slope', 'unweighted fit diffusion slope stderr',
+        'unweighted fit intercept', 'unweighted fit intercept stderr',
+        'weighted fit diffusion slope', 'weighted fit diffusion slope stderr',
+        'weighted fit intercept', 'weighted fit intercept stderr',
+    ])
+
+    # If multiple time points, compute derived diffusion constants and precision stats
+    if len(t_axis) > 1:
+        fit_wls_slopes = collated_results['weighted fit diffusion slope']
+        fit_ols_slopes = collated_results['unweighted fit diffusion slope']
+        fit_wls_stderr = collated_results['weighted fit diffusion slope stderr']
+        fit_ols_stderr = collated_results['unweighted fit diffusion slope stderr']
+
+        nom_slopes = [d * 2 for d in collated_results['nominal diffusion coeff']]
+        collated_results['nominal diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(s, l_unit, t_unit) for s in nom_slopes
+        ]
+        collated_results['unweighted fit diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(s, l_unit, t_unit) for s in fit_ols_slopes
+        ]
+        collated_results['unweighted fit diffusion stderr [cm^2/s]'] = [
+            slope_to_diffusion_constant(s, l_unit, t_unit) for s in fit_ols_stderr
+        ]
+        collated_results['weighted fit diffusion coeff [cm^2/s]'] = [
+            slope_to_diffusion_constant(s, l_unit, t_unit) for s in fit_wls_slopes
+        ]
+        collated_results['weighted fit diffusion stderr [cm^2/s]'] = [
+            slope_to_diffusion_constant(s, l_unit, t_unit) for s in fit_wls_stderr
+        ]
+
+        result_dictionary['analysis'] = estimates_precision(collated_results, proximity_level)
+
+    result_dictionary['collated results'] = collated_results
+    return result_dictionary
+
+def run_simulation_cli(parameters_filename: str):
+    """
+    Command Line Interfce (CLI)-compatible wrapper: 
+    reads parameter file, runs simulation, saves output.
+    """
+
+    # Load parameter dictionary
+    parameters_dict = open_parameters(parameters_filename)
+
+    # Run the simulation
+    result = run_simulation(parameters_dict)
+
+    # Get summary lines for print and save
+    summary_lines = summarize_results(result)
+    summary_file = result['parameters']['summary filename']
+    for line in summary_lines:
+        print_and_append(summary_file, line)
+
+    # Write CSV + histogram image
+    export_results(result)
+
+    return result
 
 def dice_runner(parameters_filename):
     '''Generate simulations using parameters'''
