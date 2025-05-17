@@ -1,0 +1,5 @@
+{
+  "python.analysis.extraPaths": ["./dice"],
+  "python.analysis.indexing": true,
+  "python.analysis.typeCheckingMode": "basic"
+}
