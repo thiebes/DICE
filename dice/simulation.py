@@ -66,8 +66,17 @@ from dice.reporting import (
     plot_accuracy_histogram,        summarize_results,        export_results,
 )
 
-def run_simulation(parameters_dictionary):
-    """Run DICE simulations using parsed parameters."""
+def run_simulation(parameters_dictionary, progress_callback=None, message_callback=None):
+    """
+    Run DICE simulations using parsed parameters, with optional GUI callbacks.
+
+    Parameters:
+    - parameters_dictionary (dict): Dictionary containing all simulation parameters.
+    - progress_callback (callable, optional): Function to call for progress updates.
+                                              Expected signature: progress_callback(completed_runs, total_runs).
+    - message_callback (callable, optional): Function to call for message/log updates.
+                                             Expected signature: message_callback(message_string).
+    """
 
     # Extract parameters
     image_type = parameters_dictionary['image type']
@@ -143,25 +152,53 @@ def run_simulation(parameters_dictionary):
     result_dictionary['parameters']['image type'] = image_type
     result_dictionary['parameters']['image filename'] = image_filename
 
+    # Clear existing summary file for this run
+    if os.path.exists(summary_filename):
+        try:
+            os.remove(summary_filename)
+        except OSError as e:
+            # Use print_and_append to ensure the message goes to console and potentially callback
+            error_message = f"Error: Could not remove existing summary file {summary_filename}: {e}"
+            print_and_append(summary_filename, error_message, gui_message_callback=message_callback)
+
+
     # Create simulation parameter sets
     run_numbers = list(range(runs_total))
     noise_list = np.concatenate([np.repeat(noise, numruns) for noise in noise_series])
     parameter_sets = zip(run_numbers, noise_list)
 
     # Run simulations
+    collected_results_list = []
     if parameters_dictionary['multiprocessing']:
-        result = Parallel(n_jobs=-1)(
+        if progress_callback:
+            try:
+                progress_callback(0, runs_total) # Before starting
+            except Exception as e:
+                print(f"Error in progress_callback (pre-parallel): {e}")
+
+        collected_results_list = Parallel(n_jobs=-1)(
             delayed(scan_runner)(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data)
             for this_run, this_noise_sigma in parameter_sets
         )
+        if progress_callback:
+            try:
+                progress_callback(runs_total, runs_total) # After completion
+            except Exception as e:
+                print(f"Error in progress_callback (post-parallel): {e}")
     else:
-        result = [
-            scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data)
-            for this_run, this_noise_sigma in parameter_sets
-        ]
-
+        for i, (this_run, this_noise_sigma) in enumerate(parameter_sets):
+            # scan_runner returns a dictionary like {'run_0': {...}}, we want the inner dict
+            scan_result_dict_outer = scan_runner(indices, parameters, ld, diff, tau, this_noise_sigma, this_run, retain_profile_data)
+            collected_results_list.append(scan_result_dict_outer)
+            if progress_callback:
+                try:
+                    progress_callback(i + 1, runs_total)
+                except Exception as e:
+                    print(f"Error in progress_callback (sequential): {e}") # Avoid callback errors stopping simulation
+    
     # Store scan results
-    [result_dictionary['run results'].update(this_result) for this_result in result]
+    for res_dict_outer in collected_results_list:
+        result_dictionary['run results'].update(res_dict_outer)
 
     # Collate results
     collated_results = pd.DataFrame([
@@ -237,15 +274,18 @@ def run_simulation_cli(parameters_filename: str):
     result = run_simulation(parameters_dict)
 
     # Get summary lines for print and save
-    summary_lines = summarize_results(result)
-    summary_file = result['parameters']['summary filename']
+    # Ensure result_dictionary is complete before summarizing
+    summary_lines = summarize_results(result_dictionary)
+    summary_file = result_dictionary['parameters']['summary filename']
     for line in summary_lines:
-        print_and_append(summary_file, line)
+        print_and_append(summary_file, line, gui_message_callback=message_callback)
 
     # Write CSV + histogram image
-    export_results(result)
+    # TODO: Consider if export_results also needs message_callback for its print statements.
+    # For now, its print statements will go to console only.
+    export_results(result_dictionary)
 
-    return result
+    return result_dictionary
 
 def dice_runner(parameters_filename):
     '''Generate simulations using parameters'''

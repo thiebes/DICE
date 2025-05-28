@@ -18,11 +18,13 @@ def plot_accuracy_histogram(
         tick_length: float,                             # tick length in points
         tick_width: float,                              # tick width in points
         num_bins: int,                                  # Nuber of bins in the histogram
-        x_lim: Optional[Tuple[float, float]] = None     # Optional x-axis limits
+        x_lim: Optional[Tuple[float, float]] = None,    # Optional x-axis limits
+        return_figure: bool = False                     # If True, returns the figure object
     ):
     
     """
-    Exports a histogram of diffusion accuracy values (D_est/D_nom) from simulation results. 
+    Generates or exports a histogram of diffusion accuracy values (D_est/D_nom) from simulation results.
+    If return_figure is True, returns the matplotlib figure object. Otherwise, saves to file and closes.
     """
 
     # convert width and height from cm to inches
@@ -95,13 +97,17 @@ def plot_accuracy_histogram(
     fig.patch.set_alpha(1)
 
     try:
-        # Export the image
-        export_file = f"{filename}"
-        plt.savefig(export_file, dpi=dpi, format=image_type)
+        # Export the image if not returning the figure (or always save, then decide to close)
+        if not return_figure: # Only save to file if not returning the figure for embedding
+            export_file = f"{filename}"
+            plt.savefig(export_file, dpi=dpi, format=image_type)
     except Exception as e:
         print(f"Error saving file: {e}")
 
-    plt.close(fig)  # Close the figure to free up memory
+    if return_figure:
+        return fig
+    else:
+        plt.close(fig)  # Close the figure to free up memory if not returning it
 
 def summarize_results(result_dict):
     """

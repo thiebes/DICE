@@ -7,16 +7,25 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 from numpy.random import default_rng
 
-def print_and_append(summary_filename, text):
+def print_and_append(summary_filename, text, gui_message_callback=None):
     """
-    Prints the given text to the console and appends it to the specified file.
+    Prints the given text to the console, appends it to the specified file,
+    and optionally calls a GUI message callback.
     
     Parameters:
     summary_filename (str): The path to the file where text should be appended.
     text (str): The text to be printed and appended to the file.
+    gui_message_callback (callable, optional): A function to call with the text message for GUI display.
     """
     # Print the text to the console
     print(text)
+
+    # Call the GUI message callback if provided
+    if gui_message_callback and callable(gui_message_callback):
+        try:
+            gui_message_callback(text)
+        except Exception as e:
+            print(f"Error in gui_message_callback: {e}") # Avoid callback errors stopping simulation
     
     # Try appending the text to the specified file
     try:
