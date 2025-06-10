@@ -1,0 +1,82 @@
+Running 1000 simulations with the following parameters (rounded):
+
+Spatial width: 5 micrometer
+Pixel width: 100 pixels
+Number of time frames: 10 frames
+Noise stdev: 0.02
+Initial contrast-to-noise ratio (CNR): 50.0
+Initial profile sigma^2: 0.18 micrometer^2
+Nominal diffusion length: 0.1 micrometer
+Nominal diffusion coeff: 0.01 micrometer^2 per nanosecond
+Nominal lifetime: 1 nanosecond
+
+Starting simulation with multiprocessing
+
+Simulation completed. Collating results.
+
+Converting diffusion constants to conventional units
+
+Analyzing precision and accuracy
+
+Portion of fits where D_estimate / D_nominal = 1 ± 0.5:
+-- Unweighted fit: 93.70
+-- Weighted fit: 96.60
+
+Exporting result data.
+-- Collated CSV file: example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_results.csv
+Exporting histogram.
+-- Histogram image file example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_histogram.png
+-- Summary file: example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_summary.txt
+
+Done!
+Running 1000 simulations with the following parameters (rounded):
+
+Spatial width: 5 micrometer
+Pixel width: 100 pixels
+Number of time frames: 10 frames
+Noise stdev: 0.02
+Initial contrast-to-noise ratio (CNR): 50.0
+Initial profile sigma^2: 0.18 micrometer^2
+Nominal diffusion length: 0.1 micrometer
+Nominal diffusion coeff: 0.01 micrometer^2 per nanosecond
+Nominal lifetime: 1 nanosecond
+
+Starting simulation with multiprocessing
+
+Simulation completed. Collating results.
+
+Converting diffusion constants to conventional units
+
+Analyzing precision and accuracy
+
+Portion of fits where D_estimate / D_nominal = 1 ± 0.5:
+-- Unweighted fit: 91.90
+-- Weighted fit: 96.60
+
+Exporting result data.
+-- Collated CSV file: example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_results.csv
+Exporting histogram.
+-- Histogram image file example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_histogram.png
+-- Summary file: example_LD-0.1_CNR-50.0_px-100_tx-10_runs-1000_summary.txt
+
+Done!
+Running 1000 simulations with the following parameters (rounded):
+
+Spatial width: 5 micrometer
+Pixel width: 100 pixels
+Number of time frames: 10 frames
+Noise stdev: 0.02
+Initial contrast-to-noise ratio (CNR): 50.0
+Initial profile sigma^2: 0.18 micrometer^2
+Nominal diffusion length: 0.1 micrometer
+Nominal diffusion coeff: 0.01 micrometer^2 per nanosecond
+Nominal lifetime: 1 nanosecond
+
+Starting simulation with multiprocessing
+
+Simulation completed. Collating results.
+
+Converting diffusion constants to conventional units
+
+Analyzing precision and accuracy
+

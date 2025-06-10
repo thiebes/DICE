@@ -1,15 +1,31 @@
+import sys
+import os
+
+# Add the project root directory to sys.path
+# This allows importing modules from the root directory (e.g., the main dice.py)
+# os.path.abspath(__file__) gives the absolute path of the current script
+# os.path.dirname() gets the directory of that script (webapp)
+# os.path.dirname() again gets the parent of that directory (project root)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+import numpy as np
 from flask import Flask, send_from_directory, render_template, request
-from dice import fft_cnr
+
+from dicecore.utils import fft_cnr
 
 app = Flask(__name__)
 
 @app.route('/robots.txt')
 def robots_txt():
-    return send_from_directory(app.static_folder, 'robots.txt')
+    static_dir = app.static_folder or 'static'
+    return send_from_directory(static_dir, 'robots.txt')
 
 @app.route('/sitemap.xml')
 def sitemap_xml():
-    return send_from_directory(app.static_folder, 'sitemap.xml')
+    static_dir = app.static_folder or 'static'
+    return send_from_directory(static_dir, 'sitemap.xml')
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -27,7 +43,7 @@ def home():
                     return render_template('error.html', error_message='Please enter a valid list of comma-separated or space-separated numbers.')
 
             try:
-                result = fft_cnr(values_list)  # Use the imported function
+                result = fft_cnr(np.array(values_list))
                 return render_template('result.html', result=result)
             except Exception as e:
                 return render_template('error.html', error_message=f'Error processing data: {str(e)}')
@@ -36,4 +52,11 @@ def home():
     return render_template('home.html')
 
 if __name__ == '__main__':
+    # When running directly, ensure the werkzeug reloader also knows about the path
+    # This is often handled by running flask from the project root or using a proper package structure,
+    # but for a direct script run, this explicit path addition is important.
+    # However, Flask's `app.run()` in debug mode might spawn a new process where sys.path modifications
+    # at the top level might not be consistently available without further configuration.
+    # For production, a WSGI server (like Gunicorn) would be used, and its configuration
+    # would handle the Python path.
     app.run(debug=False)
