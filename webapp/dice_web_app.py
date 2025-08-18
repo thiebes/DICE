@@ -1,5 +1,13 @@
 from flask import Flask, send_from_directory, render_template, request
-from dice import fft_cnr
+import sys
+import os
+
+# Add parent directory to path to import dice package
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
+from dice.core.noise import fft_cnr
 
 app = Flask(__name__)
 

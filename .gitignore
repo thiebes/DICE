@@ -3,3 +3,10 @@ __pycache__/
 
 # Ignore other Python compiled files
 *.py[cod]
+
+# Ignore DICE output directories
+output/
+
+Claude-related
+CLAUDE.md
+.claude/

@@ -66,29 +66,40 @@ Follow these steps to get started with DICE quickly:
    Modify the `parameters.txt` file to align with your experimental parameters. This file is the primary input for the simulation.
 
 3. **Run the Simulation**: 
-   The DICE module can be used in two different environments: the command line and a Jupyter-like environment.
+   DICE can be used in several ways depending on your installation method:
    
-   - **From the command line/console**:
-     Utilize the `run_dice.py` script to run the DICE module. This script requires the parameters file as an argument.
-       - Open your console or terminal.
-       - Navigate to the directory containing `run_dice.py`.
-       - Execute the script with your parameters file:
-         ```bash
-         python run_dice.py parameters.txt
-         ```
+   - **Using the console command** (if installed with `pip install -e .`):
+     ```bash
+     dice parameters.txt
+     ```
 
-   - **From within a Jupyter-like environment**:
-     - Import the DICE module.
-     - Invoke the `dice_runner` function, passing the filename of your parameters.
-       ```python
-       import dice
+   - **From the command line using the script**:
+     Navigate to the DICE directory and run:
+     ```bash
+     python run_dice.py parameters.txt
+     ```
 
-       # Replace "parameters.txt" with your parameters file
-       result = dice.dice_runner("parameters.txt")
-       ```
-     This function processes the parameters from the specified file and returns the results in a dictionary named `result`.
+   - **From within a Python environment**:
+     ```python
+     from dice.cli.main import main
+     import sys
+     
+     # Set the parameters file as command line argument
+     sys.argv = ['dice', 'parameters.txt']
+     main()
+     ```
+     
+     Or use the analysis functions directly:
+     ```python
+     from dice.analysis.simulation import run_monte_carlo_simulation
+     from dice.io.parameters import load_parameters
+     
+     # Load and run simulation
+     parameters = load_parameters("parameters.txt")
+     result = run_monte_carlo_simulation(parameters)
+     ```
 
-   *Note:* The script can be executed immediately after downloading to experience the simulation with default parameters, which serve as an illustrative example.
+   *Note:* You can run the simulation immediately with the included `parameters.txt` file to see example results.
 
 4. **View the Results**: 
    After the simulation completes, the results will be summarized and saved, including a histogram plot for visual analysis.
@@ -97,26 +108,40 @@ Follow these steps to get started with DICE quickly:
 
 # Installation
 
-## Python
-This program is written in Python, and has been tested with version 3.11.8. We recommend using the latest version if you don't have Python installed. You can install Python from the [official website](https://www.python.org/downloads/). Alternatively, you can use online Python notebook services (for example, [DataLore](https://datalore.jetbrains.com/)).
+## Python Requirements
+DICE requires Python 3.8 or later and has been tested with Python 3.11 and 3.12. You can install Python from the [official website](https://www.python.org/downloads/) or use package managers like conda. For online development, you can use services like [Google Colab](https://colab.research.google.com/) or [DataLore](https://datalore.jetbrains.com/).
 
-## Packages
-DICE depends on several Python packages. Some of these might already be installed if you have Python installed. If not, you can install these packages using pip, Python's package installer. 
+## Installation Methods
 
-You can do this by typing the following command in your terminal:
+### Method 1: Install Dependencies and Use Directly
+1. **Clone or download** this repository to your local machine
+2. **Navigate** to the DICE directory
+3. **Install dependencies** using pip:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-pip install numpy pandas matplotlib seaborn scipy statsmodels joblib
-```
+### Method 2: Install as Editable Package
+1. **Clone** this repository:
+   ```bash
+   git clone https://github.com/thiebes/DICE.git
+   cd DICE
+   ```
+2. **Install** in development mode:
+   ```bash
+   pip install -e .
+   ```
+   This allows you to use the `dice` command from anywhere and imports the package.
 
-Here's a brief overview of what each package is used for, and the version of each package that has been tested with this software:
-- **`numpy v1.24.0`**: Fundamental package for scientific computing with Python.
-- **`pandas v1.5.3`**: Library providing high-performance, easy-to-use data structures.
-- **`matplotlib 3.6.3`**: Plotting library for creating static, animated, and interactive visualizations.
-- **`seaborn 0.11.2`**: Statistical data visualization library based on matplotlib.
-- **`scipy 1.9.3`**: Used for scientific and technical computing.
-- **`statsmodels 0.13.5`**: Provides classes and functions for estimating many different statistical models.
-- **`joblib 1.3.2`**: Used for lightweight pipelining in Python.
+## Dependencies
+DICE depends on the following Python packages (minimum versions):
+- **`numpy>=1.20.0`**: Fundamental package for scientific computing
+- **`pandas>=1.3.0`**: High-performance data structures and analysis
+- **`matplotlib>=3.3.0`**: Plotting and visualization
+- **`seaborn>=0.11.0`**: Statistical data visualization
+- **`scipy>=1.7.0`**: Scientific and technical computing
+- **`statsmodels>=0.12.0`**: Statistical modeling and econometrics
+- **`joblib>=1.0.0`**: Lightweight pipelining and parallel processing
 
 **Standard Python Libraries:** The following are part of the Python Standard Library and do not need to be installed separately:
 - **`ast`**: For working with abstract syntax trees.
@@ -135,17 +160,12 @@ Edit the `parameters.txt` file to set up your simulation. Each simulation models
 A prefix for your output files to help identify them later. The output file names will also automatically include the parameters below, so your slug could be a textual identifier connected to a set of experiments. Avoid special characters in the slug. 
 
 ### Example:
-If the Filename slug is set to `'slug-example'`, and a simulation with specific parameters is run, the files generated might include:
-- `slug-example_LD-0.1_CNR-20.0_px-100_tx-10_runs-1000_results.csv`
-- `slug-example_LD-0.1_CNR-20.0_px-100_tx-10_runs-1000_summary.txt`
-- `slug-example_LD-0.1_CNR-20.0_px-100_tx-10_runs-1000_histogram.svg`
+If the Filename slug is set to `'example'`, simulation results are saved in the `output/example/` directory:
+- `output/example/example.csv` - Simulation results data
+- `output/example/example_summary.txt` - Human-readable summary
+- `output/example/example_accuracy_histogram.png` - Visualization plot
 
-The parameters in the above examples include:
-- `LD-0.1` means that the nominal diffusion length was 0.1 relative to the initial FWHM.
-- `CNR-20.0` indicates an initial contrast-to-noise ratio of 20.0.
-- `px-100` means 100 pixels across the *x*-axis.
-- `tx-10` means that there are 10 time frames in each simulated experiment.
-- `runs-1000` means the file contains the results from 1000 simulation runs.
+All simulation parameters and settings are included in the summary text file for reference.
 
 ## Number of simulation iterations
 Specify the number of simulations to run. 
@@ -224,9 +244,14 @@ The source code contains extensive documentation describing the functions and ho
 [Back to table of contents](table-of-contents)
 
 # Outputs
-- Summary text file
-- Results CSV file
-- Plot
+
+DICE generates three main output files, organized in the `output/<filename_slug>/` directory:
+
+- **Summary text file** (`<slug>_summary.txt`): Human-readable report with statistical analysis
+- **Results CSV file** (`<slug>.csv`): Raw simulation data for further analysis  
+- **Histogram plot** (`<slug>_accuracy_histogram.png`): Visualization of diffusion coefficient estimates
+
+All outputs are saved in `output/<filename_slug>/` to keep your workspace organized.
 
 [Back to table of contents](table-of-contents)
 
@@ -301,8 +326,13 @@ Joseph J. Thiebes. 2023. thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10
 [Back to table of contents](table-of-contents)
 
 # License
-[![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png)](https://creativecommons.org/licenses/by/4.0/)  
-Diffusion Insight Computation Engine (DICE) by [Joseph J. Thiebes](http://thiebes.org) is licensed under a [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).  
-Based on a work at [https://github.com/thiebes/DICE](https://github.com/thiebes/DICE).
+
+Diffusion Insight Computation Engine (DICE) by [Joseph J. Thiebes](http://thiebes.org) is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+Copyright (c) 2023-2025 Joseph J. Thiebes
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 [Back to table of contents](table-of-contents)

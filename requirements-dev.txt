@@ -1,0 +1,32 @@
+# Development dependencies
+# Install with: pip install -r requirements-dev.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Code formatting
+black>=22.0.0
+autopep8>=1.6.0
+
+# Linting
+flake8>=4.0.0
+pylint>=2.12.0
+mypy>=0.950
+
+# Testing extras
+pytest-xdist>=2.5.0  # parallel test execution
+pytest-mock>=3.6.0   # mocking support
+coverage>=6.0        # code coverage
+
+# Documentation
+sphinx>=4.5.0
+sphinx-rtd-theme>=1.0.0
+
+# Build tools (for creating executables)
+pyinstaller>=5.0
+cx-Freeze>=6.10
+
+# Development utilities
+ipython>=8.0.0
+jupyter>=1.0.0
+notebook>=6.4.0
