@@ -1,0 +1,186 @@
+"""
+Interface between GUI and DICE simulation engine.
+
+This module handles parameter conversion and simulation execution.
+"""
+
+from typing import Dict, Any, Optional
+import sys
+import os
+
+
+class DiceInterface:
+    """Interface for running DICE simulations from GUI."""
+
+    def __init__(self):
+        """Initialize the interface."""
+        self.last_result = None
+        self.last_parameters = None
+
+    def build_parameters_dict(self, gui_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build a parameters dictionary from GUI inputs in the format expected by dice.py.
+
+        Args:
+            gui_params: Dictionary containing all GUI parameter values
+
+        Returns:
+            Parameters dictionary formatted for dice.dice_runner()
+        """
+        params = {}
+
+        # Simulation control
+        params['number of runs'] = gui_params['number_of_runs']
+        params['filename slug'] = gui_params['filename_slug']
+
+        # Units
+        if 'length_unit' in gui_params and gui_params['length_unit']:
+            params['length unit'] = gui_params['length_unit']
+        if 'time_unit' in gui_params and gui_params['time_unit']:
+            params['time unit'] = gui_params['time_unit']
+
+        # Initial profile
+        params['amplitude_0'] = gui_params['amplitude_0']
+        params['mean_0'] = gui_params['mean_0']
+
+        # Profile width (mutually exclusive)
+        if gui_params['profile_width_type'] == 'fwhm':
+            params['FWHM_0'] = gui_params['profile_width_value']
+        else:  # sigma
+            params['sigma_0'] = gui_params['profile_width_value']
+
+        # Diffusion (mutually exclusive)
+        if gui_params['diffusion_type'] == 'length':
+            params['nominal diffusion length'] = gui_params['diffusion_length']
+        else:  # coefficient + lifetime
+            params['nominal diffusion coefficient'] = gui_params['diffusion_coefficient']
+            params['nominal lifetime (tau)'] = gui_params['lifetime']
+
+        # Noise (mutually exclusive)
+        if gui_params['noise_type'] == 'fixed':
+            params['noise value'] = gui_params['noise_value']
+        else:  # estimate from data
+            params['estimate noise from data'] = gui_params['noise_data_file']
+
+        # Spatial axis
+        params['spatial width'] = gui_params['spatial_width']
+        params['pixel width'] = gui_params['pixel_width']
+
+        # Temporal axis (mutually exclusive)
+        if gui_params['time_type'] == 'range':
+            params['time range'] = [
+                gui_params['time_start'],
+                gui_params['time_stop'],
+                gui_params['time_steps']
+            ]
+        else:  # series
+            # Convert comma-separated string to list of floats
+            params['time series'] = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+
+        # Analysis
+        params['proximity level'] = gui_params['proximity_level']
+
+        # Optional advanced parameters
+        if 'image_type' in gui_params and gui_params['image_type']:
+            params['image type'] = gui_params['image_type']
+        if 'image_width' in gui_params and gui_params['image_width']:
+            params['image width'] = gui_params['image_width']
+        if 'image_height' in gui_params and gui_params['image_height']:
+            params['image height'] = gui_params['image_height']
+        if 'image_dpi' in gui_params and gui_params['image_dpi']:
+            params['image dpi'] = gui_params['image_dpi']
+        if 'image_font_size' in gui_params and gui_params['image_font_size']:
+            params['image font size'] = gui_params['image_font_size']
+        if 'image_numbins' in gui_params and gui_params['image_numbins']:
+            params['image numbins'] = gui_params['image_numbins']
+        if 'retain_profile_data' in gui_params:
+            params['retain profile data'] = gui_params['retain_profile_data']
+        if 'multiprocessing' in gui_params:
+            params['multiprocessing'] = gui_params['multiprocessing']
+
+        return params
+
+    def run_simulation(self, parameters: Dict[str, Any]) -> Optional[Any]:
+        """
+        Run DICE simulation with given parameters.
+
+        Args:
+            parameters: Dictionary of parameters for dice.dice_runner()
+
+        Returns:
+            Simulation results or None if error occurred
+        """
+        try:
+            # Import dice module
+            import dice
+
+            # Store parameters
+            self.last_parameters = parameters
+
+            # Run simulation
+            result = dice.dice_runner(parameters)
+
+            # Store result
+            self.last_result = result
+
+            return result
+
+        except ImportError as e:
+            raise ImportError(f"Failed to import dice module: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Simulation failed: {e}")
+
+    def validate_parameters(self, parameters: Dict[str, Any]) -> tuple[bool, str]:
+        """
+        Validate parameters before running simulation.
+
+        Args:
+            parameters: Parameters dictionary
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check required parameters
+        required = [
+            'number of runs',
+            'spatial width',
+            'pixel width',
+            'mean_0',
+            'amplitude_0',
+        ]
+
+        for param in required:
+            if param not in parameters:
+                return False, f"Missing required parameter: {param}"
+
+        # Check mutually exclusive groups
+        if 'FWHM_0' in parameters and 'sigma_0' in parameters:
+            return False, "Cannot specify both FWHM_0 and sigma_0"
+
+        if 'nominal diffusion length' in parameters and (
+            'nominal diffusion coefficient' in parameters or 'nominal lifetime (tau)' in parameters
+        ):
+            return False, "Cannot specify both diffusion length and (coefficient + lifetime)"
+
+        if 'noise value' in parameters and 'estimate noise from data' in parameters:
+            return False, "Cannot specify both noise value and estimate from data"
+
+        if 'time range' in parameters and 'time series' in parameters:
+            return False, "Cannot specify both time range and time series"
+
+        # Check that at least one option from each mutually exclusive group is present
+        if 'FWHM_0' not in parameters and 'sigma_0' not in parameters:
+            return False, "Must specify either FWHM_0 or sigma_0"
+
+        if 'nominal diffusion length' not in parameters and (
+            'nominal diffusion coefficient' not in parameters or 'nominal lifetime (tau)' not in parameters
+        ):
+            return False, "Must specify either diffusion length or (coefficient and lifetime)"
+
+        if 'noise value' not in parameters and 'estimate noise from data' not in parameters:
+            return False, "Must specify either noise value or estimate from data"
+
+        if 'time range' not in parameters and 'time series' not in parameters:
+            return False, "Must specify either time range or time series"
+
+        return True, ""

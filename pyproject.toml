@@ -1,0 +1,56 @@
+[project]
+name = "dice"
+version = "0.1.0"
+description = "Diffusion Insight Computation Engine - Monte Carlo simulation tool for quantifying noise effects in optical measures of excited state transport"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "DICE Contributors"}
+]
+keywords = ["diffusion", "microscopy", "monte-carlo", "simulation", "optoelectronics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "pandas>=1.3.0",
+    "statsmodels>=0.12.0",
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0",
+    "joblib>=1.0.0",
+    "PyQt6>=6.0.0",
+]
+
+[project.optional-dependencies]
+webapp = [
+    "flask>=2.0.0",
+]
+test = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.12.0",
+]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.12.0",
+    "flask>=2.0.0",
+]
+
+[project.scripts]
+dice = "dice:main"
+dice-gui = "dice_gui.dice_gui:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
