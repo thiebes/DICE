@@ -59,15 +59,34 @@ Follow these steps to get started with DICE quickly:
 0. **Install Python**:
    See [Installation] below.
 
-1. **Download the Repository**: 
+1. **Download the Repository**:
    Clone or download this repository to your local machine and navigate to the project directory in your Python environment.
 
-2. **Edit Parameters**: 
-   Modify the `parameters.txt` file to align with your experimental parameters. This file is the primary input for the simulation.
+2. **Configure Parameters**:
+   Choose one of two methods:
 
-3. **Run the Simulation**: 
+   - **GUI (Recommended for new users)**: Launch the graphical interface:
+     ```bash
+     uv run dice-gui
+     ```
+     The GUI provides an intuitive interface with:
+     - Tab-based parameter organization
+     - Real-time validation and feedback
+     - Unit-aware input fields
+     - Live calculations and conversions
+     See [dice_gui/README.md](dice_gui/README.md) for details.
+
+   - **Text file**: Modify the `parameters.txt` file to align with your experimental parameters.
+
+3. **Run the Simulation**:
    DICE can be used in several ways depending on your installation method:
-   
+
+   - **Using the GUI**:
+     ```bash
+     uv run dice-gui
+     ```
+     Configure parameters and click "Run Simulation"
+
    - **Using the console command** (if installed with `pip install -e .`):
      ```bash
      dice parameters.txt
@@ -83,17 +102,17 @@ Follow these steps to get started with DICE quickly:
      ```python
      from dice.cli.main import main
      import sys
-     
+
      # Set the parameters file as command line argument
      sys.argv = ['dice', 'parameters.txt']
      main()
      ```
-     
+
      Or use the analysis functions directly:
      ```python
      from dice.analysis.simulation import run_monte_carlo_simulation
      from dice.io.parameters import load_parameters
-     
+
      # Load and run simulation
      parameters = load_parameters("parameters.txt")
      result = run_monte_carlo_simulation(parameters)
@@ -113,7 +132,40 @@ DICE requires Python 3.8 or later and has been tested with Python 3.11 and 3.12.
 
 ## Installation Methods
 
-### Method 1: Install Dependencies and Use Directly
+### Method 1: Using uv (Recommended)
+[uv](https://github.com/astral-sh/uv) is a fast Python package installer and resolver that simplifies dependency management.
+
+1. **Install uv** (if not already installed):
+   ```bash
+   # On macOS and Linux:
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # On Windows:
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/thiebes/DICE.git
+   cd DICE
+   ```
+
+3. **Sync dependencies**:
+   ```bash
+   uv sync
+   ```
+   This automatically creates a virtual environment and installs all dependencies including the GUI.
+
+4. **Run DICE**:
+   ```bash
+   # Launch GUI
+   uv run dice-gui
+
+   # Or run command-line version
+   uv run dice parameters.txt
+   ```
+
+### Method 2: Install Dependencies and Use Directly
 1. **Clone or download** this repository to your local machine
 2. **Navigate** to the DICE directory
 3. **Install dependencies** using pip:
@@ -121,7 +173,7 @@ DICE requires Python 3.8 or later and has been tested with Python 3.11 and 3.12.
    pip install -r requirements.txt
    ```
 
-### Method 2: Install as Editable Package
+### Method 3: Install as Editable Package
 1. **Clone** this repository:
    ```bash
    git clone https://github.com/thiebes/DICE.git
@@ -142,6 +194,7 @@ DICE depends on the following Python packages (minimum versions):
 - **`scipy>=1.7.0`**: Scientific and technical computing
 - **`statsmodels>=0.12.0`**: Statistical modeling and econometrics
 - **`joblib>=1.0.0`**: Lightweight pipelining and parallel processing
+- **`PyQt6>=6.0.0`**: GUI framework (required for graphical interface)
 
 **Standard Python Libraries:** The following are part of the Python Standard Library and do not need to be installed separately:
 - **`ast`**: For working with abstract syntax trees.
