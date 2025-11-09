@@ -196,14 +196,19 @@ class DiceTheme:
             }}
 
             QTabBar::tab:selected {{
-                font-weight: 500;
-                border-bottom: 2px solid palette(window);
-                background-color: palette(window);
+                font-weight: 600;
+                border-bottom: 3px solid {to_css(colors['link'])};
+                background-color: palette(base);
             }}
 
             QTabBar::tab:!selected {{
                 margin-top: 2px;
-                background-color: palette(mid);
+                background-color: palette(window);
+                opacity: 0.7;
+            }}
+
+            QTabBar::tab:hover:!selected {{
+                background-color: palette(midlight);
             }}
 
             /* Ensure minimum clickable areas - WCAG 2.5.5 */
