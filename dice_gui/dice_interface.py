@@ -105,20 +105,103 @@ class DiceInterface:
         Run DICE simulation with given parameters.
 
         Args:
-            parameters: Dictionary of parameters for dice.dice_runner()
+            parameters: Dictionary of parameters
 
         Returns:
             Simulation results or None if error occurred
         """
         try:
-            # Import dice module
-            import dice
+            # Import required modules from dice
+            from dice.io.parameters import parameter_parser, validate_parameters
+            from dice.analysis.simulation import run_monte_carlo_simulation
+            from dice.analysis.statistics import analyze_simulation_results
+            from dice.io.results import export_collated_results, write_summary_file
+            from dice.visualization.histograms import plot_accuracy_histogram
+            from dice.utils.legacy_compatibility import create_parameters_from_legacy
+            import numpy as np
+            from pathlib import Path
+
+            # Parse and process parameters (same as open_parameters does)
+            processed_params = parameter_parser(parameters)
 
             # Store parameters
-            self.last_parameters = parameters
+            self.last_parameters = processed_params
 
-            # Run simulation
-            result = dice.dice_runner(parameters)
+            # Validate parameters
+            validate_parameters(processed_params)
+
+            # Create axes
+            x_axis = processed_params['x array']
+            time_axis = processed_params['time series']
+
+            # Create simulation parameters object from legacy format
+            sim_params = create_parameters_from_legacy(
+                parameters_dict=processed_params,
+                diffusion_coefficient=processed_params['nominal diffusion coefficient'],
+                lifetime=processed_params['nominal lifetime (tau)'],
+                diffusion_length=processed_params['nominal diffusion length']
+            )
+
+            # Run Monte Carlo simulation
+            result = run_monte_carlo_simulation(
+                parameters=sim_params,
+                x_axis=x_axis,
+                time_axis=time_axis,
+                noise_values=processed_params['noise series'],
+                num_runs=processed_params['number of runs'],
+                multiprocessing=processed_params.get('multiprocessing', 1) != 0,
+                retain_profile_data=processed_params.get('retain profile data', 0) != 0
+            )
+
+            # Analyze results
+            proximity_levels = [processed_params['proximity level']]
+            analysis = analyze_simulation_results(result, proximity_levels)
+
+            # Setup output directory
+            slug = processed_params.get('filename slug', 'dice_output')
+            output_dir = Path.cwd() / 'output' / slug
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Export results to CSV
+            csv_file = output_dir / f"{slug}.csv"
+            export_collated_results(result, str(csv_file))
+
+            # Write summary file
+            summary_file = output_dir / f"{slug}_summary.txt"
+            write_summary_file(result, str(summary_file), processed_params, analysis)
+
+            # Create accuracy histogram
+            d_estimates = []
+            d_nominal = processed_params['nominal diffusion coefficient']
+
+            for run_result in result.run_results:
+                if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
+                    d_est = run_result.wls_slope / 2
+                    d_estimates.append(d_est)
+
+            if d_estimates:
+                d_ratios = np.array(d_estimates) / d_nominal
+
+                # Create legacy-format result for plotting
+                legacy_result = {
+                    'collated results': {
+                        'd_wls_over_d_nom': d_ratios.tolist()
+                    }
+                }
+
+                # Create plot
+                plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
+
+                plot_accuracy_histogram(
+                    simulation_result=legacy_result,
+                    proximity=processed_params.get('proximity level', 0.1),
+                    filename=str(plot_file),
+                    image_type=processed_params.get('image type', 'png'),
+                    width=processed_params.get('image width', 10),
+                    height=processed_params.get('image height', 6),
+                    dpi=processed_params.get('image dpi', 100),
+                    font_size=12
+                )
 
             # Store result
             self.last_result = result
