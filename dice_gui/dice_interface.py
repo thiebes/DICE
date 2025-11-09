@@ -91,6 +91,10 @@ class DiceInterface:
             params['image dpi'] = gui_params['image_dpi']
         if 'image_font_size' in gui_params and gui_params['image_font_size']:
             params['image font size'] = gui_params['image_font_size']
+        if 'image_tick_length' in gui_params and gui_params['image_tick_length']:
+            params['image tick length'] = gui_params['image_tick_length']
+        if 'image_tick_width' in gui_params and gui_params['image_tick_width']:
+            params['image tick width'] = gui_params['image_tick_width']
         if 'image_numbins' in gui_params and gui_params['image_numbins']:
             params['image numbins'] = gui_params['image_numbins']
         if 'retain_profile_data' in gui_params:

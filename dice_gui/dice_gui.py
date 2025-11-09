@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox,
     QComboBox, QRadioButton, QButtonGroup, QGroupBox, QFileDialog,
-    QProgressBar, QMessageBox, QTextEdit, QSlider, QFormLayout, QScrollArea
+    QProgressBar, QMessageBox, QTextEdit, QSlider, QFormLayout, QScrollArea,
+    QCheckBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator
@@ -87,11 +88,13 @@ class DiceGUI(QMainWindow):
         self.tab2 = self.create_tab2_physical_parameters()
         self.tab3 = self.create_tab3_experimental_conditions()
         self.tab4 = self.create_tab4_analysis_settings()
+        self.tab5 = self.create_tab5_output_settings()
 
         self.tabs.addTab(self.tab1, "Simulation Setup")
         self.tabs.addTab(self.tab2, "Physical Parameters")
         self.tabs.addTab(self.tab3, "Experimental Conditions")
         self.tabs.addTab(self.tab4, "Analysis Settings")
+        self.tabs.addTab(self.tab5, "Output Settings")
 
         main_layout.addWidget(self.tabs)
 
@@ -165,29 +168,57 @@ class DiceGUI(QMainWindow):
     def create_tab1_simulation_setup(self) -> QWidget:
         """Create Tab 1: Simulation Setup."""
         tab = QWidget()
-        layout = QFormLayout(tab)
-        layout.setSpacing(15)
+        layout = QVBoxLayout(tab)
+
+        # Basic settings group
+        basic_group = QGroupBox("Basic Settings")
+        basic_layout = QFormLayout(basic_group)
 
         # Number of runs
         self.num_runs_spin = QSpinBox()
         self.num_runs_spin.setMinimum(1)
         self.num_runs_spin.setMaximum(1000000)
         self.num_runs_spin.setValue(1000)
-        layout.addRow("Number of Runs:", self.num_runs_spin)
+        basic_layout.addRow("Number of Runs:", self.num_runs_spin)
 
         # Filename slug
         self.filename_slug_input = QLineEdit()
         self.filename_slug_input.setText("dice_simulation")
-        layout.addRow("Filename Slug:", self.filename_slug_input)
+        basic_layout.addRow("Filename Slug:", self.filename_slug_input)
 
-        layout.addRow(QLabel(""))  # Spacer
+        layout.addWidget(basic_group)
+
+        # Performance settings group
+        performance_group = QGroupBox("Performance Settings")
+        performance_layout = QFormLayout(performance_group)
+
+        # Multiprocessing checkbox
+        self.multiprocessing_check = QCheckBox("Enable parallel processing")
+        self.multiprocessing_check.setChecked(True)
+        self.multiprocessing_check.setToolTip("Use multiple CPU cores to speed up simulation")
+        performance_layout.addRow("Multiprocessing:", self.multiprocessing_check)
+
+        # Retain profile data checkbox
+        self.retain_profile_check = QCheckBox("Retain profile data")
+        self.retain_profile_check.setChecked(False)
+        self.retain_profile_check.setToolTip("Keep raw profile data (memory intensive)")
+        performance_layout.addRow("Data Retention:", self.retain_profile_check)
+
+        layout.addWidget(performance_group)
+
+        # Info label
         info_label = QLabel(
             "Number of Runs: Number of Monte Carlo simulation iterations.\n\n"
-            "Filename Slug: Prefix for output files."
+            "Filename Slug: Prefix for output files.\n\n"
+            "Multiprocessing: Enable to use multiple CPU cores for faster execution.\n\n"
+            "Retain Profile Data: Keep raw profile data in memory. Only enable if you "
+            "need the data for analysis, as it can be memory intensive for large simulations."
         )
         info_label.setWordWrap(True)
         info_label.setProperty("class", "info-text")
-        layout.addRow(info_label)
+        layout.addWidget(info_label)
+
+        layout.addStretch()
 
         return tab
 
@@ -539,6 +570,145 @@ class DiceGUI(QMainWindow):
 
         return tab
 
+    def create_tab5_output_settings(self) -> QWidget:
+        """Create Tab 5: Output Settings."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # Plot/Image settings group
+        plot_group = QGroupBox("Plot Settings")
+        plot_layout = QFormLayout(plot_group)
+
+        # Image type
+        self.image_type_combo = QComboBox()
+        self.image_type_combo.addItems(["png", "jpg", "svg", "tif"])
+        self.image_type_combo.setCurrentText("png")
+        plot_layout.addRow("Image Type:", self.image_type_combo)
+
+        # Image width (value + unit)
+        width_widget = QWidget()
+        width_layout = QHBoxLayout(width_widget)
+        width_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_width_spin = QDoubleSpinBox()
+        self.image_width_spin.setMinimum(0.1)
+        self.image_width_spin.setMaximum(100.0)
+        self.image_width_spin.setValue(8.5)
+        self.image_width_spin.setDecimals(2)
+        self.image_width_spin.setToolTip("Width of output plot")
+        self.image_width_unit_combo = QComboBox()
+        self.image_width_unit_combo.addItems(["cm", "in", "mm"])
+        self.image_width_unit_combo.setCurrentText("cm")
+        width_layout.addWidget(self.image_width_spin)
+        width_layout.addWidget(self.image_width_unit_combo)
+        plot_layout.addRow("Image Width:", width_widget)
+
+        # Image height (value + unit)
+        height_widget = QWidget()
+        height_layout = QHBoxLayout(height_widget)
+        height_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_height_spin = QDoubleSpinBox()
+        self.image_height_spin.setMinimum(0.1)
+        self.image_height_spin.setMaximum(100.0)
+        self.image_height_spin.setValue(5.0)
+        self.image_height_spin.setDecimals(2)
+        self.image_height_spin.setToolTip("Height of output plot")
+        self.image_height_unit_combo = QComboBox()
+        self.image_height_unit_combo.addItems(["cm", "in", "mm"])
+        self.image_height_unit_combo.setCurrentText("cm")
+        height_layout.addWidget(self.image_height_spin)
+        height_layout.addWidget(self.image_height_unit_combo)
+        plot_layout.addRow("Image Height:", height_widget)
+
+        # Image resolution (value + unit)
+        resolution_widget = QWidget()
+        resolution_layout = QHBoxLayout(resolution_widget)
+        resolution_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_dpi_spin = QSpinBox()
+        self.image_dpi_spin.setMinimum(50)
+        self.image_dpi_spin.setMaximum(1200)
+        self.image_dpi_spin.setValue(300)
+        self.image_dpi_spin.setToolTip("Resolution for output plots")
+        self.image_dpi_unit_combo = QComboBox()
+        self.image_dpi_unit_combo.addItems(["dpi", "dpcm"])
+        self.image_dpi_unit_combo.setCurrentText("dpi")
+        resolution_layout.addWidget(self.image_dpi_spin)
+        resolution_layout.addWidget(self.image_dpi_unit_combo)
+        plot_layout.addRow("Resolution:", resolution_widget)
+
+        # Font size (value + unit)
+        font_widget = QWidget()
+        font_layout = QHBoxLayout(font_widget)
+        font_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_font_size_spin = QSpinBox()
+        self.image_font_size_spin.setMinimum(4)
+        self.image_font_size_spin.setMaximum(72)
+        self.image_font_size_spin.setValue(8)
+        self.image_font_size_spin.setToolTip("Font size for plot labels and text")
+        self.image_font_unit_combo = QComboBox()
+        self.image_font_unit_combo.addItems(["pt", "px"])
+        self.image_font_unit_combo.setCurrentText("pt")
+        font_layout.addWidget(self.image_font_size_spin)
+        font_layout.addWidget(self.image_font_unit_combo)
+        plot_layout.addRow("Font Size:", font_widget)
+
+        # Tick length (value + unit)
+        tick_length_widget = QWidget()
+        tick_length_layout = QHBoxLayout(tick_length_widget)
+        tick_length_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_tick_length_spin = QSpinBox()
+        self.image_tick_length_spin.setMinimum(1)
+        self.image_tick_length_spin.setMaximum(50)
+        self.image_tick_length_spin.setValue(6)
+        self.image_tick_length_spin.setToolTip("Length of axis tick marks")
+        self.image_tick_length_unit_combo = QComboBox()
+        self.image_tick_length_unit_combo.addItems(["pt", "px"])
+        self.image_tick_length_unit_combo.setCurrentText("pt")
+        tick_length_layout.addWidget(self.image_tick_length_spin)
+        tick_length_layout.addWidget(self.image_tick_length_unit_combo)
+        plot_layout.addRow("Tick Length:", tick_length_widget)
+
+        # Tick width (value + unit)
+        tick_width_widget = QWidget()
+        tick_width_layout = QHBoxLayout(tick_width_widget)
+        tick_width_layout.setContentsMargins(0, 0, 0, 0)
+        self.image_tick_width_spin = QSpinBox()
+        self.image_tick_width_spin.setMinimum(1)
+        self.image_tick_width_spin.setMaximum(20)
+        self.image_tick_width_spin.setValue(2)
+        self.image_tick_width_spin.setToolTip("Width of axis tick marks")
+        self.image_tick_width_unit_combo = QComboBox()
+        self.image_tick_width_unit_combo.addItems(["pt", "px"])
+        self.image_tick_width_unit_combo.setCurrentText("pt")
+        tick_width_layout.addWidget(self.image_tick_width_spin)
+        tick_width_layout.addWidget(self.image_tick_width_unit_combo)
+        plot_layout.addRow("Tick Width:", tick_width_widget)
+
+        # Number of bins (no unit)
+        self.image_numbins_spin = QSpinBox()
+        self.image_numbins_spin.setMinimum(5)
+        self.image_numbins_spin.setMaximum(200)
+        self.image_numbins_spin.setValue(35)
+        self.image_numbins_spin.setToolTip("Number of bins for histogram plots")
+        plot_layout.addRow("Histogram Bins:", self.image_numbins_spin)
+
+        layout.addWidget(plot_group)
+
+        # Info label
+        info_label = QLabel(
+            "These settings control the appearance and format of output plots.\n\n"
+            "Image Type: File format for saved plots (PNG recommended for most uses).\n\n"
+            "Image Width/Height: Physical dimensions of the output image.\n\n"
+            "Resolution: Higher DPI values produce sharper images but larger file sizes.\n\n"
+            "Font/Tick sizes: Typography units (pt = points, px = pixels)."
+        )
+        info_label.setWordWrap(True)
+        info_label.setProperty("class", "info-text")
+        layout.addWidget(info_label)
+
+        layout.addStretch()
+
+        return tab
+
     def create_control_panel(self) -> QWidget:
         """Create the bottom control panel."""
         panel = QWidget()
@@ -809,6 +979,57 @@ class DiceGUI(QMainWindow):
 
     def collect_parameters(self) -> dict:
         """Collect all parameters from GUI into a dictionary."""
+        # Convert image dimensions to cm (standard unit)
+        width_value = self.image_width_spin.value()
+        width_unit = self.image_width_unit_combo.currentText()
+        if width_unit == "in":
+            width_cm = width_value * 2.54
+        elif width_unit == "mm":
+            width_cm = width_value / 10.0
+        else:  # cm
+            width_cm = width_value
+
+        height_value = self.image_height_spin.value()
+        height_unit = self.image_height_unit_combo.currentText()
+        if height_unit == "in":
+            height_cm = height_value * 2.54
+        elif height_unit == "mm":
+            height_cm = height_value / 10.0
+        else:  # cm
+            height_cm = height_value
+
+        # Convert resolution to dpi (standard unit)
+        dpi_value = self.image_dpi_spin.value()
+        dpi_unit = self.image_dpi_unit_combo.currentText()
+        if dpi_unit == "dpcm":
+            dpi = dpi_value * 2.54
+        else:  # dpi
+            dpi = dpi_value
+
+        # Font size, tick length, and tick width units
+        # For now, we'll pass both value and unit, but matplotlib expects points
+        # If px is selected, we may need conversion (1 pt = 1.333 px at 96 DPI)
+        font_size = self.image_font_size_spin.value()
+        font_unit = self.image_font_unit_combo.currentText()
+        if font_unit == "px":
+            font_size_pt = font_size * 0.75  # Convert px to pt
+        else:  # pt
+            font_size_pt = font_size
+
+        tick_length = self.image_tick_length_spin.value()
+        tick_length_unit = self.image_tick_length_unit_combo.currentText()
+        if tick_length_unit == "px":
+            tick_length_pt = tick_length * 0.75
+        else:  # pt
+            tick_length_pt = tick_length
+
+        tick_width = self.image_tick_width_spin.value()
+        tick_width_unit = self.image_tick_width_unit_combo.currentText()
+        if tick_width_unit == "px":
+            tick_width_pt = tick_width * 0.75
+        else:  # pt
+            tick_width_pt = tick_width
+
         params = {
             'number_of_runs': self.num_runs_spin.value(),
             'filename_slug': self.filename_slug_input.text(),
@@ -821,6 +1042,16 @@ class DiceGUI(QMainWindow):
             'spatial_width': float(self.spatial_width_input.text()),
             'pixel_width': self.pixel_width_input.value(),
             'proximity_level': self.proximity_spin.value(),
+            'multiprocessing': self.multiprocessing_check.isChecked(),
+            'retain_profile_data': self.retain_profile_check.isChecked(),
+            'image_type': self.image_type_combo.currentText(),
+            'image_width': width_cm,
+            'image_height': height_cm,
+            'image_dpi': dpi,
+            'image_font_size': font_size_pt,
+            'image_tick_length': tick_length_pt,
+            'image_tick_width': tick_width_pt,
+            'image_numbins': self.image_numbins_spin.value(),
         }
 
         # Diffusion
