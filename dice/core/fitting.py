@@ -69,24 +69,34 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         if len(this_profile) != len(x_axis):
             raise ValueError("Profile and x_axis must have the same length")
         
-        # Get index of maximum amplitude
-        max_amp_idx = np.argmax(np.abs(this_profile))
-        
-        # Initial guesses
-        mu0 = x_axis[max_amp_idx]  # Mean at maximum
-        sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
-        a0 = this_profile[max_amp_idx]  # Amplitude guess: max value
-        
         # Set bounds for mu (central region of the window)
         mu_margin = xwid * 0.3  # Allow mu within central 60% of window
         mu0_min = xmin + mu_margin
         mu0_max = xmax - mu_margin
-        
+
         # Ensure valid mu bounds
         if mu0_min >= mu0_max:
             # Fallback: use full range
             mu0_min = xmin
             mu0_max = xmax
+
+        # Find maximum amplitude within the mu bounds
+        valid_mask = (x_axis >= mu0_min) & (x_axis <= mu0_max)
+        valid_indices = np.where(valid_mask)[0]
+
+        if len(valid_indices) > 0:
+            # Find maximum within valid region
+            valid_profile = this_profile[valid_mask]
+            max_amp_idx_in_valid = np.argmax(np.abs(valid_profile))
+            max_amp_idx = valid_indices[max_amp_idx_in_valid]
+        else:
+            # Fallback: use global maximum
+            max_amp_idx = np.argmax(np.abs(this_profile))
+
+        # Initial guesses
+        mu0 = x_axis[max_amp_idx]  # Mean at maximum within bounds
+        sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
+        a0 = this_profile[max_amp_idx]  # Amplitude guess: max value within bounds
         
         # Set bounds for sigma^2
         sigma2_min = (xwid / xpix) ** 2  # Minimum: ~1 pixel width
