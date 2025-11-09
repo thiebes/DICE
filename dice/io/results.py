@@ -163,8 +163,12 @@ def write_summary_file(
         f.write(f"    {parameters.get('spatial width', 'N/A')} {length_unit}\n")
         f.write(f"Pixel width:\n")
         f.write(f"    {parameters.get('pixel width', 'N/A')} pixels\n")
+        time_series = parameters.get('time series', [])
         f.write(f"Time frames:\n")
-        f.write(f"    {len(parameters.get('time series', []))} frames\n")
+        f.write(f"    {len(time_series)} frames\n")
+        if len(time_series) > 0:
+            f.write(f"Time range:\n")
+            f.write(f"    {time_series[0]:.3f} to {time_series[-1]:.3f} {time_unit}\n")
         f.write(f"Noise standard deviation values:\n")
         f.write(f"    {results.noise_values}\n")
         f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
