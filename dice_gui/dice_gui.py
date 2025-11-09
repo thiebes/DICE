@@ -28,6 +28,7 @@ from dice_gui.accessibility import (
     add_tooltip_with_accessible_description,
     set_tab_order
 )
+from dice_gui.proximity_widget import ProximityTargetWidget
 
 
 class SimulationThread(QThread):
@@ -65,7 +66,7 @@ class DiceGUI(QMainWindow):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("DICE - Diffusion Insight Computation Engine")
-        self.setGeometry(100, 100, 900, 700)
+        self.setGeometry(100, 100, 900, 1050)
 
         # Create central widget and main layout
         central_widget = QWidget()
@@ -137,8 +138,8 @@ class DiceGUI(QMainWindow):
         length_label = QLabel("Length Unit:")
         self.length_unit_combo = QComboBox()
         self.length_unit_combo.addItems([
-            "micrometer", "nanometer", "millimeter", "centimeter",
-            "meter", "angstrom", "picometer"
+            "angstrom", "picometer", "nanometer", "micrometer",
+            "millimeter", "centimeter", "meter"
         ])
         self.length_unit_combo.setCurrentText("micrometer")
         self.length_unit_combo.currentTextChanged.connect(self.update_unit_labels)
@@ -147,8 +148,8 @@ class DiceGUI(QMainWindow):
         time_label = QLabel("Time Unit:")
         self.time_unit_combo = QComboBox()
         self.time_unit_combo.addItems([
-            "nanosecond", "picosecond", "microsecond", "millisecond",
-            "second", "femtosecond", "attosecond"
+            "attosecond", "femtosecond", "picosecond", "nanosecond",
+            "microsecond", "millisecond", "second"
         ])
         self.time_unit_combo.setCurrentText("nanosecond")
         self.time_unit_combo.currentTextChanged.connect(self.update_unit_labels)
@@ -503,26 +504,21 @@ class DiceGUI(QMainWindow):
         proximity_group = QGroupBox("Analysis Parameters")
         proximity_layout = QVBoxLayout(proximity_group)
 
-        label_widget = QWidget()
-        label_layout = QHBoxLayout(label_widget)
-        label_layout.setContentsMargins(0, 0, 0, 0)
         proximity_label = QLabel("Proximity Level:")
-        self.proximity_display = QLabel("0.10 (±10%)")
-        self.proximity_display.setObjectName("proximity-display")
-        label_layout.addWidget(proximity_label)
-        label_layout.addWidget(self.proximity_display)
-        label_layout.addStretch()
+        self.proximity_spin = QDoubleSpinBox()
+        self.proximity_spin.setMinimum(0.001)
+        self.proximity_spin.setMaximum(1000.0)
+        self.proximity_spin.setValue(0.10)
+        self.proximity_spin.setDecimals(3)
+        self.proximity_spin.setSingleStep(0.01)
+        self.proximity_spin.setToolTip("Threshold for accuracy analysis (e.g., 0.10 = ±10%)")
 
-        self.proximity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.proximity_slider.setMinimum(1)
-        self.proximity_slider.setMaximum(50)
-        self.proximity_slider.setValue(10)
-        self.proximity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.proximity_slider.setTickInterval(5)
-        self.proximity_slider.valueChanged.connect(self.update_proximity_display)
+        proximity_input_layout = QHBoxLayout()
+        proximity_input_layout.addWidget(proximity_label)
+        proximity_input_layout.addWidget(self.proximity_spin)
+        proximity_input_layout.addStretch()
 
-        proximity_layout.addWidget(label_widget)
-        proximity_layout.addWidget(self.proximity_slider)
+        proximity_layout.addLayout(proximity_input_layout)
 
         description = QLabel(
             "The proximity level determines the threshold for accuracy analysis.\n"
@@ -532,6 +528,11 @@ class DiceGUI(QMainWindow):
         description.setWordWrap(True)
         description.setProperty("class", "info-text")
         proximity_layout.addWidget(description)
+
+        # Target visualization below description (left-aligned)
+        self.proximity_target = ProximityTargetWidget(proximity=0.10)
+        self.proximity_spin.valueChanged.connect(self.update_proximity_target)
+        proximity_layout.addWidget(self.proximity_target)
 
         layout.addWidget(proximity_group)
         layout.addStretch()
@@ -716,11 +717,10 @@ class DiceGUI(QMainWindow):
         except ValueError:
             self.pixel_size_label.setText("Pixel Size: ---")
 
-    def update_proximity_display(self):
-        """Update proximity level display."""
-        value = self.proximity_slider.value() / 100.0
-        percentage = int(value * 100)
-        self.proximity_display.setText(f"{value:.2f} (±{percentage}%)")
+    def update_proximity_target(self):
+        """Update the proximity target visualization."""
+        proximity_value = self.proximity_spin.value()
+        self.proximity_target.set_proximity(proximity_value)
 
     def browse_noise_file(self):
         """Open file dialog to select noise data file."""
@@ -820,7 +820,7 @@ class DiceGUI(QMainWindow):
             'profile_width_value': float(self.width_input.text()),
             'spatial_width': float(self.spatial_width_input.text()),
             'pixel_width': self.pixel_width_input.value(),
-            'proximity_level': self.proximity_slider.value() / 100.0,
+            'proximity_level': self.proximity_spin.value(),
         }
 
         # Diffusion
