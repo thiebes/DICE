@@ -188,10 +188,22 @@ class DiceTheme:
             QTabBar::tab {{
                 min-width: 120px;
                 padding: 8px 16px;
+                border: 1px solid palette(mid);
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-bottom: -1px;
             }}
 
             QTabBar::tab:selected {{
                 font-weight: 500;
+                border-bottom: 2px solid palette(window);
+                background-color: palette(window);
+            }}
+
+            QTabBar::tab:!selected {{
+                margin-top: 2px;
+                background-color: palette(mid);
             }}
 
             /* Ensure minimum clickable areas - WCAG 2.5.5 */
