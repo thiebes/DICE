@@ -22,6 +22,12 @@ from dice_gui.validators import (
     calculate_diffusion_length, calculate_pixel_size
 )
 from dice_gui.dice_interface import DiceInterface
+from dice_gui.styles import DiceTheme, apply_theme
+from dice_gui.accessibility import (
+    add_accessible_name_and_description,
+    add_tooltip_with_accessible_description,
+    set_tab_order
+)
 
 
 class SimulationThread(QThread):
@@ -53,6 +59,7 @@ class DiceGUI(QMainWindow):
         super().__init__()
         self.interface = DiceInterface()
         self.simulation_thread = None
+        self.theme = DiceTheme()
         self.init_ui()
 
     def init_ui(self):
@@ -100,14 +107,21 @@ class DiceGUI(QMainWindow):
         layout = QVBoxLayout(header)
 
         title = QLabel("DICE")
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title.setFont(title_font)
+        title.setObjectName("title")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        add_accessible_name_and_description(
+            title,
+            "DICE Title",
+            "Diffusion Insight Computation Engine"
+        )
 
         subtitle = QLabel("Diffusion Insight Computation Engine")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        add_accessible_name_and_description(
+            subtitle,
+            "Application subtitle",
+            "Full name of the DICE application"
+        )
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -171,7 +185,7 @@ class DiceGUI(QMainWindow):
             "Filename Slug: Prefix for output files."
         )
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: gray; font-style: italic;")
+        info_label.setProperty("class", "info-text")
         layout.addRow(info_label)
 
         return tab
@@ -241,7 +255,7 @@ class DiceGUI(QMainWindow):
 
         # Calculated diffusion length display
         self.calc_length_label = QLabel("Diffusion Length: ---")
-        self.calc_length_label.setStyleSheet("color: blue; font-style: italic;")
+        self.calc_length_label.setProperty("class", "calculated-value")
         coeff_layout.addRow("", self.calc_length_label)
 
         diffusion_layout.addWidget(coeff_container)
@@ -302,7 +316,7 @@ class DiceGUI(QMainWindow):
 
         # Conversion display
         self.width_conversion_label = QLabel("Equivalent: ---")
-        self.width_conversion_label.setStyleSheet("color: blue; font-style: italic;")
+        self.width_conversion_label.setProperty("class", "calculated-value")
         profile_layout.addRow("", self.width_conversion_label)
 
         # Connect width inputs
@@ -363,7 +377,7 @@ class DiceGUI(QMainWindow):
         self.noise_browse_button = QPushButton("Browse...")
         self.noise_browse_button.clicked.connect(self.browse_noise_file)
         self.noise_cnr_label = QLabel("Estimated CNR: ---")
-        self.noise_cnr_label.setStyleSheet("color: blue; font-style: italic;")
+        self.noise_cnr_label.setProperty("class", "calculated-value")
         estimate_layout.addWidget(self.noise_file_input)
         estimate_layout.addWidget(self.noise_browse_button)
         noise_layout.addWidget(estimate_container)
@@ -398,7 +412,7 @@ class DiceGUI(QMainWindow):
 
         # Calculated pixel size
         self.pixel_size_label = QLabel("Pixel Size: ---")
-        self.pixel_size_label.setStyleSheet("color: blue; font-style: italic;")
+        self.pixel_size_label.setProperty("class", "calculated-value")
         spatial_layout.addRow("", self.pixel_size_label)
 
         # Connect for calculation
@@ -494,7 +508,7 @@ class DiceGUI(QMainWindow):
         label_layout.setContentsMargins(0, 0, 0, 0)
         proximity_label = QLabel("Proximity Level:")
         self.proximity_display = QLabel("0.10 (±10%)")
-        self.proximity_display.setStyleSheet("font-weight: bold;")
+        self.proximity_display.setObjectName("proximity-display")
         label_layout.addWidget(proximity_label)
         label_layout.addWidget(self.proximity_display)
         label_layout.addStretch()
@@ -516,7 +530,7 @@ class DiceGUI(QMainWindow):
             "are considered accurate."
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color: gray; font-style: italic;")
+        description.setProperty("class", "info-text")
         proximity_layout.addWidget(description)
 
         layout.addWidget(proximity_group)
@@ -536,17 +550,18 @@ class DiceGUI(QMainWindow):
 
         # Status label
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: blue;")
+        self.status_label.setProperty("class", "status-info")
         layout.addWidget(self.status_label)
 
         # Buttons
         button_layout = QHBoxLayout()
 
         self.run_button = QPushButton("Run Simulation")
-        self.run_button.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 10px;")
+        self.run_button.setObjectName("run-button")
         self.run_button.clicked.connect(self.run_simulation)
 
         self.stop_button = QPushButton("Stop")
+        self.stop_button.setObjectName("stop-button")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop_simulation)
 
@@ -915,6 +930,10 @@ class DiceGUI(QMainWindow):
 def main():
     """Main entry point for the GUI application."""
     app = QApplication(sys.argv)
+
+    # Apply theme with accessibility support
+    theme = apply_theme(app)
+
     window = DiceGUI()
     window.show()
     sys.exit(app.exec())
