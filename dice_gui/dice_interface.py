@@ -271,3 +271,222 @@ class DiceInterface:
             return False, "Must specify either time range or time series"
 
         return True, ""
+
+    def regenerate_plot_from_memory(
+        self,
+        filename: str,
+        image_settings: Dict[str, Any],
+        use_wls: bool = True
+    ) -> None:
+        """
+        Regenerate plot from data in memory with specified image settings.
+
+        Args:
+            filename: Path where plot should be saved
+            image_settings: Dictionary with image settings (type, width, height, dpi, etc.)
+            use_wls: If True, use WLS slopes; if False, use OLS slopes
+
+        Raises:
+            ValueError: If no data is available in memory
+            RuntimeError: If plot generation fails
+        """
+        try:
+            import numpy as np
+            from dice.visualization.histograms import plot_accuracy_histogram
+
+            # Check if data exists
+            if self.last_result is None:
+                raise ValueError("No simulation data in memory")
+
+            if self.last_parameters is None:
+                raise ValueError("No parameters in memory")
+
+            # Extract diffusion estimates based on method selection
+            d_estimates = []
+            d_nominal = self.last_parameters['nominal diffusion coefficient']
+
+            for run_result in self.last_result.run_results:
+                if use_wls:
+                    # Use WLS slopes
+                    if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
+                        d_est = run_result.wls_slope / 2
+                        d_estimates.append(d_est)
+                else:
+                    # Use OLS slopes
+                    if hasattr(run_result, 'ols_slope') and run_result.ols_slope is not None:
+                        d_est = run_result.ols_slope / 2
+                        d_estimates.append(d_est)
+
+            if not d_estimates:
+                method_name = "WLS" if use_wls else "OLS"
+                raise ValueError(f"No {method_name} diffusion estimates found in results")
+
+            # Calculate ratios
+            d_ratios = np.array(d_estimates) / d_nominal
+
+            # Create legacy-format result for plotting
+            legacy_result = {
+                'collated results': {
+                    'd_wls_over_d_nom': d_ratios.tolist()
+                }
+            }
+
+            # Get proximity from stored parameters
+            proximity = self.last_parameters.get('proximity level', 0.1)
+
+            # Create plot with specified settings
+            plot_accuracy_histogram(
+                simulation_result=legacy_result,
+                proximity=proximity,
+                filename=filename,
+                image_type=image_settings.get('image_type', 'png'),
+                width=image_settings.get('image_width', 16.0),
+                height=image_settings.get('image_height', 10.0),
+                dpi=image_settings.get('image_dpi', 100),
+                font_size=image_settings.get('image_font_size', 6),
+                tick_length=image_settings.get('image_tick_length', 6),
+                tick_width=image_settings.get('image_tick_width', 2),
+                num_bins=image_settings.get('image_numbins', 35)
+            )
+
+        except ImportError as e:
+            raise ImportError(f"Failed to import required modules: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to regenerate plot: {e}")
+
+    def load_and_plot_from_csv(
+        self,
+        csv_file: str,
+        filename: str,
+        proximity: float,
+        image_settings: Dict[str, Any],
+        use_wls: bool = True
+    ) -> None:
+        """
+        Load results from CSV file and generate plot.
+
+        Args:
+            csv_file: Path to CSV file with simulation results
+            filename: Path where plot should be saved
+            proximity: Proximity level for plot
+            image_settings: Dictionary with image settings (type, width, height, dpi, etc.)
+            use_wls: If True, use WLS slopes; if False, use OLS slopes
+
+        Raises:
+            FileNotFoundError: If CSV file does not exist
+            ValueError: If CSV is missing required columns
+            RuntimeError: If plot generation fails
+        """
+        try:
+            import pandas as pd
+            import numpy as np
+            from pathlib import Path
+            from dice.visualization.histograms import plot_accuracy_histogram
+
+            # Check if file exists
+            csv_path = Path(csv_file)
+            if not csv_path.exists():
+                raise FileNotFoundError(f"CSV file not found: {csv_file}")
+
+            # Load CSV
+            df = pd.read_csv(csv_file)
+
+            # Determine which columns to use
+            if use_wls:
+                slope_col = 'weighted fit diffusion slope'
+                method_name = 'WLS'
+            else:
+                slope_col = 'unweighted fit diffusion slope'
+                method_name = 'OLS'
+
+            # Validate required columns exist
+            required_cols = [slope_col, 'nominal diffusion coeff']
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            if missing_cols:
+                raise ValueError(f"CSV missing required columns: {missing_cols}")
+
+            # Extract slopes and nominal values
+            slopes = df[slope_col].dropna().values
+
+            if len(slopes) == 0:
+                raise ValueError(f"No valid {method_name} slopes found in CSV")
+
+            # Get nominal diffusion coefficient (should be same for all runs)
+            d_nominal = df['nominal diffusion coeff'].iloc[0]
+
+            # Calculate diffusion estimates (D = slope/2)
+            d_estimates = slopes / 2
+
+            # Calculate ratios
+            d_ratios = d_estimates / d_nominal
+
+            # Create legacy-format result for plotting
+            legacy_result = {
+                'collated results': {
+                    'd_wls_over_d_nom': d_ratios.tolist()
+                }
+            }
+
+            # Create plot with specified settings
+            plot_accuracy_histogram(
+                simulation_result=legacy_result,
+                proximity=proximity,
+                filename=filename,
+                image_type=image_settings.get('image_type', 'png'),
+                width=image_settings.get('image_width', 16.0),
+                height=image_settings.get('image_height', 10.0),
+                dpi=image_settings.get('image_dpi', 100),
+                font_size=image_settings.get('image_font_size', 6),
+                tick_length=image_settings.get('image_tick_length', 6),
+                tick_width=image_settings.get('image_tick_width', 2),
+                num_bins=image_settings.get('image_numbins', 35)
+            )
+
+            # Store loaded data in memory for regeneration
+            # Create mock RunResult objects
+            class RunResult:
+                """Mock run result for loaded CSV data."""
+                def __init__(self, **kwargs):
+                    for key, value in kwargs.items():
+                        setattr(self, key, value)
+
+            # Get both WLS and OLS slopes if available for future regeneration
+            wls_slopes = df['weighted fit diffusion slope'].dropna().values if 'weighted fit diffusion slope' in df.columns else None
+            ols_slopes = df['unweighted fit diffusion slope'].dropna().values if 'unweighted fit diffusion slope' in df.columns else None
+
+            # Create RunResult objects with both WLS and OLS slopes
+            run_results = []
+            num_runs = len(slopes)
+            for i in range(num_runs):
+                run_result = RunResult(
+                    wls_slope=wls_slopes[i] if wls_slopes is not None and i < len(wls_slopes) else None,
+                    ols_slope=ols_slopes[i] if ols_slopes is not None and i < len(ols_slopes) else None
+                )
+                run_results.append(run_result)
+
+            # Create mock SimpleSimulationResult
+            class SimpleSimulationResult:
+                def __init__(self, run_results, num_runs):
+                    self.run_results = run_results
+                    self.num_runs = num_runs
+
+            self.last_result = SimpleSimulationResult(
+                run_results=run_results,
+                num_runs=num_runs
+            )
+
+            # Store parameters for regeneration
+            self.last_parameters = {
+                'nominal diffusion coefficient': d_nominal,
+                'proximity level': proximity,
+                'filename slug': csv_path.stem
+            }
+
+        except ImportError as e:
+            raise ImportError(f"Failed to import required modules: {e}")
+        except FileNotFoundError:
+            raise
+        except ValueError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Failed to load and plot from CSV: {e}")

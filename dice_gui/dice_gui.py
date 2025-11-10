@@ -5,15 +5,17 @@ Graphical user interface for the Diffusion Insight Computation Engine.
 """
 
 import sys
+import webbrowser
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox,
     QComboBox, QRadioButton, QButtonGroup, QGroupBox, QFileDialog,
     QProgressBar, QMessageBox, QTextEdit, QSlider, QFormLayout, QScrollArea,
-    QCheckBox
+    QCheckBox, QStatusBar
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
+from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator, QAction, QKeySequence
 
 from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
@@ -62,12 +64,23 @@ class DiceGUI(QMainWindow):
         self.interface = DiceInterface()
         self.simulation_thread = None
         self.theme = DiceTheme()
+
+        # File management
+        self.current_parameter_file = None
+        self.parameters_modified = False
+        self.settings = QSettings("DICE", "DICE_GUI")
+        self.loaded_data_file = None  # Track loaded CSV file for status bar
+        self._populating = False      # Prevent modification marking during load
+
         self.init_ui()
 
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("DICE - Diffusion Insight Computation Engine")
         self.setGeometry(100, 100, 900, 1050)
+
+        # Create menu bar
+        self.create_menu_bar()
 
         # Create central widget and main layout
         central_widget = QWidget()
@@ -102,8 +115,123 @@ class DiceGUI(QMainWindow):
         control_panel = self.create_control_panel()
         main_layout.addWidget(control_panel)
 
+        # Create status bar
+        self.create_status_bar()
+
         # Initialize default values
         self.set_default_values()
+
+        # Connect modification tracking signals
+        self.connect_modification_signals()
+
+    def create_menu_bar(self):
+        """Create the menu bar with File and Help menus."""
+        menubar = self.menuBar()
+
+        # File Menu
+        file_menu = menubar.addMenu("&File")
+
+        # New Parameters
+        new_action = QAction("&New Parameters", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
+        new_action.setStatusTip("Reset all parameters to default values")
+        new_action.triggered.connect(self.new_parameters)
+        file_menu.addAction(new_action)
+
+        # Open Parameters
+        open_action = QAction("&Open Parameters...", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.setStatusTip("Load parameters from file")
+        open_action.triggered.connect(self.load_parameters)
+        file_menu.addAction(open_action)
+
+        # Save Parameters
+        save_action = QAction("&Save Parameters", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        save_action.setStatusTip("Save parameters to file")
+        save_action.triggered.connect(self.save_parameters)
+        file_menu.addAction(save_action)
+
+        # Save Parameters As
+        save_as_action = QAction("Save Parameters &As...", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.setStatusTip("Save parameters to a new file")
+        save_as_action.triggered.connect(self.save_parameters_as)
+        file_menu.addAction(save_as_action)
+
+        file_menu.addSeparator()
+
+        # Recent Parameters (submenu)
+        self.recent_menu = file_menu.addMenu("Recent &Parameters")
+        self.update_recent_menu()
+
+        file_menu.addSeparator()
+
+        # Load Results
+        load_results_action = QAction("Load &Results...", self)
+        load_results_action.setShortcut(QKeySequence("Ctrl+L"))
+        load_results_action.setStatusTip("Load simulation results from CSV file")
+        load_results_action.triggered.connect(self.load_and_plot_results)
+        file_menu.addAction(load_results_action)
+
+        file_menu.addSeparator()
+
+        # Exit
+        exit_action = QAction("E&xit", self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        exit_action.setStatusTip("Exit application")
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # Plots Menu
+        plots_menu = menubar.addMenu("&Plots")
+
+        # Accuracy Histogram (active)
+        histogram_action = QAction("&Accuracy Histogram", self)
+        histogram_action.setShortcut(QKeySequence("Ctrl+H"))
+        histogram_action.setStatusTip("Generate accuracy histogram from loaded data")
+        histogram_action.triggered.connect(self.regenerate_plot)
+        plots_menu.addAction(histogram_action)
+
+        plots_menu.addSeparator()
+
+        # Future plot types (disabled)
+        profile_action = QAction("&Profile Evolution", self)
+        profile_action.setEnabled(False)
+        profile_action.setStatusTip("Plot profile evolution over time (coming soon)")
+        plots_menu.addAction(profile_action)
+
+        msd_action = QAction("&MSD Analysis", self)
+        msd_action.setEnabled(False)
+        msd_action.setStatusTip("Plot mean squared displacement analysis (coming soon)")
+        plots_menu.addAction(msd_action)
+
+        cnr_action = QAction("&CNR Dependence", self)
+        cnr_action.setEnabled(False)
+        cnr_action.setStatusTip("Plot CNR dependence analysis (coming soon)")
+        plots_menu.addAction(cnr_action)
+
+        plots_menu.addSeparator()
+
+        batch_action = QAction("&Batch Generate All", self)
+        batch_action.setEnabled(False)
+        batch_action.setStatusTip("Generate all plot types (coming soon)")
+        plots_menu.addAction(batch_action)
+
+        # Help Menu
+        help_menu = menubar.addMenu("&Help")
+
+        # Documentation
+        doc_action = QAction("&Documentation", self)
+        doc_action.setStatusTip("Open DICE documentation on GitHub")
+        doc_action.triggered.connect(self.open_documentation)
+        help_menu.addAction(doc_action)
+
+        # About
+        about_action = QAction("&About DICE", self)
+        about_action.setStatusTip("About DICE")
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
 
     def create_header(self) -> QWidget:
         """Create the header section."""
@@ -592,7 +720,7 @@ class DiceGUI(QMainWindow):
         self.image_width_spin = QDoubleSpinBox()
         self.image_width_spin.setMinimum(0.1)
         self.image_width_spin.setMaximum(100.0)
-        self.image_width_spin.setValue(8.5)
+        self.image_width_spin.setValue(16.0)
         self.image_width_spin.setDecimals(2)
         self.image_width_spin.setToolTip("Width of output plot")
         self.image_width_unit_combo = QComboBox()
@@ -609,7 +737,7 @@ class DiceGUI(QMainWindow):
         self.image_height_spin = QDoubleSpinBox()
         self.image_height_spin.setMinimum(0.1)
         self.image_height_spin.setMaximum(100.0)
-        self.image_height_spin.setValue(5.0)
+        self.image_height_spin.setValue(10.0)
         self.image_height_spin.setDecimals(2)
         self.image_height_spin.setToolTip("Height of output plot")
         self.image_height_unit_combo = QComboBox()
@@ -642,7 +770,7 @@ class DiceGUI(QMainWindow):
         self.image_font_size_spin = QSpinBox()
         self.image_font_size_spin.setMinimum(4)
         self.image_font_size_spin.setMaximum(72)
-        self.image_font_size_spin.setValue(8)
+        self.image_font_size_spin.setValue(6)
         self.image_font_size_spin.setToolTip("Font size for plot labels and text")
         self.image_font_unit_combo = QComboBox()
         self.image_font_unit_combo.addItems(["pt", "px"])
@@ -691,7 +819,39 @@ class DiceGUI(QMainWindow):
         self.image_numbins_spin.setToolTip("Number of bins for histogram plots")
         plot_layout.addRow("Histogram Bins:", self.image_numbins_spin)
 
+        # Plot method selection (WLS vs OLS)
+        method_widget = QWidget()
+        method_layout = QHBoxLayout(method_widget)
+        method_layout.setContentsMargins(0, 0, 0, 0)
+        self.plot_method_wls_radio = QRadioButton("Weighted Least Squares (WLS)")
+        self.plot_method_ols_radio = QRadioButton("Ordinary Least Squares (OLS)")
+        self.plot_method_wls_radio.setChecked(True)
+        self.plot_method_wls_radio.setToolTip("Use weighted least squares estimates (accounts for heteroscedasticity)")
+        self.plot_method_ols_radio.setToolTip("Use ordinary least squares estimates (unweighted)")
+        method_layout.addWidget(self.plot_method_wls_radio)
+        method_layout.addWidget(self.plot_method_ols_radio)
+        method_layout.addStretch()
+        plot_layout.addRow("Fit Method:", method_widget)
+
         layout.addWidget(plot_group)
+
+        # Plot Actions group
+        actions_group = QGroupBox("Plot Actions")
+        actions_layout = QHBoxLayout(actions_group)
+
+        self.regenerate_plot_button = QPushButton("Regenerate Plot")
+        self.regenerate_plot_button.setToolTip("Regenerate plot from data in memory with current image settings")
+        self.regenerate_plot_button.clicked.connect(self.regenerate_plot)
+
+        self.load_results_button = QPushButton("Load Results")
+        self.load_results_button.setToolTip("Load results from CSV file and generate plot")
+        self.load_results_button.clicked.connect(self.load_and_plot_results)
+
+        actions_layout.addWidget(self.regenerate_plot_button)
+        actions_layout.addWidget(self.load_results_button)
+        actions_layout.addStretch()
+
+        layout.addWidget(actions_group)
 
         # Info label
         info_label = QLabel(
@@ -904,6 +1064,221 @@ class DiceGUI(QMainWindow):
             self.noise_file_input.setText(file_path)
             # TODO: Estimate CNR from file using FFT method
             self.noise_cnr_label.setText("Estimated CNR: (calculation not yet implemented)")
+
+    def collect_image_settings(self) -> dict:
+        """Collect current image settings and convert to standard units."""
+        # Convert image dimensions to cm (standard unit)
+        width_value = self.image_width_spin.value()
+        width_unit = self.image_width_unit_combo.currentText()
+        if width_unit == "in":
+            width_cm = width_value * 2.54
+        elif width_unit == "mm":
+            width_cm = width_value / 10.0
+        else:  # cm
+            width_cm = width_value
+
+        height_value = self.image_height_spin.value()
+        height_unit = self.image_height_unit_combo.currentText()
+        if height_unit == "in":
+            height_cm = height_value * 2.54
+        elif height_unit == "mm":
+            height_cm = height_value / 10.0
+        else:  # cm
+            height_cm = height_value
+
+        # Convert resolution to dpi (standard unit)
+        dpi_value = self.image_dpi_spin.value()
+        dpi_unit = self.image_dpi_unit_combo.currentText()
+        if dpi_unit == "dpcm":
+            dpi = dpi_value * 2.54
+        else:  # dpi
+            dpi = dpi_value
+
+        # Convert font size to points
+        font_size = self.image_font_size_spin.value()
+        font_unit = self.image_font_unit_combo.currentText()
+        if font_unit == "px":
+            font_size_pt = font_size * 0.75
+        else:  # pt
+            font_size_pt = font_size
+
+        # Convert tick length to points
+        tick_length = self.image_tick_length_spin.value()
+        tick_length_unit = self.image_tick_length_unit_combo.currentText()
+        if tick_length_unit == "px":
+            tick_length_pt = tick_length * 0.75
+        else:  # pt
+            tick_length_pt = tick_length
+
+        # Convert tick width to points
+        tick_width = self.image_tick_width_spin.value()
+        tick_width_unit = self.image_tick_width_unit_combo.currentText()
+        if tick_width_unit == "px":
+            tick_width_pt = tick_width * 0.75
+        else:  # pt
+            tick_width_pt = tick_width
+
+        return {
+            'image_type': self.image_type_combo.currentText(),
+            'image_width': width_cm,
+            'image_height': height_cm,
+            'image_dpi': dpi,
+            'image_font_size': font_size_pt,
+            'image_tick_length': tick_length_pt,
+            'image_tick_width': tick_width_pt,
+            'image_numbins': self.image_numbins_spin.value()
+        }
+
+    def get_plot_filename(self, output_dir, slug: str, image_type: str) -> str:
+        """Get plot filename, handling overwrites with user confirmation."""
+        from pathlib import Path
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        filename = output_dir / f"{slug}_accuracy_histogram.{image_type}"
+
+        if filename.exists():
+            reply = QMessageBox.question(
+                self, "File Exists",
+                f"File already exists:\n{filename}\n\n"
+                "Do you want to overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.No:
+                # Open save dialog
+                new_file, _ = QFileDialog.getSaveFileName(
+                    self,
+                    "Save Plot As",
+                    str(filename),
+                    f"{image_type.upper()} Files (*.{image_type});;All Files (*)"
+                )
+                if new_file:
+                    filename = Path(new_file)
+                else:
+                    raise ValueError("Save cancelled by user")
+
+        return str(filename)
+
+    def regenerate_plot(self):
+        """Regenerate plot from data in memory with current image settings."""
+        # Check if data exists in memory
+        if self.interface.last_result is None:
+            reply = QMessageBox.question(
+                self, "No Data in Memory",
+                "No data in memory to plot.\n\n"
+                "Would you like to load data from a CSV file?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.load_and_plot_results()
+            return
+
+        try:
+            # Collect current image settings
+            image_settings = self.collect_image_settings()
+
+            # Get plot method (WLS or OLS)
+            use_wls = self.plot_method_wls_radio.isChecked()
+
+            # Get output location (original directory)
+            slug = self.interface.last_parameters.get('filename slug', 'plot')
+            from pathlib import Path
+            output_dir = Path.cwd() / 'output' / slug
+
+            # Get plot filename with overwrite handling
+            filename = self.get_plot_filename(output_dir, slug, image_settings['image_type'])
+
+            # Call interface method to regenerate
+            self.interface.regenerate_plot_from_memory(
+                filename=filename,
+                image_settings=image_settings,
+                use_wls=use_wls
+            )
+
+            # Show success message
+            QMessageBox.information(self, "Plot Generated",
+                                  f"Plot saved to:\n{filename}")
+
+        except ValueError as e:
+            if "cancelled" in str(e).lower():
+                return  # User cancelled save dialog
+            QMessageBox.critical(self, "Error", str(e))
+        except Exception as e:
+            QMessageBox.critical(self, "Error Generating Plot",
+                               f"Failed to generate plot:\n\n{str(e)}")
+
+    def load_and_plot_results(self):
+        """Load results from CSV and generate plot."""
+        from pathlib import Path
+
+        # Get default directory from filename slug output path
+        default_dir = Path.cwd() / 'output' / self.filename_slug_input.text()
+        if not default_dir.exists():
+            default_dir = Path.cwd() / 'output'
+        if not default_dir.exists():
+            default_dir = Path.cwd()
+
+        # Open file dialog
+        csv_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Results CSV File",
+            str(default_dir),
+            "CSV Files (*.csv);;All Files (*)"
+        )
+
+        if not csv_file:
+            return
+
+        try:
+            # Collect current image settings
+            image_settings = self.collect_image_settings()
+
+            # Get proximity from Analysis Settings tab
+            proximity = self.proximity_spin.value()
+
+            # Get plot method
+            use_wls = self.plot_method_wls_radio.isChecked()
+
+            # Determine output location
+            csv_path = Path(csv_file)
+            output_dir = csv_path.parent
+            slug = csv_path.stem  # Use CSV filename without extension
+
+            # Get plot filename with overwrite handling
+            filename = self.get_plot_filename(output_dir, slug, image_settings['image_type'])
+
+            # Call interface method to load and plot
+            self.interface.load_and_plot_from_csv(
+                csv_file=csv_file,
+                filename=filename,
+                proximity=proximity,
+                image_settings=image_settings,
+                use_wls=use_wls
+            )
+
+            # Update status bar
+            self.loaded_data_file = csv_file
+            self.update_status_bar()
+
+            # Show success message with info
+            QMessageBox.information(
+                self, "Data Loaded and Plot Generated",
+                f"Loaded results from:\n{csv_file}\n\n"
+                f"Plot saved to:\n{filename}\n\n"
+                "You can adjust image settings and click 'Regenerate Plot' "
+                "to create a new version with different formatting."
+            )
+
+        except ValueError as e:
+            if "cancelled" in str(e).lower():
+                return  # User cancelled save dialog
+            QMessageBox.critical(self, "Error", str(e))
+        except Exception as e:
+            QMessageBox.critical(self, "Error Loading Results",
+                               f"Failed to load and plot results:\n\n{str(e)}")
 
     def validate_all_inputs(self) -> tuple[bool, str]:
         """Validate all inputs before running simulation."""
@@ -1138,6 +1513,10 @@ class DiceGUI(QMainWindow):
         self.reset_ui_after_simulation()
         self.status_label.setText("Simulation completed successfully!")
 
+        # Clear loaded data file (new simulation overwrites)
+        self.loaded_data_file = None
+        self.update_status_bar()
+
         QMessageBox.information(
             self,
             "Simulation Complete",
@@ -1156,6 +1535,524 @@ class DiceGUI(QMainWindow):
         self.run_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
+
+    # ============ Menu Actions ============
+
+    def new_parameters(self):
+        """Reset all parameters to default values."""
+        # Check if there are unsaved changes
+        if self.parameters_modified:
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Do you want to discard them?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        # Reset to default values
+        self.set_default_values()
+        self.current_parameter_file = None
+        self.parameters_modified = False
+        self.update_window_title()
+
+    def load_parameters(self):
+        """Load parameters from a file."""
+        # Check if there are unsaved changes
+        if self.parameters_modified:
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Do you want to discard them?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        # Open file dialog
+        default_dir = str(Path.cwd())
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Parameters File",
+            default_dir,
+            "Parameter Files (*.txt);;All Files (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            self.load_parameters_from_file(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error Loading Parameters",
+                f"Failed to load parameters:\n\n{str(e)}"
+            )
+
+    def load_parameters_from_file(self, file_path: str):
+        """Load parameters from a specific file path."""
+        import ast
+
+        # Read and parse the parameter file
+        with open(file_path, 'r') as f:
+            content = f.read()
+
+        # Parse the dictionary
+        params = ast.literal_eval(content)
+
+        # Populate GUI from parameters
+        self.populate_gui_from_parameters(params)
+
+        # Update file tracking
+        self.current_parameter_file = file_path
+        self.parameters_modified = False
+        self.add_to_recent_files(file_path)
+        self.update_window_title()
+
+        QMessageBox.information(
+            self, "Parameters Loaded",
+            f"Parameters loaded from:\n{file_path}"
+        )
+
+    def save_parameters(self):
+        """Save parameters to the current file or prompt for location."""
+        if self.current_parameter_file:
+            try:
+                self.save_parameters_to_file(self.current_parameter_file)
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "Error Saving Parameters",
+                    f"Failed to save parameters:\n\n{str(e)}"
+                )
+        else:
+            self.save_parameters_as()
+
+    def save_parameters_as(self):
+        """Save parameters to a new file."""
+        default_dir = str(Path.cwd())
+        default_name = "parameters.txt"
+        if self.current_parameter_file:
+            default_name = Path(self.current_parameter_file).name
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Parameters As",
+            str(Path(default_dir) / default_name),
+            "Parameter Files (*.txt);;All Files (*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            self.save_parameters_to_file(file_path)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error Saving Parameters",
+                f"Failed to save parameters:\n\n{str(e)}"
+            )
+
+    def save_parameters_to_file(self, file_path: str):
+        """Save current GUI parameters to a file."""
+        # Collect parameters from GUI
+        gui_params = self.collect_parameters()
+
+        # Convert to file format
+        file_content = self.parameters_to_file_format(gui_params)
+
+        # Write to file
+        with open(file_path, 'w') as f:
+            f.write(file_content)
+
+        # Update file tracking
+        self.current_parameter_file = file_path
+        self.parameters_modified = False
+        self.add_to_recent_files(file_path)
+        self.update_window_title()
+
+        QMessageBox.information(
+            self, "Parameters Saved",
+            f"Parameters saved to:\n{file_path}"
+        )
+
+    def parameters_to_file_format(self, gui_params: dict) -> str:
+        """Convert GUI parameters to parameters.txt file format."""
+        lines = [
+            "##################################################################",
+            "# DICE Parameter Configuration",
+            "# Generated by DICE GUI",
+            "##################################################################",
+            "",
+            "{"
+        ]
+
+        # Filename slug
+        lines.append(f"    'filename slug': '{gui_params['filename_slug']}',")
+        lines.append("")
+
+        # Number of runs
+        lines.append(f"    'number of runs': {gui_params['number_of_runs']},")
+        lines.append("")
+
+        # Units
+        lines.append("    ### Units ###")
+        lines.append(f"    'length unit': '{gui_params['length_unit']}',")
+        lines.append(f"    'time unit': '{gui_params['time_unit']}',")
+        lines.append("")
+
+        # Diffusion parameters
+        lines.append("    ### Nominal diffusion and lifetime parameters ###")
+        if gui_params['diffusion_type'] == 'length':
+            lines.append(f"    'nominal diffusion length': {gui_params['diffusion_length']},")
+        else:
+            lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
+            lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
+        lines.append("")
+
+        # Initial profile
+        lines.append("    ### Initial profile parameters ###")
+        if gui_params['profile_width_type'] == 'fwhm':
+            lines.append(f"    'FWHM_0': {gui_params['profile_width_value']},")
+        else:
+            lines.append(f"    'sigma_0': {gui_params['profile_width_value']},")
+        lines.append(f"    'amplitude_0': {gui_params['amplitude_0']},")
+        lines.append(f"    'mean_0': {gui_params['mean_0']},")
+        lines.append("")
+
+        # Noise
+        lines.append("    ### Noise parameter ###")
+        if gui_params['noise_type'] == 'fixed':
+            lines.append(f"    'noise value': {gui_params['noise_value']},")
+        else:
+            lines.append(f"    'estimate noise from data': '{gui_params['noise_data_file']}',")
+        lines.append("")
+
+        # Spatial axis
+        lines.append("    ### Spatial axis parameters ###")
+        lines.append(f"    'spatial width': {gui_params['spatial_width']},")
+        lines.append(f"    'pixel width': {gui_params['pixel_width']},")
+        lines.append("")
+
+        # Time axis
+        lines.append("    ### Time axis parameters ###")
+        if gui_params['time_type'] == 'range':
+            lines.append(f"    'time range': [{gui_params['time_start']}, {gui_params['time_stop']}, {gui_params['time_steps']}],")
+        else:
+            lines.append(f"    'time series': [{gui_params['time_series']}],")
+        lines.append("")
+
+        # Proximity
+        lines.append("    ### Diffusion coefficient proximity threshold ###")
+        lines.append(f"    'proximity level': {gui_params['proximity_level']},")
+        lines.append("")
+
+        # Plot parameters
+        lines.append("    ### Plot image parameters ###")
+        lines.append(f"    'image type': '{gui_params['image_type']}',")
+        lines.append(f"    'image width': {gui_params['image_width']},")
+        lines.append(f"    'image height': {gui_params['image_height']},")
+        lines.append(f"    'image dpi': {gui_params['image_dpi']},")
+        lines.append(f"    'image font size': {gui_params['image_font_size']},")
+        lines.append(f"    'image tick length': {gui_params['image_tick_length']},")
+        lines.append(f"    'image tick width': {gui_params['image_tick_width']},")
+        lines.append(f"    'image numbins': {gui_params['image_numbins']},")
+        lines.append("")
+
+        # Performance settings
+        lines.append("    ### Performance settings ###")
+        lines.append(f"    'retain profile data': {gui_params['retain_profile_data']},")
+        lines.append(f"    'multiprocessing': {gui_params['multiprocessing']},")
+
+        lines.append("}")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    def populate_gui_from_parameters(self, params: dict):
+        """Populate GUI fields from a parameters dictionary."""
+        self._populating = True  # Prevent modification marking
+
+        try:
+            # Basic settings
+            if 'number of runs' in params:
+                self.num_runs_spin.setValue(params['number of runs'])
+            if 'filename slug' in params:
+                self.filename_slug_input.setText(params['filename slug'])
+
+            # Units
+            if 'length unit' in params:
+                self.length_unit_combo.setCurrentText(params['length unit'])
+            if 'time unit' in params:
+                self.time_unit_combo.setCurrentText(params['time unit'])
+
+            # Initial profile
+            if 'amplitude_0' in params:
+                self.amplitude_input.setText(str(params['amplitude_0']))
+            if 'mean_0' in params:
+                self.mean_input.setText(str(params['mean_0']))
+
+            # Profile width (mutually exclusive)
+            if 'FWHM_0' in params:
+                self.fwhm_radio.setChecked(True)
+                self.width_input.setText(str(params['FWHM_0']))
+            elif 'sigma_0' in params:
+                self.sigma_radio.setChecked(True)
+                self.width_input.setText(str(params['sigma_0']))
+
+            # Diffusion (mutually exclusive)
+            if 'nominal diffusion length' in params:
+                self.diffusion_length_radio.setChecked(True)
+                self.diffusion_length_input.setText(str(params['nominal diffusion length']))
+            elif 'nominal diffusion coefficient' in params and 'nominal lifetime (tau)' in params:
+                self.diffusion_coefficient_radio.setChecked(True)
+                self.diffusion_coefficient_input.setText(str(params['nominal diffusion coefficient']))
+                self.lifetime_input.setText(str(params['nominal lifetime (tau)']))
+
+            # Noise (mutually exclusive)
+            if 'noise value' in params:
+                self.noise_fixed_radio.setChecked(True)
+                self.noise_value_input.setText(str(params['noise value']))
+            elif 'estimate noise from data' in params:
+                self.noise_estimate_radio.setChecked(True)
+                self.noise_file_input.setText(params['estimate noise from data'])
+
+            # Spatial axis
+            if 'spatial width' in params:
+                self.spatial_width_input.setText(str(params['spatial width']))
+            if 'pixel width' in params:
+                self.pixel_width_input.setValue(params['pixel width'])
+
+            # Time axis (mutually exclusive)
+            if 'time range' in params:
+                self.time_range_radio.setChecked(True)
+                time_range = params['time range']
+                self.time_start_input.setText(str(time_range[0]))
+                self.time_stop_input.setText(str(time_range[1]))
+                self.time_steps_input.setValue(time_range[2])
+            elif 'time series' in params:
+                self.time_series_radio.setChecked(True)
+                # Convert list to comma-separated string
+                time_series_str = ", ".join(str(t) for t in params['time series'])
+                self.time_series_input.setPlainText(time_series_str)
+
+            # Proximity
+            if 'proximity level' in params:
+                self.proximity_spin.setValue(params['proximity level'])
+
+            # Performance
+            if 'multiprocessing' in params:
+                self.multiprocessing_check.setChecked(params['multiprocessing'])
+            if 'retain profile data' in params:
+                self.retain_profile_check.setChecked(params['retain profile data'])
+
+            # Image settings (with defaults if not present)
+            if 'image type' in params:
+                self.image_type_combo.setCurrentText(params['image type'])
+            if 'image width' in params:
+                self.image_width_spin.setValue(params['image width'])
+            if 'image height' in params:
+                self.image_height_spin.setValue(params['image height'])
+            if 'image dpi' in params:
+                self.image_dpi_spin.setValue(int(params['image dpi']))
+            if 'image font size' in params:
+                self.image_font_size_spin.setValue(int(params['image font size']))
+            if 'image tick length' in params:
+                self.image_tick_length_spin.setValue(int(params['image tick length']))
+            if 'image tick width' in params:
+                self.image_tick_width_spin.setValue(int(params['image tick width']))
+            if 'image numbins' in params:
+                self.image_numbins_spin.setValue(params['image numbins'])
+        finally:
+            self._populating = False  # Re-enable modification marking
+
+    def add_to_recent_files(self, file_path: str):
+        """Add a file to the recent files list."""
+        # Get existing recent files from settings
+        recent = self.settings.value("recent_parameters", [])
+        if not isinstance(recent, list):
+            recent = []
+
+        # Remove if already in list
+        if file_path in recent:
+            recent.remove(file_path)
+
+        # Add to front
+        recent.insert(0, file_path)
+
+        # Limit to 5
+        recent = recent[:5]
+
+        # Save to settings
+        self.settings.setValue("recent_parameters", recent)
+
+        # Update menu
+        self.update_recent_menu()
+
+    def update_recent_menu(self):
+        """Update the Recent Parameters submenu."""
+        self.recent_menu.clear()
+
+        recent = self.settings.value("recent_parameters", [])
+        if not isinstance(recent, list):
+            recent = []
+
+        if not recent:
+            no_recent = QAction("No recent files", self)
+            no_recent.setEnabled(False)
+            self.recent_menu.addAction(no_recent)
+            return
+
+        for file_path in recent:
+            if Path(file_path).exists():
+                action = QAction(Path(file_path).name, self)
+                action.setStatusTip(file_path)
+                action.triggered.connect(lambda checked, f=file_path: self.load_parameters_from_file(f))
+                self.recent_menu.addAction(action)
+
+    def update_window_title(self):
+        """Update window title with current file and modified state."""
+        title = "DICE - Diffusion Insight Computation Engine"
+
+        if self.current_parameter_file:
+            filename = Path(self.current_parameter_file).name
+            title = f"DICE - [{filename}]"
+
+        if self.parameters_modified:
+            title += "*"
+
+        self.setWindowTitle(title)
+
+    def create_status_bar(self):
+        """Create status bar showing version and loaded data."""
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
+        # Permanent version label on right
+        version_label = QLabel("DICE v1.0")
+        self.status_bar.addPermanentWidget(version_label)
+
+        # Left side shows loaded data file (if any)
+        self.update_status_bar()
+
+    def update_status_bar(self):
+        """Update status bar with current loaded data filename."""
+        if self.loaded_data_file:
+            self.status_bar.showMessage(f"Loaded: {Path(self.loaded_data_file).name}")
+        else:
+            self.status_bar.showMessage("No data loaded")
+
+    def connect_modification_signals(self):
+        """Connect all parameter widgets to modification tracking."""
+        # Simulation control
+        self.num_runs_spin.valueChanged.connect(self.mark_modified)
+        self.filename_slug_input.textChanged.connect(self.mark_modified)
+
+        # Units
+        self.length_unit_combo.currentTextChanged.connect(self.mark_modified)
+        self.time_unit_combo.currentTextChanged.connect(self.mark_modified)
+
+        # Initial profile parameters
+        self.amplitude_input.textChanged.connect(self.mark_modified)
+        self.mean_input.textChanged.connect(self.mark_modified)
+        self.width_input.textChanged.connect(self.mark_modified)
+        self.fwhm_radio.toggled.connect(self.mark_modified)
+        self.sigma_radio.toggled.connect(self.mark_modified)
+
+        # Diffusion parameters
+        self.diffusion_length_radio.toggled.connect(self.mark_modified)
+        self.diffusion_coeff_radio.toggled.connect(self.mark_modified)
+        self.diffusion_length_input.textChanged.connect(self.mark_modified)
+        self.diffusion_coeff_input.textChanged.connect(self.mark_modified)
+        self.lifetime_input.textChanged.connect(self.mark_modified)
+
+        # Noise parameters
+        self.noise_fixed_radio.toggled.connect(self.mark_modified)
+        self.noise_estimate_radio.toggled.connect(self.mark_modified)
+        self.noise_value_input.textChanged.connect(self.mark_modified)
+        self.noise_file_input.textChanged.connect(self.mark_modified)
+
+        # Spatial axis
+        self.spatial_width_input.textChanged.connect(self.mark_modified)
+        self.pixel_width_input.valueChanged.connect(self.mark_modified)
+
+        # Time axis
+        self.time_range_radio.toggled.connect(self.mark_modified)
+        self.time_series_radio.toggled.connect(self.mark_modified)
+        self.time_start_input.textChanged.connect(self.mark_modified)
+        self.time_stop_input.textChanged.connect(self.mark_modified)
+        self.time_steps_input.valueChanged.connect(self.mark_modified)
+        self.time_series_input.textChanged.connect(self.mark_modified)
+
+        # Analysis
+        self.proximity_spin.valueChanged.connect(self.mark_modified)
+
+        # Advanced parameters (Output Settings tab)
+        self.image_type_combo.currentTextChanged.connect(self.mark_modified)
+        self.image_width_spin.valueChanged.connect(self.mark_modified)
+        self.image_height_spin.valueChanged.connect(self.mark_modified)
+        self.image_dpi_spin.valueChanged.connect(self.mark_modified)
+        self.image_font_size_spin.valueChanged.connect(self.mark_modified)
+        self.image_tick_length_spin.valueChanged.connect(self.mark_modified)
+        self.image_tick_width_spin.valueChanged.connect(self.mark_modified)
+        self.image_numbins_spin.valueChanged.connect(self.mark_modified)
+        self.retain_profile_check.stateChanged.connect(self.mark_modified)
+        self.multiprocessing_check.stateChanged.connect(self.mark_modified)
+
+    def mark_modified(self):
+        """Mark parameters as modified."""
+        if hasattr(self, '_populating') and self._populating:
+            return  # Don't mark modified during initial population
+        self.parameters_modified = True
+        self.update_window_title()
+
+    def show_about_dialog(self):
+        """Show the About DICE dialog."""
+        about_text = """
+<h2>DICE - Diffusion Insight Computation Engine</h2>
+
+<p><b>Version:</b> 1.0</p>
+
+<p>DICE is a Python-based scientific computing tool for quantifying noise effects
+in optical measures of excited state transport in optoelectronic semiconducting materials.</p>
+
+<p><b>Citation:</b><br>
+If you use DICE in your research, please cite:<br>
+Thiebes, J. J. (2023). <i>Diffusion Insight Computation Engine (DICE)</i> <br>
+[Software]. Zenodo. https://doi.org/10.5281/zenodo.10258191</p>
+
+<p><b>GitHub:</b> <a href="https://github.com/thiebes/DICE">https://github.com/thiebes/DICE</a></p>
+
+<p><b>License:</b> MIT</p>
+"""
+        QMessageBox.about(self, "About DICE", about_text)
+
+    def open_documentation(self):
+        """Open DICE documentation on GitHub."""
+        url = "https://github.com/thiebes/DICE#readme"
+        webbrowser.open(url)
+
+    def closeEvent(self, event):
+        """Handle window close event to check for unsaved changes."""
+        if self.parameters_modified:
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before exiting?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+
+            if reply == QMessageBox.StandardButton.Save:
+                self.save_parameters()
+                # If save was cancelled, don't exit
+                if self.parameters_modified:
+                    event.ignore()
+                    return
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+
+        event.accept()
 
 
 def main():
