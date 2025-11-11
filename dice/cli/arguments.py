@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from dice import __version__
+
 
 def create_parser() -> argparse.ArgumentParser:
     """
@@ -97,7 +99,7 @@ For more information, visit: https://github.com/your-repo/DICE
     parser.add_argument(
         '--version',
         action='version',
-        version='%(prog)s 1.0.0'
+        version=f'%(prog)s {__version__}'
     )
     
     # Advanced options

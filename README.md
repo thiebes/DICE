@@ -141,7 +141,7 @@ This material is based upon work supported by the National Science Foundation un
 ## How to Cite
 
 ```text
-Joseph J. Thiebes. 2023. thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10258191
+Thiebes, J. J. (2023). Diffusion Insight Computation Engine (DICE) [Software]. Zenodo. https://doi.org/10.5281/zenodo.10258191
 ```
 
 ## License

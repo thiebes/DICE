@@ -37,12 +37,18 @@ This web app is currently available for your use on the web at: https://dice-thi
 
 ### Running the Application
 
+#### Local Development
+
 1. Start the Flask development server:
     ```sh
     python dice_web_app.py
     ```
 
 2. Open your web browser and navigate to `http://127.0.0.1:5000/`.
+
+#### Production Deployment
+
+For deploying to PythonAnywhere, see [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on git-based deployment.
 
 ### Usage
 

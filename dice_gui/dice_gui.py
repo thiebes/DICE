@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator, QAction, QKeySequence
 
+from dice import __version__
 from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
     validate_proximity_level, validate_time_range, validate_time_series,
@@ -307,11 +308,22 @@ class DiceGUI(QMainWindow):
         self.num_runs_spin.setMinimum(1)
         self.num_runs_spin.setMaximum(1000000)
         self.num_runs_spin.setValue(1000)
+        self.num_runs_spin.setToolTip(
+            "Number of Monte Carlo simulation iterations to run.\n\n"
+            "Higher values provide better statistical precision but take longer to compute.\n"
+            "Typical values: 100-1000 for testing, 1000-10000 for publication-quality results.\n\n"
+            "Each run generates a noisy profile, fits it, and estimates the diffusion coefficient."
+        )
         basic_layout.addRow("Number of Runs:", self.num_runs_spin)
 
         # Filename slug
         self.filename_slug_input = QLineEdit()
         self.filename_slug_input.setText("dice_simulation")
+        self.filename_slug_input.setToolTip(
+            "Prefix for all output filenames.\n\n"
+            "Output files will be saved as: output/<slug>/<slug>_results.csv, <slug>_accuracy_histogram.png, etc.\n\n"
+            "Use descriptive names to organize multiple simulations (e.g., 'high_SNR_test' or 'sample_A_analysis')."
+        )
         basic_layout.addRow("Filename Slug:", self.filename_slug_input)
 
         layout.addWidget(basic_group)
@@ -365,7 +377,20 @@ class DiceGUI(QMainWindow):
         # Radio buttons for diffusion type
         self.diffusion_button_group = QButtonGroup()
         self.diffusion_length_radio = QRadioButton("Diffusion Length")
+        self.diffusion_length_radio.setToolTip(
+            "Specify diffusion as a single length parameter.\n\n"
+            "Diffusion length L = sqrt(D*tau) is the characteristic distance a carrier diffuses during its lifetime.\n"
+            "Use this when you know the overall transport distance but not individual D and tau values.\n\n"
+            "Typical values: 10-1000 nm for organic semiconductors, 100-10000 nm for inorganic materials."
+        )
         self.diffusion_coeff_radio = QRadioButton("Diffusion Coefficient + Lifetime")
+        self.diffusion_coeff_radio.setToolTip(
+            "Specify diffusion coefficient D and lifetime tau separately.\n\n"
+            "Use this when you know both parameters independently from experiments.\n"
+            "D controls spatial spreading rate, tau controls temporal decay.\n\n"
+            "Typical D: 0.001-1 cm²/s (organics), 1-100 cm²/s (inorganics)\n"
+            "Typical tau: 1-1000 ns"
+        )
         self.diffusion_button_group.addButton(self.diffusion_length_radio, 0)
         self.diffusion_button_group.addButton(self.diffusion_coeff_radio, 1)
         self.diffusion_length_radio.setChecked(True)
@@ -378,6 +403,12 @@ class DiceGUI(QMainWindow):
         length_layout.setContentsMargins(30, 0, 0, 0)
         self.diffusion_length_input = QLineEdit()
         self.diffusion_length_input.setPlaceholderText("e.g., 1.0")
+        self.diffusion_length_input.setToolTip(
+            "Characteristic diffusion length during carrier lifetime.\n\n"
+            "This is the nominal value used to generate synthetic data.\n"
+            "The simulation assesses how accurately this value can be recovered from noisy measurements.\n\n"
+            "Must be positive. Units set by length unit selector above."
+        )
         self.diffusion_length_label = QLabel("μm")
         length_layout.addWidget(QLabel("Diffusion Length:"))
         length_layout.addWidget(self.diffusion_length_input)
@@ -397,6 +428,14 @@ class DiceGUI(QMainWindow):
         d_layout.setContentsMargins(0, 0, 0, 0)
         self.diffusion_coeff_input = QLineEdit()
         self.diffusion_coeff_input.setPlaceholderText("e.g., 0.5")
+        self.diffusion_coeff_input.setToolTip(
+            "Diffusion coefficient describing spatial spreading rate.\n\n"
+            "In 1D Fickian diffusion, variance grows as: sigma²(t) = sigma²(0) + 2*D*t\n\n"
+            "Typical values:\n"
+            "- Organic semiconductors: 0.001-0.1 cm²/s (0.01-10 μm²/ns)\n"
+            "- Inorganic semiconductors: 0.1-100 cm²/s (10-10000 μm²/ns)\n\n"
+            "Must be non-negative. Zero means no diffusion (only decay)."
+        )
         self.diffusion_coeff_label = QLabel("μm²/ns")
         d_layout.addWidget(self.diffusion_coeff_input)
         d_layout.addWidget(self.diffusion_coeff_label)
@@ -406,6 +445,15 @@ class DiceGUI(QMainWindow):
         tau_layout.setContentsMargins(0, 0, 0, 0)
         self.lifetime_input = QLineEdit()
         self.lifetime_input.setPlaceholderText("e.g., 2.0")
+        self.lifetime_input.setToolTip(
+            "Excited state lifetime (tau) for exponential decay.\n\n"
+            "Intensity decays as: I(t) = I(0) * exp(-t/tau)\n\n"
+            "Typical values:\n"
+            "- Fluorescence: 0.1-10 ns\n"
+            "- Phosphorescence: 10-1000 ns\n"
+            "- Triplet excitons: 1-1000 ns\n\n"
+            "Must be non-negative. Zero means no decay (infinite lifetime)."
+        )
         self.lifetime_label = QLabel("ns")
         tau_layout.addWidget(self.lifetime_input)
         tau_layout.addWidget(self.lifetime_label)
@@ -434,6 +482,12 @@ class DiceGUI(QMainWindow):
         # Amplitude
         self.amplitude_input = QLineEdit()
         self.amplitude_input.setText("1.0")
+        self.amplitude_input.setToolTip(
+            "Initial peak intensity of the Gaussian profile at t=0.\n\n"
+            "Typically normalized to 1.0 for convenience.\n"
+            "The noise level is specified relative to this amplitude.\n\n"
+            "Can be zero or positive. Zero amplitude means no signal (only noise)."
+        )
         profile_layout.addRow("Amplitude₀:", self.amplitude_input)
 
         # Mean position
@@ -442,6 +496,12 @@ class DiceGUI(QMainWindow):
         mean_layout.setContentsMargins(0, 0, 0, 0)
         self.mean_input = QLineEdit()
         self.mean_input.setText("0.0")
+        self.mean_input.setToolTip(
+            "Center position of the initial Gaussian profile along the spatial axis.\n\n"
+            "Typically set to 0.0 (centered on the spatial window).\n"
+            "The profile center does not move during diffusion (only spreads and decays).\n\n"
+            "Should be within the spatial width defined in Experimental Conditions."
+        )
         self.mean_label = QLabel("μm")
         mean_layout.addWidget(self.mean_input)
         mean_layout.addWidget(self.mean_label)
@@ -450,7 +510,19 @@ class DiceGUI(QMainWindow):
         # Profile width radio buttons
         self.width_button_group = QButtonGroup()
         self.fwhm_radio = QRadioButton("FWHM")
+        self.fwhm_radio.setToolTip(
+            "Full Width at Half Maximum of the Gaussian profile.\n\n"
+            "FWHM is the width measured at 50% of peak intensity.\n"
+            "Common in microscopy and spectroscopy (easier to measure experimentally).\n\n"
+            "Relationship: FWHM = 2*sqrt(2*ln(2))*sigma ≈ 2.355*sigma"
+        )
         self.sigma_radio = QRadioButton("Sigma (σ)")
+        self.sigma_radio.setToolTip(
+            "Standard deviation of the Gaussian profile.\n\n"
+            "Sigma is the mathematical parameter in the Gaussian function: exp(-(x-μ)²/(2*sigma²))\n"
+            "Preferred for theoretical analysis and diffusion calculations.\n\n"
+            "Relationship: sigma = FWHM / 2.355"
+        )
         self.width_button_group.addButton(self.fwhm_radio, 0)
         self.width_button_group.addButton(self.sigma_radio, 1)
         self.fwhm_radio.setChecked(True)
@@ -469,6 +541,14 @@ class DiceGUI(QMainWindow):
         width_layout.setContentsMargins(0, 0, 0, 0)
         self.width_input = QLineEdit()
         self.width_input.setPlaceholderText("e.g., 1.0")
+        self.width_input.setToolTip(
+            "Initial width of the Gaussian profile (FWHM or sigma, depending on selection above).\n\n"
+            "This represents the spatial extent of the initial excitation (e.g., laser spot size).\n"
+            "During diffusion, this width increases over time.\n\n"
+            "Typical values: 0.1-10 μm for confocal microscopy\n"
+            "Should be smaller than the spatial window to avoid edge effects.\n\n"
+            "Must be positive."
+        )
         self.width_unit_label = QLabel("μm")
         width_layout.addWidget(self.width_input)
         width_layout.addWidget(self.width_unit_label)
@@ -508,7 +588,19 @@ class DiceGUI(QMainWindow):
         # Radio buttons for noise type
         self.noise_button_group = QButtonGroup()
         self.noise_fixed_radio = QRadioButton("Fixed Noise Value")
+        self.noise_fixed_radio.setToolTip(
+            "Specify noise level directly as standard deviation.\n\n"
+            "Use this when you know the noise level from calibration or previous measurements.\n"
+            "Noise is added as Gaussian white noise with the specified standard deviation.\n\n"
+            "For normalized amplitude of 1.0, CNR = 1/noise_value"
+        )
         self.noise_estimate_radio = QRadioButton("Estimate from Data")
+        self.noise_estimate_radio.setToolTip(
+            "Estimate noise level from experimental profile data using FFT method.\n\n"
+            "Load a CSV file containing an experimental profile.\n"
+            "DICE will analyze high-frequency components to estimate background noise.\n\n"
+            "Useful when noise level is unknown but experimental data is available."
+        )
         self.noise_button_group.addButton(self.noise_fixed_radio, 0)
         self.noise_button_group.addButton(self.noise_estimate_radio, 1)
         self.noise_fixed_radio.setChecked(True)
@@ -522,6 +614,14 @@ class DiceGUI(QMainWindow):
         fixed_layout.addWidget(QLabel("Noise σ:"))
         self.noise_value_input = QLineEdit()
         self.noise_value_input.setPlaceholderText("e.g., 0.01")
+        self.noise_value_input.setToolTip(
+            "Standard deviation of Gaussian white noise added to profiles.\n\n"
+            "This value is constant across all pixels and time points.\n"
+            "For amplitude=1.0, a noise value of 0.01 gives CNR=100, 0.1 gives CNR=10.\n\n"
+            "Typical values: 0.001-0.1 (0.1%-10% of signal amplitude)\n"
+            "Higher noise makes diffusion coefficient estimation more difficult.\n\n"
+            "Must be non-negative. Zero means no noise (perfect measurements)."
+        )
         fixed_layout.addWidget(self.noise_value_input)
         fixed_layout.addStretch()
         noise_layout.addWidget(fixed_container)
@@ -534,7 +634,14 @@ class DiceGUI(QMainWindow):
         estimate_layout.setContentsMargins(30, 0, 0, 0)
         self.noise_file_input = QLineEdit()
         self.noise_file_input.setPlaceholderText("Path to CSV file...")
+        self.noise_file_input.setToolTip(
+            "Path to CSV file containing experimental profile data for noise estimation.\n\n"
+            "File should contain spatial profile data with background noise.\n"
+            "DICE will use FFT analysis to separate signal from noise components.\n\n"
+            "Click Browse to select file."
+        )
         self.noise_browse_button = QPushButton("Browse...")
+        self.noise_browse_button.setToolTip("Select CSV file containing experimental profile data")
         self.noise_browse_button.clicked.connect(self.browse_noise_file)
         self.noise_cnr_label = QLabel("Estimated CNR: ---")
         self.noise_cnr_label.setProperty("class", "calculated-value")
@@ -558,6 +665,14 @@ class DiceGUI(QMainWindow):
         spatial_width_layout.setContentsMargins(0, 0, 0, 0)
         self.spatial_width_input = QLineEdit()
         self.spatial_width_input.setPlaceholderText("e.g., 10.0")
+        self.spatial_width_input.setToolTip(
+            "Total spatial width of the observation window.\n\n"
+            "This defines the x-axis range from -width/2 to +width/2.\n"
+            "Should be large enough to contain the spreading profile without edge truncation.\n\n"
+            "Rule of thumb: Make this 3-5 times the final profile width.\n"
+            "For diffusion length L and max time t_max: width ≈ 5*sqrt(sigma_0² + 2*D*t_max)\n\n"
+            "Typical values: 5-50 μm for microscopy experiments"
+        )
         self.spatial_width_label = QLabel("μm")
         spatial_width_layout.addWidget(self.spatial_width_input)
         spatial_width_layout.addWidget(self.spatial_width_label)
@@ -568,6 +683,14 @@ class DiceGUI(QMainWindow):
         self.pixel_width_input.setMinimum(1)
         self.pixel_width_input.setMaximum(100000)
         self.pixel_width_input.setValue(100)
+        self.pixel_width_input.setToolTip(
+            "Number of pixels (spatial sampling points) across the profile.\n\n"
+            "Higher values provide better spatial resolution but increase computation time.\n\n"
+            "Rule of thumb: At least 10-20 pixels per profile FWHM for accurate Gaussian fitting.\n"
+            "For initial FWHM=1 μm and width=10 μm: 100 pixels gives 0.1 μm/pixel resolution.\n\n"
+            "Typical values: 50-500 pixels\n"
+            "Minimum practical: ~20-30 pixels"
+        )
         spatial_layout.addRow("Number of Pixels:", self.pixel_width_input)
 
         # Calculated pixel size
@@ -588,7 +711,19 @@ class DiceGUI(QMainWindow):
         # Radio buttons for time type
         self.time_button_group = QButtonGroup()
         self.time_range_radio = QRadioButton("Time Range")
+        self.time_range_radio.setToolTip(
+            "Define time points as evenly-spaced range.\n\n"
+            "Generates linear time series: linspace(start, stop, steps)\n"
+            "Convenient for uniform temporal sampling.\n\n"
+            "Example: start=0, stop=10, steps=11 gives [0, 1, 2, ..., 10]"
+        )
         self.time_series_radio = QRadioButton("Time Series")
+        self.time_series_radio.setToolTip(
+            "Specify arbitrary time points as comma-separated list.\n\n"
+            "Allows non-uniform sampling (e.g., logarithmic spacing).\n"
+            "Useful for matching experimental time delays.\n\n"
+            "Example: 0.1, 0.5, 1, 2, 5, 10, 20, 50"
+        )
         self.time_button_group.addButton(self.time_range_radio, 0)
         self.time_button_group.addButton(self.time_series_radio, 1)
         self.time_range_radio.setChecked(True)
@@ -605,6 +740,12 @@ class DiceGUI(QMainWindow):
         start_layout.setContentsMargins(0, 0, 0, 0)
         self.time_start_input = QLineEdit()
         self.time_start_input.setPlaceholderText("e.g., 0.0")
+        self.time_start_input.setToolTip(
+            "First time point for profile measurements.\n\n"
+            "Often set to 0 (initial excitation) but can be non-zero.\n"
+            "For non-zero start, initial profile still has width specified in Physical Parameters.\n\n"
+            "Must be less than stop time."
+        )
         self.time_start_label = QLabel("ns")
         start_layout.addWidget(self.time_start_input)
         start_layout.addWidget(self.time_start_label)
@@ -614,6 +755,13 @@ class DiceGUI(QMainWindow):
         stop_layout.setContentsMargins(0, 0, 0, 0)
         self.time_stop_input = QLineEdit()
         self.time_stop_input.setPlaceholderText("e.g., 10.0")
+        self.time_stop_input.setToolTip(
+            "Final time point for profile measurements.\n\n"
+            "Should be long enough to observe significant diffusion but not so long that signal decays to noise.\n\n"
+            "Rule of thumb: For lifetime tau, useful range is ~0.1*tau to ~2*tau\n"
+            "For diffusion, need enough time for measurable width increase (delta_sigma² > noise sensitivity)\n\n"
+            "Must be greater than start time."
+        )
         self.time_stop_label = QLabel("ns")
         stop_layout.addWidget(self.time_stop_input)
         stop_layout.addWidget(self.time_stop_label)
@@ -622,6 +770,13 @@ class DiceGUI(QMainWindow):
         self.time_steps_input.setMinimum(2)
         self.time_steps_input.setMaximum(10000)
         self.time_steps_input.setValue(10)
+        self.time_steps_input.setToolTip(
+            "Number of time points in the range (including start and stop).\n\n"
+            "More time points improve linear regression fit but increase computation time.\n\n"
+            "Rule of thumb: At least 5-10 points for reliable linear fit.\n"
+            "Typical values: 10-50 time points\n\n"
+            "Minimum: 2 (though 3+ strongly recommended for meaningful statistics)"
+        )
 
         range_layout.addRow("Start:", start_widget)
         range_layout.addRow("Stop:", stop_widget)
@@ -638,6 +793,14 @@ class DiceGUI(QMainWindow):
         self.time_series_input = QTextEdit()
         self.time_series_input.setPlaceholderText("e.g., 0.1, 0.5, 1.0, 2.0, 5.0")
         self.time_series_input.setMaximumHeight(80)
+        self.time_series_input.setToolTip(
+            "Arbitrary time points as comma-separated values.\n\n"
+            "Allows custom temporal sampling to match experimental conditions.\n"
+            "Useful for logarithmic spacing or irregular time delays.\n\n"
+            "Example: 0, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50\n\n"
+            "Must have at least 2 time points for linear regression.\n"
+            "Time points should be in ascending order (though not strictly required)."
+        )
         series_layout.addWidget(series_label)
         series_layout.addWidget(self.time_series_input)
         temporal_layout.addWidget(series_container)
@@ -670,7 +833,17 @@ class DiceGUI(QMainWindow):
         self.proximity_spin.setValue(0.10)
         self.proximity_spin.setDecimals(3)
         self.proximity_spin.setSingleStep(0.01)
-        self.proximity_spin.setToolTip("Threshold for accuracy analysis (e.g., 0.10 = ±10%)")
+        self.proximity_spin.setToolTip(
+            "Threshold for accuracy analysis as fractional tolerance.\n\n"
+            "Defines the acceptable range for diffusion coefficient estimates:\n"
+            "- 0.10 means ±10% (estimates between 0.9*D_nominal and 1.1*D_nominal are 'accurate')\n"
+            "- 0.20 means ±20%\n"
+            "- 0.05 means ±5%\n\n"
+            "The simulation reports what fraction of Monte Carlo runs fall within this range.\n"
+            "This helps assess whether your experimental conditions provide reliable measurements.\n\n"
+            "Typical values: 0.10-0.20 for most applications\n"
+            "Stricter: 0.05 for high-precision requirements"
+        )
 
         proximity_input_layout = QHBoxLayout()
         proximity_input_layout.addWidget(proximity_label)
@@ -711,6 +884,16 @@ class DiceGUI(QMainWindow):
         self.image_type_combo = QComboBox()
         self.image_type_combo.addItems(["png", "jpg", "svg", "tif"])
         self.image_type_combo.setCurrentText("png")
+        self.image_type_combo.setToolTip(
+            "File format for saved plots.\n\n"
+            "- PNG: Best for general use, lossless compression, good quality (recommended)\n"
+            "- JPG: Smaller files but lossy compression, may show artifacts\n"
+            "- SVG: Vector format, scalable without quality loss, ideal for publications\n"
+            "- TIF: Uncompressed, largest files, maximum quality\n\n"
+            "For publications: PNG or SVG\n"
+            "For presentations: PNG\n"
+            "For archiving: TIF or SVG"
+        )
         plot_layout.addRow("Image Type:", self.image_type_combo)
 
         # Image width (value + unit)
@@ -722,7 +905,14 @@ class DiceGUI(QMainWindow):
         self.image_width_spin.setMaximum(100.0)
         self.image_width_spin.setValue(16.0)
         self.image_width_spin.setDecimals(2)
-        self.image_width_spin.setToolTip("Width of output plot")
+        self.image_width_spin.setToolTip(
+            "Physical width of output plot.\n\n"
+            "For publications:\n"
+            "- Single column: 8-9 cm (3-3.5 in)\n"
+            "- Double column: 16-18 cm (6-7 in)\n\n"
+            "For presentations: 10-12 in (25-30 cm)\n\n"
+            "Larger sizes provide more detail but may not fit journal requirements."
+        )
         self.image_width_unit_combo = QComboBox()
         self.image_width_unit_combo.addItems(["cm", "in", "mm"])
         self.image_width_unit_combo.setCurrentText("cm")
@@ -739,7 +929,14 @@ class DiceGUI(QMainWindow):
         self.image_height_spin.setMaximum(100.0)
         self.image_height_spin.setValue(10.0)
         self.image_height_spin.setDecimals(2)
-        self.image_height_spin.setToolTip("Height of output plot")
+        self.image_height_spin.setToolTip(
+            "Physical height of output plot.\n\n"
+            "Common aspect ratios:\n"
+            "- 16:10 (wide): Good for histograms\n"
+            "- 4:3 (standard): Balanced appearance\n"
+            "- 1:1 (square): Compact\n\n"
+            "Height is typically 60-70% of width for most plots."
+        )
         self.image_height_unit_combo = QComboBox()
         self.image_height_unit_combo.addItems(["cm", "in", "mm"])
         self.image_height_unit_combo.setCurrentText("cm")
@@ -755,7 +952,16 @@ class DiceGUI(QMainWindow):
         self.image_dpi_spin.setMinimum(50)
         self.image_dpi_spin.setMaximum(1200)
         self.image_dpi_spin.setValue(300)
-        self.image_dpi_spin.setToolTip("Resolution for output plots")
+        self.image_dpi_spin.setToolTip(
+            "Resolution in dots per inch (DPI).\n\n"
+            "Common standards:\n"
+            "- 72-96 DPI: Screen display, presentations\n"
+            "- 150 DPI: Draft prints\n"
+            "- 300 DPI: Publication quality (most journals require this)\n"
+            "- 600 DPI: High-quality prints, posters\n\n"
+            "Higher DPI increases file size and generation time.\n"
+            "For PNG/JPG/TIF; SVG is resolution-independent."
+        )
         self.image_dpi_unit_combo = QComboBox()
         self.image_dpi_unit_combo.addItems(["dpi", "dpcm"])
         self.image_dpi_unit_combo.setCurrentText("dpi")
@@ -771,7 +977,15 @@ class DiceGUI(QMainWindow):
         self.image_font_size_spin.setMinimum(4)
         self.image_font_size_spin.setMaximum(72)
         self.image_font_size_spin.setValue(6)
-        self.image_font_size_spin.setToolTip("Font size for plot labels and text")
+        self.image_font_size_spin.setToolTip(
+            "Font size for axis labels, titles, and annotations.\n\n"
+            "Publication guidelines:\n"
+            "- Minimum: 6-8 pt (must be readable when printed)\n"
+            "- Standard: 8-10 pt\n"
+            "- Larger: 12-14 pt (for presentations)\n\n"
+            "Font size should scale with image dimensions.\n"
+            "Points (pt) are standard for print; pixels (px) for screen."
+        )
         self.image_font_unit_combo = QComboBox()
         self.image_font_unit_combo.addItems(["pt", "px"])
         self.image_font_unit_combo.setCurrentText("pt")
@@ -787,7 +1001,14 @@ class DiceGUI(QMainWindow):
         self.image_tick_length_spin.setMinimum(1)
         self.image_tick_length_spin.setMaximum(50)
         self.image_tick_length_spin.setValue(6)
-        self.image_tick_length_spin.setToolTip("Length of axis tick marks")
+        self.image_tick_length_spin.setToolTip(
+            "Length of axis tick marks in points or pixels.\n\n"
+            "Typical values:\n"
+            "- Short: 3-4 pt (subtle)\n"
+            "- Standard: 5-7 pt (recommended)\n"
+            "- Long: 8-12 pt (emphasis)\n\n"
+            "Should be proportional to plot size and line widths."
+        )
         self.image_tick_length_unit_combo = QComboBox()
         self.image_tick_length_unit_combo.addItems(["pt", "px"])
         self.image_tick_length_unit_combo.setCurrentText("pt")
@@ -803,7 +1024,14 @@ class DiceGUI(QMainWindow):
         self.image_tick_width_spin.setMinimum(1)
         self.image_tick_width_spin.setMaximum(20)
         self.image_tick_width_spin.setValue(2)
-        self.image_tick_width_spin.setToolTip("Width of axis tick marks")
+        self.image_tick_width_spin.setToolTip(
+            "Thickness of axis tick marks and plot borders.\n\n"
+            "Typical values:\n"
+            "- Thin: 0.5-1 pt (delicate)\n"
+            "- Standard: 1-2 pt (recommended)\n"
+            "- Thick: 2-4 pt (bold)\n\n"
+            "Should match axis line width for consistency."
+        )
         self.image_tick_width_unit_combo = QComboBox()
         self.image_tick_width_unit_combo.addItems(["pt", "px"])
         self.image_tick_width_unit_combo.setCurrentText("pt")
@@ -816,7 +1044,14 @@ class DiceGUI(QMainWindow):
         self.image_numbins_spin.setMinimum(5)
         self.image_numbins_spin.setMaximum(200)
         self.image_numbins_spin.setValue(35)
-        self.image_numbins_spin.setToolTip("Number of bins for histogram plots")
+        self.image_numbins_spin.setToolTip(
+            "Number of bins for accuracy histogram.\n\n"
+            "More bins show finer distribution detail but may appear noisy with few data points.\n"
+            "Fewer bins smooth the distribution but may hide features.\n\n"
+            "Rule of thumb: sqrt(N) to N/10 bins, where N is number of Monte Carlo runs.\n"
+            "For 1000 runs: 30-100 bins is reasonable.\n\n"
+            "Typical values: 20-50 bins"
+        )
         plot_layout.addRow("Histogram Bins:", self.image_numbins_spin)
 
         # Plot method selection (WLS vs OLS)
@@ -826,8 +1061,22 @@ class DiceGUI(QMainWindow):
         self.plot_method_wls_radio = QRadioButton("Weighted Least Squares (WLS)")
         self.plot_method_ols_radio = QRadioButton("Ordinary Least Squares (OLS)")
         self.plot_method_wls_radio.setChecked(True)
-        self.plot_method_wls_radio.setToolTip("Use weighted least squares estimates (accounts for heteroscedasticity)")
-        self.plot_method_ols_radio.setToolTip("Use ordinary least squares estimates (unweighted)")
+        self.plot_method_wls_radio.setToolTip(
+            "Use Weighted Least Squares for diffusion coefficient estimation.\n\n"
+            "WLS accounts for heteroscedasticity (varying uncertainty across time points).\n"
+            "Weights are calculated from Gaussian fit parameter uncertainties.\n\n"
+            "Recommended for most cases as it provides more accurate estimates when\n"
+            "measurement precision varies with time (e.g., due to intensity decay).\n\n"
+            "This affects which data column is plotted in histograms."
+        )
+        self.plot_method_ols_radio.setToolTip(
+            "Use Ordinary Least Squares for diffusion coefficient estimation.\n\n"
+            "OLS treats all time points equally regardless of measurement uncertainty.\n"
+            "Simpler method, appropriate when all points have similar precision.\n\n"
+            "May be less accurate than WLS when signal quality varies with time,\n"
+"but easier to interpret and faster to compute.\n\n"
+            "This affects which data column is plotted in histograms."
+        )
         method_layout.addWidget(self.plot_method_wls_radio)
         method_layout.addWidget(self.plot_method_ols_radio)
         method_layout.addStretch()
@@ -840,11 +1089,23 @@ class DiceGUI(QMainWindow):
         actions_layout = QHBoxLayout(actions_group)
 
         self.regenerate_plot_button = QPushButton("Regenerate Plot")
-        self.regenerate_plot_button.setToolTip("Regenerate plot from data in memory with current image settings")
+        self.regenerate_plot_button.setToolTip(
+            "Regenerate plot using data currently in memory with updated settings.\n\n"
+            "Use this to adjust plot appearance (size, resolution, fonts, bins) without\n"
+            "re-running the entire simulation.\n\n"
+            "Requires data from a completed simulation or loaded CSV file.\n"
+            "All plot settings above will be applied to the regenerated plot."
+        )
         self.regenerate_plot_button.clicked.connect(self.regenerate_plot)
 
         self.load_results_button = QPushButton("Load Results")
-        self.load_results_button.setToolTip("Load results from CSV file and generate plot")
+        self.load_results_button.setToolTip(
+            "Load simulation results from a previously saved CSV file.\n\n"
+            "Opens a file dialog to select a results CSV file.\n"
+            "Generates accuracy histogram plot with current image settings.\n\n"
+            "Useful for creating plots with different formatting or proximity levels\n"
+            "without re-running time-consuming simulations."
+        )
         self.load_results_button.clicked.connect(self.load_and_plot_results)
 
         actions_layout.addWidget(self.regenerate_plot_button)
@@ -1929,7 +2190,7 @@ class DiceGUI(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         # Permanent version label on right
-        version_label = QLabel("DICE v1.0")
+        version_label = QLabel(f"DICE v{__version__}")
         self.status_bar.addPermanentWidget(version_label)
 
         # Left side shows loaded data file (if any)
@@ -2008,10 +2269,10 @@ class DiceGUI(QMainWindow):
 
     def show_about_dialog(self):
         """Show the About DICE dialog."""
-        about_text = """
+        about_text = f"""
 <h2>DICE - Diffusion Insight Computation Engine</h2>
 
-<p><b>Version:</b> 1.0</p>
+<p><b>Version:</b> {__version__}</p>
 
 <p>DICE is a Python-based scientific computing tool for quantifying noise effects
 in optical measures of excited state transport in optoelectronic semiconducting materials.</p>
