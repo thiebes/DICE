@@ -1,10 +1,4 @@
 import argparse
-import sys
-import os
-
-# Dynamically add the repo root to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from dice.simulation import run_simulation_cli
 
 def main():

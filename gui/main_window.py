@@ -3,38 +3,145 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QLineEdit, QSpinBox, QComboBox,
     QRadioButton, QGroupBox, QFormLayout, QVBoxLayout, QHBoxLayout, QWidget,
     QPushButton, QApplication, QFileDialog, QCheckBox,
-    QProgressBar, QTextEdit, QMessageBox, QTableView
+    QProgressBar, QTextEdit, QMessageBox, QTableView, QTabWidget,
+    QScrollArea, QSplitter, QFrame
 )
-from PyQt6.QtGui import QDoubleValidator, QPixmap, QIntValidator
+from PyQt6.QtGui import QDoubleValidator, QPixmap, QIntValidator, QPalette, QValidator
 from PyQt6.QtCore import QTimer, QThread, pyqtSignal, Qt # For delayed exit and threading
 import traceback # For error logging
 import pandas as pd # For table model and results handling
-
-# Import the simulation function
-from dice.simulation import run_simulation
-from dice.reporting import plot_accuracy_histogram, summarize_results # For displaying plot and summary
-from dice.parameters import ( # For parameter processing
-    process_nominal_diffusion_length, process_time_axis, 
-    process_initial_profile, process_noise_parameters, parameter_parser # Added parameter_parser
-)
-from .pandas_model import PandasTableModel # For QTableView
-
+import json
+import os # For directory memory in file dialogs
 # Matplotlib imports for embedding plot
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+# Import the simulation function
+from dice.simulation import run_simulation
+from dice.reporting import plot_accuracy_histogram, summarize_results # For displaying plot and summary
+from dice.parameters import (
+    parameter_parser,
+    process_nominal_diffusion_length,
+    process_initial_profile,
+    process_noise_parameters,
+    process_time_axis
+)
+from .pandas_model import PandasTableModel # For QTableView
+
+
+class ValidatedLineEdit(QLineEdit):
+    """
+    Custom QLineEdit with visual validation feedback that only appears after user interaction.
+
+    This widget extends QLineEdit to provide color-coded visual feedback based on validation
+    state, but only after the user has interacted with the field (to avoid flashing validation
+    styles when the widget is first created or programmatically populated).
+
+    Visual feedback:
+        - Green border: Valid input (QValidator.State.Acceptable or non-empty when no validator)
+        - Orange border: Intermediate input (QValidator.State.Intermediate or empty when no validator)
+        - Red border: Invalid input (QValidator.State.Invalid)
+
+    The validation styling is triggered by:
+        - textChanged signal (but only if user has interacted)
+        - editingFinished signal (which also marks the field as interacted)
+    """
+
+    def __init__(self, validator=None, parent=None):
+        """
+        Initialize the validated line edit.
+
+        Parameters:
+            validator (QValidator, optional): Qt validator to apply to the input. Defaults to None.
+            parent (QWidget, optional): Parent widget. Defaults to None.
+        """
+        super().__init__(parent)
+        self._user_interacted = False
+        if validator:
+            self.setValidator(validator)
+        self.textChanged.connect(self._on_text_changed)
+        self.editingFinished.connect(self._mark_interacted)
+
+    def _mark_interacted(self):
+        """
+        Mark the field as having been interacted with by the user.
+
+        This slot is connected to the editingFinished signal and sets the internal
+        flag to enable validation styling on subsequent text changes.
+        """
+        self._user_interacted = True
+
+    def _on_text_changed(self):
+        """
+        Apply validation styling based on current input state.
+
+        This slot is connected to the textChanged signal and applies color-coded borders
+        based on validation state. Styling is only applied if the user has already
+        interacted with the field to prevent visual flashing on initialization.
+
+        Validation logic:
+            - If a validator is set: Uses QValidator state (Acceptable/Intermediate/Invalid)
+            - If no validator: Checks if text is non-empty (green) or empty (orange)
+        """
+        if not self._user_interacted:
+            return
+
+        if self.validator():
+            state = self.validator().validate(self.text(), 0)[0]
+            if state == QValidator.State.Acceptable:
+                self.setStyleSheet("border: 2px solid green;")
+            elif state == QValidator.State.Intermediate:
+                self.setStyleSheet("border: 2px solid orange;")
+            else:
+                self.setStyleSheet("border: 2px solid red;")
+        else:
+            # No validator, check if empty
+            if self.text().strip():
+                self.setStyleSheet("border: 2px solid green;")
+            else:
+                self.setStyleSheet("border: 2px solid orange;")
+
 
 # Simulation Thread
 class SimulationThread(QThread):
+    """
+    Background thread for running DICE simulations without blocking the GUI.
+
+    This thread runs the simulation in the background and emits signals to update
+    the GUI with progress, messages, and final results. Error handling is implemented
+    to catch exceptions and report them back to the main thread.
+
+    Signals:
+        progress_updated(int, int): Emitted with (current_step, total_steps) during simulation.
+        message_logged(str): Emitted with log messages during simulation.
+        simulation_finished(object, bool): Emitted with (result_or_error, success) when complete.
+            - If successful: (result_dictionary, True)
+            - If failed: (error_message, False)
+    """
     progress_updated = pyqtSignal(int, int)
     message_logged = pyqtSignal(str)
-    simulation_finished = pyqtSignal(object) # Can be result_dict or exception
+    simulation_finished = pyqtSignal(object, bool) # (result_or_error, success)
 
     def __init__(self, parameters_dict, parent=None):
+        """
+        Initialize the simulation thread.
+
+        Parameters:
+            parameters_dict (dict): Dictionary of simulation parameters.
+            parent (QObject, optional): Parent QObject. Defaults to None.
+        """
         super().__init__(parent)
         self.parameters_dict = parameters_dict
 
     def run(self):
+        """
+        Execute the simulation in the background thread.
+
+        This method is called automatically when the thread starts. It runs the
+        simulation with the provided parameters and emits appropriate signals
+        for progress updates, messages, and final results. Exceptions are caught
+        and reported via the simulation_finished signal.
+        """
         try:
             # run_simulation now takes progress_callback and message_callback
             result_dictionary = run_simulation(
@@ -42,27 +149,78 @@ class SimulationThread(QThread):
                 progress_callback=self.emit_progress,
                 message_callback=self.emit_message
             )
-            self.simulation_finished.emit(result_dictionary)
+            self.simulation_finished.emit(result_dictionary, True)
         except Exception as e:
-            self.simulation_finished.emit(e)
+            error_msg = f"{type(e).__name__}: {e}"
+            import traceback
+            tb_str = traceback.format_exc()
+            self.emit_message(f"ERROR: {error_msg}\n\nFull traceback:\n{tb_str}")
+            self.simulation_finished.emit(error_msg, False)
 
     def emit_progress(self, current_step, total_steps):
+        """
+        Emit progress update signal.
+
+        Parameters:
+            current_step (int): Current simulation step.
+            total_steps (int): Total number of steps.
+        """
         self.progress_updated.emit(current_step, total_steps)
 
     def emit_message(self, message):
+        """
+        Emit message log signal.
+
+        Parameters:
+            message (str): Log message to display in GUI.
+        """
         self.message_logged.emit(message)
 
 
 class MainWindow(QMainWindow):
+    """
+    Main window for the DICE simulation GUI application.
+
+    This window provides a comprehensive interface for configuring and running DICE
+    (Diffusion Insight Computation Engine) simulations. It includes parameter input
+    widgets, validation, simulation execution with progress tracking, and results
+    visualization.
+
+    Key features:
+        - Parameter input with real-time validation and visual feedback
+        - Background simulation execution using QThread
+        - Progress bar and log output for monitoring simulation status
+        - Results visualization with matplotlib integration
+        - Export capabilities for plots, summaries, and CSV data
+        - Directory memory for file dialogs
+
+    Attributes:
+        simulation_results (dict): Most recent simulation results, or None if no simulation run.
+        results_canvas (FigureCanvas): Matplotlib canvas for displaying results plots.
+        _last_directory (str): Last directory used in file dialogs for improved UX.
+    """
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DICE Simulation")
         self.setGeometry(100, 100, 800, 600) # x, y, width, height
 
+        # Directory memory for file dialogs
+        self._last_directory = os.path.expanduser("~")
+
         # Central Widget and Main Layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+
+        # Create tab widget
+        tabs = QTabWidget()
+        main_layout.addWidget(tabs)
+
+        # Tab 1: Basic Setup
+        basic_tab = QWidget()
+        basic_layout = QVBoxLayout(basic_tab)
+        tabs.addTab(basic_tab, "Basic Setup")
 
         # Filename and Runs Group
         run_settings_group = QGroupBox("Run Settings")
@@ -73,7 +231,7 @@ class MainWindow(QMainWindow):
         self.num_runs_spinbox.setValue(1000)
         run_settings_layout.addRow("Filename Slug:", self.filename_slug_edit)
         run_settings_layout.addRow("Number of Runs:", self.num_runs_spinbox)
-        main_layout.addWidget(run_settings_group)
+        basic_layout.addWidget(run_settings_group)
 
         # Units Group
         units_group = QGroupBox("Units")
@@ -86,7 +244,13 @@ class MainWindow(QMainWindow):
         self.time_unit_combo.setCurrentText('nanosecond')
         units_layout.addRow("Length Unit:", self.length_unit_combo)
         units_layout.addRow("Time Unit:", self.time_unit_combo)
-        main_layout.addWidget(units_group)
+        basic_layout.addWidget(units_group)
+        basic_layout.addStretch()
+
+        # Tab 2: Physical Parameters
+        physical_tab = QWidget()
+        physical_layout = QVBoxLayout(physical_tab)
+        tabs.addTab(physical_tab, "Physical Parameters")
 
         # Diffusion and Lifetime Group
         diffusion_lifetime_group = QGroupBox("Diffusion and Lifetime")
@@ -110,7 +274,7 @@ class MainWindow(QMainWindow):
         diffusion_lifetime_layout.addWidget(self.radio_diffusion_length)
         diffusion_lifetime_layout.addWidget(self.radio_diffusion_coeff_lifetime)
         diffusion_lifetime_layout.addLayout(diffusion_lifetime_inputs_layout)
-        main_layout.addWidget(diffusion_lifetime_group)
+        physical_layout.addWidget(diffusion_lifetime_group)
 
         # Radio button logic
         self.radio_diffusion_length.setChecked(True)
@@ -119,6 +283,12 @@ class MainWindow(QMainWindow):
 
         self.radio_diffusion_length.toggled.connect(self.toggle_diffusion_inputs)
         self.radio_diffusion_coeff_lifetime.toggled.connect(self.toggle_diffusion_inputs)
+
+        # Dynamic synchronization: Ld = sqrt(D * τ)
+        self._updating_diffusion_fields = False
+        self.nominal_diffusion_length_edit.editingFinished.connect(self._on_diffusion_length_changed)
+        self.nominal_diffusion_coeff_edit.editingFinished.connect(self._on_diffusion_coeff_changed)
+        self.nominal_lifetime_edit.editingFinished.connect(self._on_lifetime_changed)
 
         # Initial Profile Parameters Group
         initial_profile_group = QGroupBox("Initial Profile")
@@ -145,12 +315,17 @@ class MainWindow(QMainWindow):
         initial_profile_main_layout.addWidget(self.radio_fwhm0)
         initial_profile_main_layout.addWidget(self.radio_sigma0)
         initial_profile_main_layout.addLayout(initial_profile_inputs_layout)
-        main_layout.addWidget(initial_profile_group)
+        physical_layout.addWidget(initial_profile_group)
 
         self.radio_fwhm0.setChecked(True)
         self.sigma0_edit.setEnabled(False)
         self.radio_fwhm0.toggled.connect(self.toggle_initial_profile_inputs)
         self.radio_sigma0.toggled.connect(self.toggle_initial_profile_inputs)
+
+        # Dynamic synchronization: FWHM = 2 * sqrt(2 * ln(2)) * sigma ≈ 2.355 * sigma
+        self._updating_profile_width_fields = False
+        self.fwhm0_edit.editingFinished.connect(self._on_fwhm_changed)
+        self.sigma0_edit.editingFinished.connect(self._on_sigma_changed)
 
         # Noise Parameter Group
         noise_group = QGroupBox("Noise")
@@ -172,7 +347,13 @@ class MainWindow(QMainWindow):
         noise_main_layout.addWidget(self.radio_noise_value)
         noise_main_layout.addWidget(self.radio_estimate_noise)
         noise_main_layout.addLayout(noise_inputs_layout)
-        main_layout.addWidget(noise_group)
+        physical_layout.addWidget(noise_group)
+        physical_layout.addStretch()
+
+        # Tab 3: Spatial & Time
+        spatial_time_tab = QWidget()
+        spatial_time_layout = QVBoxLayout(spatial_time_tab)
+        tabs.addTab(spatial_time_tab, "Spatial & Time")
 
         self.radio_noise_value.setChecked(True)
         self.estimate_noise_file_edit.setEnabled(False)
@@ -191,7 +372,7 @@ class MainWindow(QMainWindow):
         self.pixel_width_spinbox.setValue(100)
         spatial_axis_layout.addRow("Spatial Width:", self.spatial_width_edit)
         spatial_axis_layout.addRow("Pixel Width:", self.pixel_width_spinbox)
-        main_layout.addWidget(spatial_axis_group)
+        spatial_time_layout.addWidget(spatial_axis_group)
 
         # Time Axis Parameters Group
         time_axis_group = QGroupBox("Time Axis")
@@ -220,7 +401,7 @@ class MainWindow(QMainWindow):
         time_axis_main_layout.addLayout(time_range_layout)
         time_axis_main_layout.addWidget(self.radio_time_series)
         time_axis_main_layout.addWidget(self.time_series_edit)
-        main_layout.addWidget(time_axis_group)
+        spatial_time_layout.addWidget(time_axis_group)
 
         self.radio_time_range.setChecked(True)
         self.time_series_edit.setEnabled(False)
@@ -234,13 +415,13 @@ class MainWindow(QMainWindow):
         proximity_validator = QDoubleValidator(0.0, 1.0, 2) # Min, Max, Decimals
         self.proximity_level_edit.setValidator(proximity_validator)
         analysis_layout.addRow("Diffusion Coefficient Proximity Threshold (0.0-1.0):", self.proximity_level_edit)
-        main_layout.addWidget(analysis_group)
+        spatial_time_layout.addWidget(analysis_group)
+        spatial_time_layout.addStretch()
 
-        # Temporary button to get parameters
-        self.get_params_button = QPushButton("Get Parameters (Print to Console)")
-        self.get_params_button.clicked.connect(self.get_parameters_dict)
-        main_layout.addWidget(self.get_params_button)
-
+        # Tab 4: Plot Settings
+        plot_tab = QWidget()
+        plot_layout = QVBoxLayout(plot_tab)
+        tabs.addTab(plot_tab, "Plot Settings")
 
         # Plot Image Settings Group
         plot_image_group = QGroupBox("Plot Image Settings")
@@ -279,7 +460,7 @@ class MainWindow(QMainWindow):
         plot_image_layout.addRow("Image Tick Width:", self.image_tick_width_spinbox)
         plot_image_layout.addRow("Image Num Bins (Histogram):", self.image_numbins_spinbox)
         plot_image_layout.addRow("Image X-Limits (e.g., 0.0, 2.0 or None):", self.image_xlim_edit)
-        main_layout.addWidget(plot_image_group)
+        plot_layout.addWidget(plot_image_group)
 
         # Performance Settings Group
         performance_group = QGroupBox("Performance")
@@ -290,20 +471,26 @@ class MainWindow(QMainWindow):
         self.multiprocessing_checkbox.setChecked(True)
         performance_layout.addRow("Retain Profile Data:", self.retain_profile_data_checkbox)
         performance_layout.addRow("Enable Multiprocessing:", self.multiprocessing_checkbox)
-        main_layout.addWidget(performance_group)
+        plot_layout.addWidget(performance_group)
+        plot_layout.addStretch()
+
+        # Tab 5: Run & Results
+        run_results_tab = QWidget()
+        run_results_layout = QVBoxLayout(run_results_tab)
+        tabs.addTab(run_results_tab, "Run & Results")
 
         # Simulation Control
         self.run_button = QPushButton("Run Simulation")
         self.run_button.clicked.connect(self._start_simulation)
-        main_layout.addWidget(self.run_button)
+        run_results_layout.addWidget(self.run_button)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
-        main_layout.addWidget(self.progress_bar)
+        run_results_layout.addWidget(self.progress_bar)
 
         self.log_output_area = QTextEdit()
         self.log_output_area.setReadOnly(True)
-        main_layout.addWidget(self.log_output_area)
+        run_results_layout.addWidget(self.log_output_area)
 
         # Results Display Area
         results_group = QGroupBox("Results")
@@ -337,21 +524,56 @@ class MainWindow(QMainWindow):
         save_buttons_layout.addWidget(self.save_csv_button)
         
         results_layout.addLayout(save_buttons_layout) # Add button layout to the results group
-        
-        main_layout.addWidget(results_group)
-        
+
+        run_results_layout.addWidget(results_group)
+
         self.simulation_thread = None # To hold the thread object
         self.simulation_results = None # To hold results or exception
 
     def _start_simulation(self):
+        """
+        Initiate the simulation workflow after validation and parameter parsing.
+
+        This slot is connected to the "Run Simulation" button and orchestrates the full
+        simulation startup process:
+            1. Clear log output and reset progress bar
+            2. Disable save buttons (no results yet)
+            3. Validate parameters using validate_parameters()
+            4. Build parameter dictionary from GUI widgets
+            5. Parse parameters with parameter_parser() to add derived fields
+            6. Create and start SimulationThread with parsed parameters
+            7. Connect thread signals to GUI update slots
+
+        If validation or parsing fails, appropriate error messages are shown to the user
+        and the simulation is not started.
+
+        This method handles:
+            - ValueError: Parameter validation errors
+            - KeyError: Missing required parameters
+            - TypeError: Parameter type mismatches
+
+        Side effects:
+            - Disables run button during simulation
+            - Updates log output area with status messages
+            - Shows QMessageBox for validation/parsing errors
+            - Creates and starts self.simulation_thread
+        """
         self.log_output_area.clear()
         self.progress_bar.setValue(0)
         self.progress_bar.setRange(0, 100) # Initial range, will be updated
-        
+
         # Disable save buttons when starting a new simulation
         self.save_plot_button.setEnabled(False)
         self.save_summary_button.setEnabled(False)
         self.save_csv_button.setEnabled(False)
+
+        # Validate parameters first
+        is_valid, errors = self.validate_parameters()
+        if not is_valid:
+            error_msg = "Parameter validation failed:\n\n" + "\n".join(f"- {e}" for e in errors)
+            self.log_output_area.append(error_msg)
+            QMessageBox.critical(self, "Validation Error", error_msg)
+            return
 
         params = self.get_parameters_dict()
         if params is None:
@@ -389,31 +611,74 @@ class MainWindow(QMainWindow):
     def _on_simulation_message(self, message):
         self.log_output_area.append(message)
 
-    def _on_simulation_finished(self, result):
+    def _on_simulation_finished(self, result, success):
+        """
+        Handle simulation completion signal from SimulationThread.
+
+        This slot is connected to the simulation_finished signal and processes the
+        simulation results or error based on the success flag.
+
+        Parameters:
+            result (dict or str): Simulation results dictionary if success=True,
+                                 or error message string if success=False.
+            success (bool): True if simulation completed successfully, False if error occurred.
+
+        Behavior on success:
+            - Sets progress bar to 100%
+            - Stores results in self.simulation_results
+            - Displays results via _display_results()
+            - Shows success message dialog
+            - Re-enables run button
+
+        Behavior on failure:
+            - Resets progress bar to 0
+            - Disables save buttons
+            - Shows error message dialog
+            - Sets self.simulation_results to None
+            - Re-enables run button
+        """
         self.run_button.setEnabled(True)
-        if isinstance(result, Exception):
-            self.progress_bar.setValue(0) # Or some indication of error
-            # Ensure save buttons remain disabled on error
+        if not success:
+            # result is error message string
+            self.progress_bar.setValue(0)
             self.save_plot_button.setEnabled(False)
             self.save_summary_button.setEnabled(False)
             self.save_csv_button.setEnabled(False)
-            error_message = f"Simulation Error: {type(result).__name__}: {result}"
-            self.log_output_area.append(error_message)
-            QMessageBox.critical(self, "Simulation Error", error_message)
-            self.simulation_results = result # Store the exception
-            # Print full traceback to console for development/debugging
-            print("--- Simulation Thread Exception ---")
-            traceback.print_exception(type(result), result, result.__traceback__)
-            print("---------------------------------")
+            # Message already logged by thread
+            QMessageBox.critical(self, "Simulation Error", result)
+            self.simulation_results = None
         else:
+            # result is dictionary
             self.progress_bar.setValue(self.progress_bar.maximum())
             self.log_output_area.append("Simulation complete.")
-            self.simulation_results = result # Store the result dictionary
-            QMessageBox.information(self, "Simulation Complete", "The simulation has finished successfully.")
+            self.simulation_results = result
+            QMessageBox.information(self, "Simulation Complete", "Simulation finished successfully.")
             self._display_results(result)
 
 
     def _display_results(self, result_dictionary):
+        """
+        Display simulation results in the GUI results area.
+
+        This method generates the accuracy histogram plot using plot_accuracy_histogram()
+        and displays it in the matplotlib canvas widget. It also enables the save buttons
+        for exporting plots, summaries, and CSV data.
+
+        Parameters:
+            result_dictionary (dict): Simulation results from run_simulation().
+                Required keys: 'parameters', 'collated results'
+
+        Side effects:
+            - Replaces existing matplotlib canvas with new plot
+            - Enables save plot/summary/CSV buttons
+            - Logs plot generation status to log output area
+            - Properly disposes of old canvas to prevent memory leaks
+
+        Error handling:
+            - Validates result_dictionary structure
+            - Catches and displays plot generation errors
+            - Logs errors to log output area
+        """
         if not result_dictionary or 'parameters' not in result_dictionary or 'collated results' not in result_dictionary:
             self.log_output_area.append("Error: Invalid result dictionary for display.")
             return
@@ -443,11 +708,15 @@ class MainWindow(QMainWindow):
             returned_fig = plot_accuracy_histogram(**plot_params)
 
             if returned_fig:
-                # Clear previous figure from canvas
-                self.results_canvas.figure.clear() 
-                # Assign the new figure to the canvas
-                self.results_canvas.figure = returned_fig
-                # Redraw the canvas
+                old_canvas = self.results_canvas
+                new_canvas = FigureCanvas(returned_fig)
+
+                layout = self.results_canvas.parent().layout()
+                layout.replaceWidget(old_canvas, new_canvas)
+
+                old_canvas.deleteLater()
+
+                self.results_canvas = new_canvas
                 self.results_canvas.draw()
                 self.log_output_area.append("Plot displayed.")
             else:
@@ -486,12 +755,13 @@ class MainWindow(QMainWindow):
             return
 
         fileName, _ = QFileDialog.getSaveFileName(
-            self, "Save Plot", "", 
+            self, "Save Plot", self._last_directory,
             "PNG (*.png);;JPEG (*.jpg *.jpeg);;SVG (*.svg);;PDF (*.pdf);;All Files (*)"
         )
         if fileName:
             try:
                 self.results_canvas.figure.savefig(fileName)
+                self._last_directory = os.path.dirname(fileName)
                 QMessageBox.information(self, "Success", f"Plot saved to {fileName}")
             except Exception as e:
                 QMessageBox.warning(self, "Save Error", f"Could not save plot: {e}")
@@ -503,7 +773,7 @@ class MainWindow(QMainWindow):
             return
 
         fileName, _ = QFileDialog.getSaveFileName(
-            self, "Save Summary", "", "Text Files (*.txt);;All Files (*)"
+            self, "Save Summary", self._last_directory, "Text Files (*.txt);;All Files (*)"
         )
         if fileName:
             try:
@@ -511,41 +781,81 @@ class MainWindow(QMainWindow):
                 with open(fileName, 'w') as f:
                     for line in summary_lines:
                         f.write(line + '\n')
+                self._last_directory = os.path.dirname(fileName)
                 QMessageBox.information(self, "Success", f"Summary saved to {fileName}")
             except Exception as e:
                 QMessageBox.warning(self, "Save Error", f"Could not save summary: {e}")
                 traceback.print_exc()
 
     def _save_csv_data(self):
-        if (self.simulation_results is None or 
-            isinstance(self.simulation_results, Exception) or 
+        if (self.simulation_results is None or
+            isinstance(self.simulation_results, Exception) or
             'collated results' not in self.simulation_results or
             not isinstance(self.simulation_results['collated results'], pd.DataFrame)):
             QMessageBox.warning(self, "Save Error", "No CSV data available to save.")
             return
 
         fileName, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV Data", "", "CSV Files (*.csv);;All Files (*)"
+            self, "Save CSV Data", self._last_directory, "CSV Files (*.csv);;All Files (*)"
         )
         if fileName:
             try:
                 df = self.simulation_results['collated results']
                 df.to_csv(fileName, index=False)
+                self._last_directory = os.path.dirname(fileName)
                 QMessageBox.information(self, "Success", f"CSV data saved to {fileName}")
             except Exception as e:
                 QMessageBox.warning(self, "Save Error", f"Could not save CSV data: {e}")
                 traceback.print_exc()
 
     def _browse_noise_file(self):
-        options = QFileDialog.Options()
-        fileName, _ = QFileDialog.getOpenFileName(self, "Select Noise File", "", "CSV Files (*.csv);;All Files (*)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self, "Select Noise File", self._last_directory, "CSV Files (*.csv);;All Files (*)")
         if fileName:
             self.estimate_noise_file_edit.setText(fileName)
+            self._last_directory = os.path.dirname(fileName)
 
     def toggle_initial_profile_inputs(self):
         is_fwhm0_selected = self.radio_fwhm0.isChecked()
         self.fwhm0_edit.setEnabled(is_fwhm0_selected)
         self.sigma0_edit.setEnabled(not is_fwhm0_selected)
+
+    def _on_fwhm_changed(self):
+        """When FWHM changes: sigma = FWHM / (2 * sqrt(2 * ln(2)))"""
+        if self._updating_profile_width_fields:
+            return
+        try:
+            import math
+            fwhm = float(self.fwhm0_edit.text())
+            if fwhm <= 0:
+                return
+            self._updating_profile_width_fields = True
+            # FWHM = 2 * sqrt(2 * ln(2)) * sigma
+            fwhm_to_sigma = 2 * math.sqrt(2 * math.log(2))
+            sigma = fwhm / fwhm_to_sigma
+            self.sigma0_edit.setText(str(sigma))
+        except ValueError:
+            pass
+        finally:
+            self._updating_profile_width_fields = False
+
+    def _on_sigma_changed(self):
+        """When sigma changes: FWHM = 2 * sqrt(2 * ln(2)) * sigma"""
+        if self._updating_profile_width_fields:
+            return
+        try:
+            import math
+            sigma = float(self.sigma0_edit.text())
+            if sigma <= 0:
+                return
+            self._updating_profile_width_fields = True
+            # FWHM = 2 * sqrt(2 * ln(2)) * sigma
+            fwhm_to_sigma = 2 * math.sqrt(2 * math.log(2))
+            fwhm = sigma * fwhm_to_sigma
+            self.fwhm0_edit.setText(str(fwhm))
+        except ValueError:
+            pass
+        finally:
+            self._updating_profile_width_fields = False
 
     def toggle_noise_inputs(self):
         is_noise_value_selected = self.radio_noise_value.isChecked()
@@ -575,118 +885,147 @@ class MainWindow(QMainWindow):
         self.nominal_diffusion_coeff_edit.setEnabled(not is_diffusion_length_selected)
         self.nominal_lifetime_edit.setEnabled(not is_diffusion_length_selected)
 
-    def get_parameters_dict(self):
-        params = {}
-        params['filename slug'] = self.filename_slug_edit.text()
-        params['number of runs'] = self.num_runs_spinbox.value()
-        params['length unit'] = self.length_unit_combo.currentText()
-        params['time unit'] = self.time_unit_combo.currentText()
-
-        # Diffusion and Lifetime
-        if self.radio_diffusion_length.isChecked():
-            try:
-                params['nominal diffusion length'] = float(self.nominal_diffusion_length_edit.text())
-            except ValueError:
-                params['nominal diffusion length'] = 0.1 
-        else:
-            try:
-                params['nominal diffusion coefficient'] = float(self.nominal_diffusion_coeff_edit.text())
-                params['nominal lifetime (tau)'] = float(self.nominal_lifetime_edit.text())
-            except ValueError:
-                params['nominal diffusion coefficient'] = 0.01 
-                params['nominal lifetime (tau)'] = 1.0
-        
-        # Initial Profile
+    def _on_diffusion_length_changed(self):
+        """When Ld changes: τ = 1.0, D = Ld²"""
+        if self._updating_diffusion_fields:
+            return
         try:
-            params['amplitude_0'] = float(self.amplitude0_edit.text())
-            params['mean_0'] = float(self.mean0_edit.text())
-            if self.radio_fwhm0.isChecked():
-                params['FWHM_0'] = float(self.fwhm0_edit.text())
-            else:
-                params['sigma_0'] = float(self.sigma0_edit.text())
+            ld = float(self.nominal_diffusion_length_edit.text())
+            if ld <= 0:
+                return
+            self._updating_diffusion_fields = True
+            tau = 1.0
+            d = ld ** 2
+            self.nominal_lifetime_edit.setText(str(tau))
+            self.nominal_diffusion_coeff_edit.setText(str(d))
         except ValueError:
-            print("Warning: Invalid float value in Initial Profile.")
-            params['amplitude_0'] = 1.0
-            params['mean_0'] = 0.0
-            if self.radio_fwhm0.isChecked():
-                params['FWHM_0'] = 1.0
-            else:
-                params['sigma_0'] = 0.4032
+            pass
+        finally:
+            self._updating_diffusion_fields = False
 
-        # Noise
-        if self.radio_noise_value.isChecked():
-            try:
-                params['noise value'] = float(self.noise_value_edit.text())
-            except ValueError:
-                params['noise value'] = 0.02
-        else:
-            params['estimate noise from data'] = self.estimate_noise_file_edit.text()
-
-        # Spatial Axis
+    def _on_diffusion_coeff_changed(self):
+        """When D changes: τ unchanged, Ld = sqrt(D * τ)"""
+        if self._updating_diffusion_fields:
+            return
         try:
-            params['spatial width'] = float(self.spatial_width_edit.text())
+            d = float(self.nominal_diffusion_coeff_edit.text())
+            tau = float(self.nominal_lifetime_edit.text())
+            if d <= 0 or tau <= 0:
+                return
+            self._updating_diffusion_fields = True
+            ld = (d * tau) ** 0.5
+            self.nominal_diffusion_length_edit.setText(str(ld))
         except ValueError:
-            params['spatial width'] = 5.0
-        params['pixel width'] = self.pixel_width_spinbox.value()
+            pass
+        finally:
+            self._updating_diffusion_fields = False
 
-        # Time Axis
-        if self.radio_time_range.isChecked():
+    def _on_lifetime_changed(self):
+        """When τ changes: D unchanged, Ld = sqrt(D * τ)"""
+        if self._updating_diffusion_fields:
+            return
+        try:
+            d = float(self.nominal_diffusion_coeff_edit.text())
+            tau = float(self.nominal_lifetime_edit.text())
+            if d <= 0 or tau <= 0:
+                return
+            self._updating_diffusion_fields = True
+            ld = (d * tau) ** 0.5
+            self.nominal_diffusion_length_edit.setText(str(ld))
+        except ValueError:
+            pass
+        finally:
+            self._updating_diffusion_fields = False
+
+    def validate_parameters(self):
+        """
+        Validate GUI parameters before starting simulation.
+
+        Returns:
+            tuple: (is_valid: bool, error_messages: list[str])
+        """
+        errors = []
+
+        # Spatial width > 0
+        try:
+            spatial_width = float(self.spatial_width_edit.text())
+            if spatial_width <= 0:
+                errors.append("Spatial width must be greater than 0")
+        except ValueError:
+            errors.append("Spatial width must be a valid number")
+
+        # Pixel width > 0
+        pixel_width = self.pixel_width_spinbox.value()
+        if pixel_width <= 0:
+            errors.append("Pixel width must be greater than 0")
+
+        # Proximity level 0-1
+        try:
+            proximity = float(self.proximity_level_edit.text())
+            if not (0.0 <= proximity <= 1.0):
+                errors.append("Proximity level must be between 0.0 and 1.0")
+        except ValueError:
+            errors.append("Proximity level must be a valid number between 0.0 and 1.0")
+
+        # Time range/series validation
+        has_time_range = self.radio_time_range.isChecked()
+        has_time_series = self.radio_time_series.isChecked()
+
+        if has_time_range:
             try:
                 start = float(self.time_range_start_edit.text())
                 stop = float(self.time_range_stop_edit.text())
                 steps = int(self.time_range_steps_edit.text())
-                params['time range'] = [start, stop, steps]
-            except ValueError:
-                print("Warning: Invalid float/int value in Time Range.")
-                params['time range'] = [0.0, 1.0, 10]
-        else:
-            try:
-                params['time series'] = [float(t.strip()) for t in self.time_series_edit.text().split(',') if t.strip()]
-            except ValueError:
-                print("Warning: Invalid float value in Time Series.")
-                params['time series'] = [1.0,3.0,5.0,10.0,15.0,25.0,60.0,100.0]
-        
-        # Analysis (Proximity Level)
-        try:
-            params['proximity level'] = float(self.proximity_level_edit.text())
-        except ValueError:
-            params['proximity level'] = 0.5
 
-        # Plot Image Settings
-        params['image type'] = self.image_type_combo.currentText()
-        try:
-            params['image width'] = float(self.image_width_edit.text())
-        except ValueError:
-            params['image width'] = 8.5
-        try:
-            params['image height'] = float(self.image_height_edit.text())
-        except ValueError:
-            params['image height'] = 5.0
-        params['image dpi'] = self.image_dpi_spinbox.value()
-        params['image font size'] = self.image_font_size_spinbox.value()
-        params['image tick length'] = self.image_tick_length_spinbox.value()
-        params['image tick width'] = self.image_tick_width_spinbox.value()
-        params['image numbins'] = self.image_numbins_spinbox.value()
-        
-        xlim_text = self.image_xlim_edit.text().strip()
-        if xlim_text.lower() == 'none':
-            params['image x_lim'] = None
-        else:
+                if start >= stop:
+                    errors.append("Time range start must be less than stop")
+            except ValueError:
+                errors.append("Time range values must be valid numbers")
+        elif has_time_series:
             try:
-                parts = [float(p.strip()) for p in xlim_text.split(',')]
-                if len(parts) == 2:
-                    params['image x_lim'] = parts
+                series_text = self.time_series_edit.text().strip()
+                if not series_text:
+                    errors.append("Time series cannot be empty")
                 else:
-                    print("Warning: Invalid format for 'image x_lim'. Expected 'None' or 'float1, float2'. Using None.")
-                    params['image x_lim'] = None
+                    values = [float(t.strip()) for t in series_text.split(',') if t.strip()]
+                    if len(values) == 0:
+                        errors.append("Time series must contain at least one value")
             except ValueError:
-                print("Warning: Invalid float value in 'image x_lim'. Using None.")
-                params['image x_lim'] = None
+                errors.append("Time series must contain valid comma-separated numbers")
+        else:
+            errors.append("Either time range or time series must be selected")
 
-        # Performance Settings
-        params['retain profile data'] = self.retain_profile_data_checkbox.isChecked()
-        params['multiprocessing'] = self.multiprocessing_checkbox.isChecked()
-        
+        return (len(errors) == 0, errors)
+
+    def get_parameters_dict(self):
+        """
+        Build parameter dictionary from current GUI widget values.
+
+        This method extracts all simulation parameters from the GUI widgets and constructs
+        a dictionary suitable for passing to run_simulation(). It includes fallback default
+        values for cases where user input cannot be parsed as the expected type.
+
+        Parameter groups collected:
+            - Run settings: filename slug, number of runs, units
+            - Diffusion: nominal diffusion length OR (coefficient + lifetime)
+            - Initial profile: amplitude, mean, FWHM/sigma
+            - Noise: noise value OR estimate from data file
+            - Spatial axis: spatial width, pixel width
+            - Time axis: time range (start, stop, steps) OR time series (list)
+            - Analysis: proximity level
+            - Plot settings: image type, dimensions, DPI, font, ticks, bins, x limits
+            - Processing: retain profile data, multiprocessing
+
+        Returns:
+            dict: Complete parameter dictionary with all required keys for simulation.
+
+        Notes:
+            - Uses try/except blocks with fallback defaults for robust error handling
+            - Prints warnings to console for invalid inputs
+            - Does not validate parameter logical constraints (use validate_parameters() first)
+        """
+        params = {}
+
         # Basic validation flags
         valid_params = True
         error_messages = []

@@ -34,6 +34,7 @@ DICE aims to support ongoing improvements in the reliability and reproducibility
   - [Online CNR Estimator](#online-cnr-estimator)
   - [Full DICE Software](#full-dice-software)
 - [Installation](#installation)
+- [GUI Usage Guide](#gui-usage-guide)
 - [Parameter inputs](#parameter-inputs)
 - [Functions](#functions)
 - [Outputs](#outputs)
@@ -50,81 +51,231 @@ DICE aims to support ongoing improvements in the reliability and reproducibility
 
 ## Online CNR Estimator
 
-Use [this link](https://dice-thiebes.pythonanywhere.com) to access an online CNR estimator for your 1D noisy Gaussian profile. No Python installation necessary. 
+Use [this link](https://dice-thiebes.pythonanywhere.com) to access an online CNR estimator for your 1D noisy Gaussian profile. No Python installation necessary.
 
-## Full DICE software
+## Full DICE Software
 
-Follow these steps to get started with DICE quickly:
+### Using the GUI (Recommended for New Users)
 
-0. **Install Python**:
-   See [Installation] below.
+After installing DICE (see [Installation](#installation) below):
 
-1. **Download the Repository**: 
-   Clone or download this repository to your local machine and navigate to the project directory in your Python environment.
+1. **Launch the GUI**:
+   ```bash
+   dice-gui
+   ```
 
-2. **Edit Parameters**: 
-   Modify the `parameters.txt` file to align with your experimental parameters. This file is the primary input for the simulation.
+2. **Configure Parameters**:
+   - Enter your simulation parameters in the GUI form
+   - Parameters are organized into logical groups (Run Settings, Diffusion, Time Axis, etc.)
+   - Visual validation provides immediate feedback on invalid inputs
 
-3. **Run the Simulation**: 
-   The DICE module can be used in two different environments: the command line and a Jupyter-like environment.
-   
-   - **From the command line/console**:
-     Utilize the `run_dice.py` script to run the DICE module. This script requires the parameters file as an argument.
-       - Open your console or terminal.
-       - Navigate to the directory containing `run_dice.py`.
-       - Execute the script with your parameters file:
-         ```bash
-         python run_dice.py parameters.txt
-         ```
+3. **Run Simulation**:
+   - Click "Run Simulation" to start
+   - Monitor progress via the progress bar and log output
+   - View results automatically displayed upon completion
 
-   - **From within a Jupyter-like environment**:
-     - Import the DICE module.
-     - Invoke the `dice_runner` function, passing the filename of your parameters.
-       ```python
-       import dice
+4. **Export Results**:
+   - Save plots as PNG, JPEG, SVG, or PDF
+   - Export summary text files
+   - Export CSV data for further analysis
 
-       # Replace "parameters.txt" with your parameters file
-       result = dice.dice_runner("parameters.txt")
-       ```
-     This function processes the parameters from the specified file and returns the results in a dictionary named `result`.
+See the [GUI Usage Guide](#gui-usage-guide) section for detailed instructions.
 
-   *Note:* The script can be executed immediately after downloading to experience the simulation with default parameters, which serve as an illustrative example.
+### Using the Command Line
 
-4. **View the Results**: 
-   After the simulation completes, the results will be summarized and saved, including a histogram plot for visual analysis.
+After installing DICE:
+
+```bash
+# Run with a parameter file
+dice-cli data/parameters.txt
+```
+
+The CLI reads parameters from a text file and outputs results (CSV, summary text, and plots) to the current directory.
+
+### Using DICE Programmatically
+
+Import DICE in your Python code for custom workflows:
+
+```python
+from dice import run_simulation, open_parameters
+
+# Load parameters from file
+params = open_parameters("data/parameters.txt")
+
+# Run simulation with callbacks
+result = run_simulation(
+    params,
+    progress_callback=lambda current, total: print(f"{current}/{total}"),
+    message_callback=lambda msg: print(msg)
+)
+
+# Access results
+estimates = result['collated results']['sigma^2_t estimates']
+```
+
+See the [Parameter Inputs](#parameter-inputs) section for details on parameter file format.
 
 [Back to table of contents](table-of-contents)
 
 # Installation
 
 ## Python
-This program is written in Python, and has been tested with version 3.11.8. We recommend using the latest version if you don't have Python installed. You can install Python from the [official website](https://www.python.org/downloads/). Alternatively, you can use online Python notebook services (for example, [DataLore](https://datalore.jetbrains.com/)).
+This program is written in Python, and has been tested with version 3.11 and later. We recommend using Python 3.11 or newer. You can install Python from the [official website](https://www.python.org/downloads/).
 
-## Packages
-DICE depends on several Python packages. Some of these might already be installed if you have Python installed. If not, you can install these packages using pip, Python's package installer. 
+## Quick Installation
 
-You can do this by typing the following command in your terminal:
+DICE can be installed as a Python package with all dependencies:
 
 ```bash
-pip install numpy pandas matplotlib seaborn scipy statsmodels joblib
+# Clone the repository
+git clone https://github.com/thiebes/DICE.git
+cd DICE
+
+# Install DICE in editable mode with all dependencies
+pip install -e .
 ```
 
-Here's a brief overview of what each package is used for, and the version of each package that has been tested with this software:
-- **`numpy v1.24.0`**: Fundamental package for scientific computing with Python.
-- **`pandas v1.5.3`**: Library providing high-performance, easy-to-use data structures.
-- **`matplotlib 3.6.3`**: Plotting library for creating static, animated, and interactive visualizations.
-- **`seaborn 0.11.2`**: Statistical data visualization library based on matplotlib.
-- **`scipy 1.9.3`**: Used for scientific and technical computing.
-- **`statsmodels 0.13.5`**: Provides classes and functions for estimating many different statistical models.
-- **`joblib 1.3.2`**: Used for lightweight pipelining in Python.
+This will install DICE along with all required dependencies and create two command-line tools:
+- `dice-gui` - Launches the graphical user interface
+- `dice-cli` - Runs simulations from parameter files via command line
 
-**Standard Python Libraries:** The following are part of the Python Standard Library and do not need to be installed separately:
-- **`ast`**: For working with abstract syntax trees.
-- **`os`**: Provides a way of using operating system-dependent functionality.
-- **`re`**: Provides regular expression matching operations.
-- **`typing`**: Used to support type hints (available in Python 3.5 and later).
+## Development Installation
 
-Remember to regularly update your packages to their latest versions using pip to ensure the smooth functioning of DICE. If you encounter issues during installation, please **[contact the author](http://thiebes.org/contact)** or raise an issue on GitHub.
+For development or testing, install with optional dev dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+This includes:
+- `pytest` - Testing framework
+- `pytest-qt` - PyQt6 testing support
+- `pytest-cov` - Coverage reporting
+
+## Dependencies
+
+DICE depends on the following Python packages (automatically installed with `pip install -e .`):
+
+### Core Dependencies
+- **`numpy`**: Fundamental package for scientific computing with Python
+- **`pandas`**: Library providing high-performance, easy-to-use data structures
+- **`matplotlib`**: Plotting library for creating static, animated, and interactive visualizations
+- **`seaborn`**: Statistical data visualization library based on matplotlib
+- **`scipy`**: Used for scientific and technical computing
+- **`statsmodels`**: Provides classes and functions for estimating many different statistical models
+- **`joblib`**: Used for lightweight pipelining in Python
+- **`PyQt6`**: GUI framework for the graphical interface
+
+### Standard Python Libraries
+The following are part of the Python Standard Library and do not need to be installed separately:
+- **`ast`**: For working with abstract syntax trees
+- **`os`**: Provides a way of using operating system-dependent functionality
+- **`re`**: Provides regular expression matching operations
+- **`typing`**: Used to support type hints
+
+If you encounter issues during installation, please **[contact the author](http://thiebes.org/contact)** or raise an issue on GitHub.
+
+[Back to table of contents](table-of-contents)
+
+# GUI Usage Guide
+
+The DICE GUI provides an interface for configuring and running simulations with visual validation and results display.
+
+## Launching the GUI
+
+After installation, launch the GUI from your terminal:
+
+```bash
+dice-gui
+```
+
+## Parameter Groups
+
+The GUI organizes parameters into logical groups:
+
+### Run Settings
+- **Filename Slug**: Prefix for output files (avoid special characters)
+- **Number of Runs**: Number of simulation iterations to perform
+
+### Units
+- **Length Unit**: Singular unit name (e.g., 'micrometer', 'nanometer')
+- **Time Unit**: Singular unit name (e.g., 'millisecond', 'nanosecond')
+
+### Diffusion and Lifetime
+Choose one approach:
+- **Diffusion Length**: Nominal diffusion length (√Dτ) in your length units
+- **Diffusion Coefficient + Lifetime**: Separate D and τ values (scaled appropriately for your units)
+
+### Initial Profile
+- **Amplitude**: Initial profile amplitude (typically 1.0)
+- **Mean**: Center position (typically 0.0 for centered profiles)
+- **Width**: Choose either FWHM or sigma (σ) to specify Gaussian width
+
+### Noise
+Choose one approach:
+- **Noise Value**: Standard deviation of noise to add
+- **Estimate from Data**: Provide a CSV file to estimate noise from experimental data
+
+### Spatial Axis
+- **Spatial Width**: Scan width in your length units
+- **Pixel Width**: Number of pixels across the spatial axis
+
+### Time Axis
+Choose one approach:
+- **Time Range**: Start, stop, and number of evenly-spaced frames
+- **Time Series**: Comma-separated list of specific time values
+
+### Analysis
+- **Proximity Level**: Accuracy threshold for analysis (e.g., 0.1 for ±10%)
+
+### Plot Settings
+- **Image Type**: Output format (PNG, JPEG, SVG, PDF)
+- **Dimensions**: Width and height in inches
+- **DPI**: Resolution in dots per inch
+- **Font/Ticks**: Size and styling for plot elements
+- **Number of Bins**: Histogram bin count
+- **X Limits**: Custom x-axis limits or 'none' for automatic
+
+### Data and Processing
+- **Retain Profile Data**: Keep raw profile data (increases memory usage)
+- **Multiprocessing**: Enable parallel processing for faster execution
+
+## Running Simulations
+
+1. **Configure Parameters**: Fill in all required fields. Invalid inputs will be indicated with colored borders:
+   - Green: Valid input
+   - Orange: Empty or intermediate value
+   - Red: Invalid input
+
+2. **Validate**: Click "Run Simulation" to automatically validate all parameters. Validation errors will be displayed if any parameters are invalid.
+
+3. **Monitor Progress**: Watch the progress bar and log output area for status updates during simulation execution.
+
+4. **View Results**: When complete, the accuracy histogram plot will be displayed automatically in the results area.
+
+## Exporting Results
+
+After a simulation completes, three export buttons become available:
+
+- **Save Plot**: Export the histogram plot in your chosen image format
+- **Save Summary**: Export a text summary of simulation parameters and results
+- **Save CSV**: Export detailed numerical results as CSV for further analysis
+
+All file dialogs remember the last directory used for convenience.
+
+## Validation Behavior
+
+The GUI provides real-time validation feedback:
+
+- Parameters are checked as you type (after initial interaction with each field)
+- Pre-simulation validation occurs when you click "Run Simulation"
+- Common validation rules:
+  - Spatial width and pixel width must be greater than 0
+  - Proximity level must be between 0.0 and 1.0
+  - Time range start must be less than stop
+  - Time series must contain valid comma-separated numbers
+
+If validation fails, error messages will appear in both a dialog box and the log output area, specifying which parameters need correction.
 
 [Back to table of contents](table-of-contents)
 

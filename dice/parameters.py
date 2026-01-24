@@ -1,32 +1,52 @@
 # Standard Python libraries
 import ast
+import json
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
+
+# Valid units for physical calculations (used by validate_units and slope_to_diffusion_constant)
+VALID_LENGTH_UNITS = {
+    'meter', 'centimeter', 'millimeter', 'micrometer',
+    'nanometer', 'angstrom', 'picometer'
+}
+VALID_TIME_UNITS = {
+    'second', 'millisecond', 'microsecond', 'nanosecond',
+    'picosecond', 'femtosecond', 'attosecond'
+}
 
 from dice.utils import (
     make_x_axis,            make_time_axis,         make_noise_distribution,
     fwhm_to_sigma2,         fft_cnr,                
 )
 
-def open_parameters(filename):
+def open_parameters(filename, max_lines=10000):
     """
-    Reads simulation parameters from a file, evaluates and parses them.
+    Reads simulation parameters from a file with line count validation.
 
     Parameters:
     - filename: The name of the file containing the simulation parameters.
+    - max_lines: Maximum allowed lines in the parameter file (default: 10,000).
 
     Returns:
     - A dictionary with parsed and formatted simulation parameters.
 
     Raises:
     - FileNotFoundError: If the file does not exist.
-    - ValueError: If the file content is not a valid dictionary.
+    - ValueError: If the file exceeds line limit or content is not a valid dictionary.
     - Exception: Propagates any parsing errors from `parameter_parser`.
     """
     try:
         with open(filename, 'r') as f:
-            parms_txt = f.read() # read the file
+            lines = f.readlines()
+            line_count = len(lines)
+
+            if line_count > max_lines:
+                raise ValueError(
+                    f"Parameter file has {line_count} lines, exceeding limit of {max_lines}"
+                )
+
+            parms_txt = ''.join(lines)
             parms_dict = ast.literal_eval(parms_txt) # evaluate the content literally
             result = parameter_parser(parms_dict) # parse the content
         return result
@@ -228,6 +248,218 @@ def handle_profile_width_parameters(parameters_dictionary: Dict[str, Any]) -> fl
             return np.power(sigma, 2.)
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
+
+def validate_units(length_unit: str, time_unit: str) -> None:
+    """
+    Validate that length and time units are supported by DICE.
+
+    DICE supports a specific set of length and time units for physical calculations.
+    Units are used during diffusion coefficient conversion in slope_to_diffusion_constant().
+
+    Parameters:
+        length_unit: Unit for length measurements (e.g., 'micrometer', 'nanometer')
+        time_unit: Unit for time measurements (e.g., 'nanosecond', 'picosecond')
+
+    Raises:
+        ValueError: If either unit is not in the supported list.
+
+    Supported Units:
+        Length: meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
+        Time: second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
+    """
+    if length_unit not in VALID_LENGTH_UNITS:
+        raise ValueError(
+            f"Invalid length unit '{length_unit}'. "
+            f"Supported units: {', '.join(sorted(VALID_LENGTH_UNITS))}"
+        )
+
+    if time_unit not in VALID_TIME_UNITS:
+        raise ValueError(
+            f"Invalid time unit '{time_unit}'. "
+            f"Supported units: {', '.join(sorted(VALID_TIME_UNITS))}"
+        )
+
+def process_nominal_diffusion_length(
+    length_unit: str,
+    time_unit: str,
+    nominal_diffusion_length: float = None,
+    nominal_diffusion_coeff: float = None,
+    nominal_lifetime_tau: float = None
+) -> Dict[str, Any]:
+    """
+    Wrapper function to process diffusion parameters for GUI usage.
+
+    Validates units and calculates diffusion-related parameters based on input.
+    Either diffusion length OR both coefficient and lifetime must be provided.
+
+    Parameters:
+    - length_unit: Unit for length measurements (validated against supported units)
+    - time_unit: Unit for time measurements (validated against supported units)
+    - nominal_diffusion_length: Diffusion length (optional if coeff and tau provided)
+    - nominal_diffusion_coeff: Diffusion coefficient (optional if length provided)
+    - nominal_lifetime_tau: Lifetime tau (optional if length provided)
+
+    Returns:
+    - Dictionary with processed diffusion parameters including validated units
+
+    Raises:
+    - ValueError: If units are invalid or parameter combination is incorrect
+    """
+    # Validate units early
+    validate_units(length_unit, time_unit)
+
+    # Initialize with validated units
+    params = {
+        'length unit': length_unit,
+        'time unit': time_unit
+    }
+
+    # Validate inputs and pass through user-provided keys only
+    # Let handle_diffusion_parameters() derive the missing values
+    if nominal_diffusion_length is not None:
+        if nominal_diffusion_coeff is not None or nominal_lifetime_tau is not None:
+            raise ValueError("Provide either nominal diffusion length OR both coefficient and tau, not both")
+        params['nominal diffusion length'] = nominal_diffusion_length
+    elif nominal_diffusion_coeff is not None and nominal_lifetime_tau is not None:
+        params['nominal diffusion coefficient'] = nominal_diffusion_coeff
+        params['nominal lifetime (tau)'] = nominal_lifetime_tau
+    else:
+        raise ValueError("Provide either nominal diffusion length OR both coefficient and tau")
+
+    return params
+
+def process_initial_profile(
+    length_unit: str,
+    fwhm_0: float = None,
+    sigma_0: float = None,
+    amplitude_0: float = None,
+    mean_0: float = None
+) -> Dict[str, Any]:
+    """
+    Wrapper function to process initial profile parameters for GUI usage.
+
+    Validates length unit and processes initial Gaussian profile parameters.
+    Either FWHM_0 OR sigma_0 must be provided (not both).
+
+    Parameters:
+    - length_unit: Unit for length measurements (validated against supported units)
+    - fwhm_0: Full width at half maximum (optional if sigma_0 provided)
+    - sigma_0: Standard deviation (optional if fwhm_0 provided)
+    - amplitude_0: Profile amplitude
+    - mean_0: Profile mean position
+
+    Returns:
+    - Dictionary with processed initial profile parameters including validated length unit
+
+    Raises:
+    - ValueError: If length unit is invalid or parameter combination is incorrect
+    """
+    # Validate length unit
+    if length_unit not in VALID_LENGTH_UNITS:
+        raise ValueError(
+            f"Invalid length unit '{length_unit}'. "
+            f"Supported units: {', '.join(sorted(VALID_LENGTH_UNITS))}"
+        )
+
+    if amplitude_0 is None or mean_0 is None:
+        raise ValueError("amplitude_0 and mean_0 are required")
+
+    # Initialize with validated length unit
+    params = {
+        'length unit': length_unit,
+        'amplitude_0': amplitude_0,
+        'mean_0': mean_0
+    }
+
+    if fwhm_0 is not None and sigma_0 is not None:
+        raise ValueError("Provide either FWHM_0 OR sigma_0, not both")
+    elif fwhm_0 is not None:
+        params['FWHM_0'] = fwhm_0
+    elif sigma_0 is not None:
+        params['sigma_0'] = sigma_0
+    else:
+        raise ValueError("Provide either FWHM_0 or sigma_0")
+
+    return params
+
+def process_noise_parameters(
+    noise_value: str = None,
+    estimate_noise_file: str = None,
+    num_runs: int = None
+) -> Dict[str, Any]:
+    """
+    Wrapper function to process noise parameters for GUI usage.
+
+    Parameters:
+    - noise_value: String representation of noise value (optional if file provided)
+    - estimate_noise_file: Path to CSV file for noise estimation (optional if value provided)
+    - num_runs: Number of simulation runs
+
+    Returns:
+    - Dictionary with processed noise parameters
+
+    Raises:
+    - ValueError: If invalid combination of parameters provided
+    """
+    params = {}
+
+    if noise_value is not None and estimate_noise_file is not None:
+        raise ValueError("Provide either noise value OR noise estimation file, not both")
+    elif noise_value is not None:
+        try:
+            params['noise value'] = float(noise_value)
+        except ValueError:
+            raise ValueError(f"Invalid noise value: {noise_value}")
+    elif estimate_noise_file is not None:
+        if not estimate_noise_file:
+            raise ValueError("Noise estimation file path is empty")
+        params['estimate noise from data'] = estimate_noise_file
+    else:
+        raise ValueError("Provide either noise value or noise estimation file")
+
+    return params
+
+def process_time_axis(
+    time_range_tuple: Tuple[float, float, int] = None,
+    time_series_str: str = None
+) -> Dict[str, Any]:
+    """
+    Wrapper function to process time axis parameters for GUI usage.
+
+    Parameters:
+    - time_range_tuple: Tuple of (start, stop, steps) for time range (optional if series provided)
+    - time_series_str: String representation of time series (optional if range provided)
+
+    Returns:
+    - Dictionary with processed time axis parameters
+
+    Raises:
+    - ValueError: If invalid combination of parameters provided
+    """
+    params = {}
+
+    if time_range_tuple is not None and time_series_str is not None:
+        raise ValueError("Provide either time range OR time series, not both")
+    elif time_range_tuple is not None:
+        if len(time_range_tuple) != 3:
+            raise ValueError("Time range must be a tuple of (start, stop, steps)")
+        t_start, t_stop, t_steps = time_range_tuple
+        params['time series'] = make_time_axis(t_start, t_stop, t_steps)
+    elif time_series_str is not None:
+        if not time_series_str.strip():
+            raise ValueError("Time series string is empty")
+        try:
+            # Try parsing as JSON array first
+            time_series = json.loads(time_series_str)
+            if not isinstance(time_series, list):
+                raise ValueError("Time series must be a list/array")
+            params['time series'] = np.array(time_series, dtype=float)
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid time series format: {time_series_str}")
+    else:
+        raise ValueError("Provide either time range or time series")
+
+    return params
 
 def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
     """

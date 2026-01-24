@@ -274,18 +274,15 @@ def run_simulation_cli(parameters_filename: str):
     result = run_simulation(parameters_dict)
 
     # Get summary lines for print and save
-    # Ensure result_dictionary is complete before summarizing
-    summary_lines = summarize_results(result_dictionary)
-    summary_file = result_dictionary['parameters']['summary filename']
+    summary_lines = summarize_results(result)
+    summary_file = result['parameters']['summary filename']
     for line in summary_lines:
-        print_and_append(summary_file, line, gui_message_callback=message_callback)
+        print_and_append(summary_file, line)
 
     # Write CSV + histogram image
-    # TODO: Consider if export_results also needs message_callback for its print statements.
-    # For now, its print statements will go to console only.
-    export_results(result_dictionary)
+    export_results(result)
 
-    return result_dictionary
+    return result
 
 def dice_runner(parameters_filename):
     '''Generate simulations using parameters'''

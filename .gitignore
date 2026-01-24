@@ -3,3 +3,10 @@ __pycache__/
 
 # Ignore other Python compiled files
 *.py[cod]
+
+# Ignore virtual environments
+.venv/
+venv/
+
+# Ignore egg-info directories
+*.egg-info/

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dice-simulator"
+version = "1.3.0"
+description = "Diffusion Insight Computation Engine for time-resolved microscopy"
+authors = [{name = "Joseph J. Thiebes"}]
+license = "CC-BY-4.0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "scipy",
+    "statsmodels",
+    "joblib",
+    "PyQt6",
+]
+
+[project.scripts]
+dice-cli = "dice.cli:main"
+dice-gui = "dice.gui:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-qt>=4.0", "pytest-cov>=4.0"]
+
+[tool.setuptools.packages.find]
+include = ["dice*", "gui*"]
+exclude = ["tests*", "webapp*", "cli*"]
