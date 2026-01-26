@@ -18,13 +18,14 @@ This web app is currently available for your use on the web at: https://dice-thi
 - Python 3.x
 - Flask
 - NumPy
+- DICE package (main project)
 
 ### Installation
 
 1. Clone the repository:
     ```sh
     git clone https://github.com/thiebes/DICE.git
-    cd DICE
+    cd DICE/webapp
     ```
 
 2. Install the required packages:
@@ -32,7 +33,11 @@ This web app is currently available for your use on the web at: https://dice-thi
     pip install -r requirements.txt
     ```
 
+3. Note: This webapp uses the modularized DICE package from the parent directory. Ensure you've cloned the complete DICE repository.
+
 ### Running the Application
+
+#### Local Development
 
 1. Start the Flask development server:
     ```sh
@@ -40,6 +45,10 @@ This web app is currently available for your use on the web at: https://dice-thi
     ```
 
 2. Open your web browser and navigate to `http://127.0.0.1:5000/`.
+
+#### Production Deployment
+
+For deploying to PythonAnywhere, see [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on git-based deployment.
 
 ### Usage
 

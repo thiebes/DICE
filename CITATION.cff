@@ -22,3 +22,14 @@ keywords:
   - "simulation"
   - "microscopy"
   - "photonics"
+preferred-citation:
+  type: software
+  authors:
+    - family-names: "Thiebes"
+      given-names: "Joseph J."
+      orcid: "https://orcid.org/0000-0002-7456-3952"
+  title: "Diffusion Insight Computation Engine (DICE)"
+  version: "1.3.0"
+  doi: "10.5281/zenodo.10258191"
+  url: "https://github.com/thiebes/DICE"
+  date-released: "2025-01-24"
