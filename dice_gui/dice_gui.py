@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox,
     QComboBox, QRadioButton, QButtonGroup, QGroupBox, QFileDialog,
     QProgressBar, QMessageBox, QTextEdit, QSlider, QFormLayout, QScrollArea,
-    QCheckBox, QStatusBar
+    QCheckBox, QStatusBar, QMenu, QFrame
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator, QAction, QKeySequence
@@ -33,12 +33,57 @@ from dice_gui.accessibility import (
     set_tab_order
 )
 from dice_gui.proximity_widget import ProximityTargetWidget
+from dice_gui.validation_manager import ValidationManager, apply_validation_style
+
+# Example parameter configurations
+EXAMPLE_PARAMETERS = {
+    "quick_test": {
+        'filename slug': 'quick_test',
+        'number of runs': 100,
+        'nominal diffusion length': 0.1,
+        'FWHM_0': 1,
+        'amplitude_0': 1,
+        'mean_0': 0,
+        'noise value': 0.02,
+        'spatial width': 5,
+        'pixel width': 50,
+        'time range': [0, 1, 5],
+        'proximity level': 0.1,
+    },
+    "high_precision": {
+        'filename slug': 'high_precision',
+        'number of runs': 10000,
+        'nominal diffusion length': 0.1,
+        'FWHM_0': 1,
+        'amplitude_0': 1,
+        'mean_0': 0,
+        'noise value': 0.02,
+        'spatial width': 10,
+        'pixel width': 200,
+        'time range': [0, 2, 20],
+        'proximity level': 0.1,
+    },
+    "publication": {
+        'filename slug': 'publication_example',
+        'number of runs': 1000,
+        'nominal diffusion length': 0.1,
+        'FWHM_0': 1,
+        'amplitude_0': 1,
+        'mean_0': 0,
+        'noise value': 0.02,
+        'spatial width': 5,
+        'pixel width': 100,
+        'time range': [0, 1, 10],
+        'proximity level': 0.5,
+    }
+}
 
 
 class SimulationThread(QThread):
     """Thread for running simulations without blocking the GUI."""
 
     progress = pyqtSignal(str)
+    iteration_progress = pyqtSignal(int, int)  # current, total
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
 
@@ -46,15 +91,29 @@ class SimulationThread(QThread):
         super().__init__()
         self.interface = interface
         self.parameters = parameters
+        self._stop_requested = False
 
     def run(self):
         """Run the simulation in a separate thread."""
         try:
-            self.progress.emit("Starting simulation...")
+            num_runs = self.parameters.get('number of runs', 1000)
+            is_parallel = self.parameters.get('multiprocessing', True)
+
+            if is_parallel:
+                import os
+                cpu_count = os.cpu_count() or 1
+                self.progress.emit(f"Running {num_runs:,} iterations ({cpu_count} CPU cores)...")
+            else:
+                self.progress.emit("Starting simulation...")
+
             result = self.interface.run_simulation(self.parameters)
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
+
+    def request_stop(self):
+        """Request the simulation to stop."""
+        self._stop_requested = True
 
 
 class DiceGUI(QMainWindow):
@@ -72,13 +131,26 @@ class DiceGUI(QMainWindow):
         self.settings = QSettings("DICE", "DICE_GUI")
         self.loaded_data_file = None  # Track loaded CSV file for status bar
         self._populating = False      # Prevent modification marking during load
+        self.validation_manager = None  # Will be initialized in init_ui
+        self._error_labels = {}  # field_id -> inline error QLabel
+
+        # Map tabs to their validated field IDs for tab completion indicators
+        self._tab_fields = {
+            0: ["filename_slug"],  # Tab 1: Simulation Setup
+            1: ["diffusion_length", "diffusion_coeff", "lifetime",
+                "amplitude", "mean", "width"],  # Tab 2: Physical Parameters
+            2: ["noise_value", "noise_file", "spatial_width",
+                "time_start", "time_stop", "time_series"],  # Tab 3: Experimental Conditions
+            3: [],  # Tab 4: Analysis Settings (no validated fields)
+            4: [],  # Tab 5: Output Settings (no validated fields)
+        }
 
         self.init_ui()
 
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("DICE - Diffusion Insight Computation Engine")
-        self.setGeometry(100, 100, 900, 1050)
+        self.setGeometry(100, 100, 900, 750)
 
         # Create menu bar
         self.create_menu_bar()
@@ -87,14 +159,25 @@ class DiceGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Create scrollable content area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(10, 10, 10, 10)
 
         # Add header
         header = self.create_header()
-        main_layout.addWidget(header)
+        scroll_layout.addWidget(header)
 
         # Add unit selection panel
         unit_panel = self.create_unit_panel()
-        main_layout.addWidget(unit_panel)
+        scroll_layout.addWidget(unit_panel)
 
         # Create tab widget
         self.tabs = QTabWidget()
@@ -110,9 +193,12 @@ class DiceGUI(QMainWindow):
         self.tabs.addTab(self.tab4, "Analysis Settings")
         self.tabs.addTab(self.tab5, "Output Settings")
 
-        main_layout.addWidget(self.tabs)
+        scroll_layout.addWidget(self.tabs)
 
-        # Add bottom control panel
+        scroll_area.setWidget(scroll_content)
+        main_layout.addWidget(scroll_area, stretch=1)
+
+        # Add sticky bottom control panel (outside scroll area)
         control_panel = self.create_control_panel()
         main_layout.addWidget(control_panel)
 
@@ -124,6 +210,12 @@ class DiceGUI(QMainWindow):
 
         # Connect modification tracking signals
         self.connect_modification_signals()
+
+        # Setup validation system
+        self.setup_validation()
+
+        # Initialize output path preview
+        self._update_output_path_preview()
 
     def create_menu_bar(self):
         """Create the menu bar with File and Help menus."""
@@ -326,6 +418,18 @@ class DiceGUI(QMainWindow):
         )
         basic_layout.addRow("Filename Slug:", self.filename_slug_input)
 
+        # Filename slug validation error label
+        self._error_labels["filename_slug"] = self._create_error_label()
+        basic_layout.addRow("", self._error_labels["filename_slug"])
+
+        # Output path preview
+        self.output_path_preview = QLabel()
+        self.output_path_preview.setProperty("class", "output-path-preview")
+        self.output_path_preview.setWordWrap(True)
+        self.output_path_preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        basic_layout.addRow("Output Location:", self.output_path_preview)
+        self.filename_slug_input.textChanged.connect(self._update_output_path_preview)
+
         layout.addWidget(basic_group)
 
         # Performance settings group
@@ -398,9 +502,10 @@ class DiceGUI(QMainWindow):
         diffusion_layout.addWidget(self.diffusion_length_radio)
 
         # Diffusion length input
-        length_container = QWidget()
+        length_container = QFrame()
+        length_container.setProperty("class", "option-card")
         length_layout = QHBoxLayout(length_container)
-        length_layout.setContentsMargins(30, 0, 0, 0)
+        length_layout.setContentsMargins(12, 8, 12, 8)
         self.diffusion_length_input = QLineEdit()
         self.diffusion_length_input.setPlaceholderText("e.g., 1.0")
         self.diffusion_length_input.setToolTip(
@@ -416,12 +521,21 @@ class DiceGUI(QMainWindow):
         length_layout.addStretch()
         diffusion_layout.addWidget(length_container)
 
+        # Diffusion length validation error label
+        self._error_labels["diffusion_length"] = self._create_error_label()
+        diffusion_error_container = QWidget()
+        diffusion_error_layout = QHBoxLayout(diffusion_error_container)
+        diffusion_error_layout.setContentsMargins(30, 0, 0, 0)
+        diffusion_error_layout.addWidget(self._error_labels["diffusion_length"])
+        diffusion_layout.addWidget(diffusion_error_container)
+
         diffusion_layout.addWidget(self.diffusion_coeff_radio)
 
         # Diffusion coefficient + lifetime inputs
-        coeff_container = QWidget()
+        coeff_container = QFrame()
+        coeff_container.setProperty("class", "option-card")
         coeff_layout = QFormLayout(coeff_container)
-        coeff_layout.setContentsMargins(30, 0, 0, 0)
+        coeff_layout.setContentsMargins(12, 8, 12, 8)
 
         d_widget = QWidget()
         d_layout = QHBoxLayout(d_widget)
@@ -459,7 +573,12 @@ class DiceGUI(QMainWindow):
         tau_layout.addWidget(self.lifetime_label)
 
         coeff_layout.addRow("Diffusion Coefficient (D):", d_widget)
+        self._error_labels["diffusion_coeff"] = self._create_error_label()
+        coeff_layout.addRow("", self._error_labels["diffusion_coeff"])
+
         coeff_layout.addRow("Lifetime (τ):", tau_widget)
+        self._error_labels["lifetime"] = self._create_error_label()
+        coeff_layout.addRow("", self._error_labels["lifetime"])
 
         # Calculated diffusion length display
         self.calc_length_label = QLabel("Diffusion Length: ---")
@@ -489,6 +608,8 @@ class DiceGUI(QMainWindow):
             "Can be zero or positive. Zero amplitude means no signal (only noise)."
         )
         profile_layout.addRow("Amplitude₀:", self.amplitude_input)
+        self._error_labels["amplitude"] = self._create_error_label()
+        profile_layout.addRow("", self._error_labels["amplitude"])
 
         # Mean position
         mean_widget = QWidget()
@@ -506,6 +627,8 @@ class DiceGUI(QMainWindow):
         mean_layout.addWidget(self.mean_input)
         mean_layout.addWidget(self.mean_label)
         profile_layout.addRow("Mean Position (μ₀):", mean_widget)
+        self._error_labels["mean"] = self._create_error_label()
+        profile_layout.addRow("", self._error_labels["mean"])
 
         # Profile width radio buttons
         self.width_button_group = QButtonGroup()
@@ -553,6 +676,8 @@ class DiceGUI(QMainWindow):
         width_layout.addWidget(self.width_input)
         width_layout.addWidget(self.width_unit_label)
         profile_layout.addRow("Width Value:", width_widget)
+        self._error_labels["width"] = self._create_error_label()
+        profile_layout.addRow("", self._error_labels["width"])
 
         # Conversion display
         self.width_conversion_label = QLabel("Equivalent: ---")
@@ -608,9 +733,10 @@ class DiceGUI(QMainWindow):
         noise_layout.addWidget(self.noise_fixed_radio)
 
         # Fixed noise input
-        fixed_container = QWidget()
+        fixed_container = QFrame()
+        fixed_container.setProperty("class", "option-card")
         fixed_layout = QHBoxLayout(fixed_container)
-        fixed_layout.setContentsMargins(30, 0, 0, 0)
+        fixed_layout.setContentsMargins(12, 8, 12, 8)
         fixed_layout.addWidget(QLabel("Noise σ:"))
         self.noise_value_input = QLineEdit()
         self.noise_value_input.setPlaceholderText("e.g., 0.01")
@@ -626,12 +752,21 @@ class DiceGUI(QMainWindow):
         fixed_layout.addStretch()
         noise_layout.addWidget(fixed_container)
 
+        # Noise value validation error label
+        self._error_labels["noise_value"] = self._create_error_label()
+        noise_error_container = QWidget()
+        noise_error_layout = QHBoxLayout(noise_error_container)
+        noise_error_layout.setContentsMargins(30, 0, 0, 0)
+        noise_error_layout.addWidget(self._error_labels["noise_value"])
+        noise_layout.addWidget(noise_error_container)
+
         noise_layout.addWidget(self.noise_estimate_radio)
 
         # Estimate from data
-        estimate_container = QWidget()
+        estimate_container = QFrame()
+        estimate_container.setProperty("class", "option-card")
         estimate_layout = QHBoxLayout(estimate_container)
-        estimate_layout.setContentsMargins(30, 0, 0, 0)
+        estimate_layout.setContentsMargins(12, 8, 12, 8)
         self.noise_file_input = QLineEdit()
         self.noise_file_input.setPlaceholderText("Path to CSV file...")
         self.noise_file_input.setToolTip(
@@ -648,6 +783,15 @@ class DiceGUI(QMainWindow):
         estimate_layout.addWidget(self.noise_file_input)
         estimate_layout.addWidget(self.noise_browse_button)
         noise_layout.addWidget(estimate_container)
+
+        # Noise file validation error label
+        self._error_labels["noise_file"] = self._create_error_label()
+        noise_file_error_container = QWidget()
+        noise_file_error_layout = QHBoxLayout(noise_file_error_container)
+        noise_file_error_layout.setContentsMargins(30, 0, 0, 0)
+        noise_file_error_layout.addWidget(self._error_labels["noise_file"])
+        noise_layout.addWidget(noise_file_error_container)
+
         noise_layout.addWidget(self.noise_cnr_label)
 
         # Connect radio buttons
@@ -677,6 +821,8 @@ class DiceGUI(QMainWindow):
         spatial_width_layout.addWidget(self.spatial_width_input)
         spatial_width_layout.addWidget(self.spatial_width_label)
         spatial_layout.addRow("Spatial Width:", spatial_width_widget)
+        self._error_labels["spatial_width"] = self._create_error_label()
+        spatial_layout.addRow("", self._error_labels["spatial_width"])
 
         # Pixel width
         self.pixel_width_input = QSpinBox()
@@ -731,9 +877,10 @@ class DiceGUI(QMainWindow):
         temporal_layout.addWidget(self.time_range_radio)
 
         # Time range inputs
-        range_container = QWidget()
+        range_container = QFrame()
+        range_container.setProperty("class", "option-card")
         range_layout = QFormLayout(range_container)
-        range_layout.setContentsMargins(30, 0, 0, 0)
+        range_layout.setContentsMargins(12, 8, 12, 8)
 
         start_widget = QWidget()
         start_layout = QHBoxLayout(start_widget)
@@ -779,16 +926,23 @@ class DiceGUI(QMainWindow):
         )
 
         range_layout.addRow("Start:", start_widget)
+        self._error_labels["time_start"] = self._create_error_label()
+        range_layout.addRow("", self._error_labels["time_start"])
+
         range_layout.addRow("Stop:", stop_widget)
+        self._error_labels["time_stop"] = self._create_error_label()
+        range_layout.addRow("", self._error_labels["time_stop"])
+
         range_layout.addRow("Steps:", self.time_steps_input)
         temporal_layout.addWidget(range_container)
 
         temporal_layout.addWidget(self.time_series_radio)
 
         # Time series input
-        series_container = QWidget()
+        series_container = QFrame()
+        series_container.setProperty("class", "option-card")
         series_layout = QVBoxLayout(series_container)
-        series_layout.setContentsMargins(30, 0, 0, 0)
+        series_layout.setContentsMargins(12, 8, 12, 8)
         series_label = QLabel("Comma-separated time values:")
         self.time_series_input = QTextEdit()
         self.time_series_input.setPlaceholderText("e.g., 0.1, 0.5, 1.0, 2.0, 5.0")
@@ -803,6 +957,8 @@ class DiceGUI(QMainWindow):
         )
         series_layout.addWidget(series_label)
         series_layout.addWidget(self.time_series_input)
+        self._error_labels["time_series"] = self._create_error_label()
+        series_layout.addWidget(self._error_labels["time_series"])
         temporal_layout.addWidget(series_container)
 
         # Connect radio buttons
@@ -872,13 +1028,32 @@ class DiceGUI(QMainWindow):
         return tab
 
     def create_tab5_output_settings(self) -> QWidget:
-        """Create Tab 5: Output Settings."""
+        """Create Tab 5: Output Settings with progressive disclosure."""
+        from dice_gui.presets import PRESETS, OUTPUT_DEFAULTS, get_preset
+        from dice_gui.collapsible_group import CollapsibleGroupBox
+
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # Plot/Image settings group
-        plot_group = QGroupBox("Plot Settings")
-        plot_layout = QFormLayout(plot_group)
+        # === Preset Section ===
+        preset_layout = QHBoxLayout()
+        preset_label = QLabel("Quick Setup:")
+        self.preset_combo = QComboBox()
+        self.preset_combo.setProperty("class", "preset-selector")
+        self.preset_combo.addItem("Custom", None)
+        self.preset_combo.addItem("Publication (journal-ready)", "publication")
+        self.preset_combo.addItem("Presentation (large fonts)", "presentation")
+        self.preset_combo.addItem("Draft (quick preview)", "draft")
+        self.preset_combo.currentIndexChanged.connect(self._apply_output_preset)
+
+        preset_layout.addWidget(preset_label)
+        preset_layout.addWidget(self.preset_combo)
+        preset_layout.addStretch()
+        layout.addLayout(preset_layout)
+
+        # === Basic Plot Settings (always visible) ===
+        basic_group = QGroupBox("Plot Settings")
+        basic_layout = QFormLayout(basic_group)
 
         # Image type
         self.image_type_combo = QComboBox()
@@ -886,17 +1061,15 @@ class DiceGUI(QMainWindow):
         self.image_type_combo.setCurrentText("png")
         self.image_type_combo.setToolTip(
             "File format for saved plots.\n\n"
-            "- PNG: Best for general use, lossless compression, good quality (recommended)\n"
-            "- JPG: Smaller files but lossy compression, may show artifacts\n"
-            "- SVG: Vector format, scalable without quality loss, ideal for publications\n"
-            "- TIF: Uncompressed, largest files, maximum quality\n\n"
-            "For publications: PNG or SVG\n"
-            "For presentations: PNG\n"
-            "For archiving: TIF or SVG"
+            "- PNG: Best for general use, lossless compression (recommended)\n"
+            "- JPG: Smaller files but lossy compression\n"
+            "- SVG: Vector format, scalable, ideal for publications\n"
+            "- TIF: Uncompressed, maximum quality"
         )
-        plot_layout.addRow("Image Type:", self.image_type_combo)
+        basic_layout.addRow("Image Type:", self.image_type_combo)
+        self.image_type_combo.currentTextChanged.connect(self._update_output_path_preview)
 
-        # Image width (value + unit)
+        # Image width
         width_widget = QWidget()
         width_layout = QHBoxLayout(width_widget)
         width_layout.setContentsMargins(0, 0, 0, 0)
@@ -905,22 +1078,13 @@ class DiceGUI(QMainWindow):
         self.image_width_spin.setMaximum(100.0)
         self.image_width_spin.setValue(16.0)
         self.image_width_spin.setDecimals(2)
-        self.image_width_spin.setToolTip(
-            "Physical width of output plot.\n\n"
-            "For publications:\n"
-            "- Single column: 8-9 cm (3-3.5 in)\n"
-            "- Double column: 16-18 cm (6-7 in)\n\n"
-            "For presentations: 10-12 in (25-30 cm)\n\n"
-            "Larger sizes provide more detail but may not fit journal requirements."
-        )
         self.image_width_unit_combo = QComboBox()
         self.image_width_unit_combo.addItems(["cm", "in", "mm"])
-        self.image_width_unit_combo.setCurrentText("cm")
         width_layout.addWidget(self.image_width_spin)
         width_layout.addWidget(self.image_width_unit_combo)
-        plot_layout.addRow("Image Width:", width_widget)
+        basic_layout.addRow("Image Width:", width_widget)
 
-        # Image height (value + unit)
+        # Image height
         height_widget = QWidget()
         height_layout = QHBoxLayout(height_widget)
         height_layout.setContentsMargins(0, 0, 0, 0)
@@ -929,47 +1093,61 @@ class DiceGUI(QMainWindow):
         self.image_height_spin.setMaximum(100.0)
         self.image_height_spin.setValue(10.0)
         self.image_height_spin.setDecimals(2)
-        self.image_height_spin.setToolTip(
-            "Physical height of output plot.\n\n"
-            "Common aspect ratios:\n"
-            "- 16:10 (wide): Good for histograms\n"
-            "- 4:3 (standard): Balanced appearance\n"
-            "- 1:1 (square): Compact\n\n"
-            "Height is typically 60-70% of width for most plots."
-        )
         self.image_height_unit_combo = QComboBox()
         self.image_height_unit_combo.addItems(["cm", "in", "mm"])
-        self.image_height_unit_combo.setCurrentText("cm")
         height_layout.addWidget(self.image_height_spin)
         height_layout.addWidget(self.image_height_unit_combo)
-        plot_layout.addRow("Image Height:", height_widget)
+        basic_layout.addRow("Image Height:", height_widget)
 
-        # Image resolution (value + unit)
-        resolution_widget = QWidget()
-        resolution_layout = QHBoxLayout(resolution_widget)
-        resolution_layout.setContentsMargins(0, 0, 0, 0)
+        # DPI
         self.image_dpi_spin = QSpinBox()
         self.image_dpi_spin.setMinimum(50)
         self.image_dpi_spin.setMaximum(1200)
         self.image_dpi_spin.setValue(300)
-        self.image_dpi_spin.setToolTip(
-            "Resolution in dots per inch (DPI).\n\n"
-            "Common standards:\n"
-            "- 72-96 DPI: Screen display, presentations\n"
-            "- 150 DPI: Draft prints\n"
-            "- 300 DPI: Publication quality (most journals require this)\n"
-            "- 600 DPI: High-quality prints, posters\n\n"
-            "Higher DPI increases file size and generation time.\n"
-            "For PNG/JPG/TIF; SVG is resolution-independent."
-        )
-        self.image_dpi_unit_combo = QComboBox()
-        self.image_dpi_unit_combo.addItems(["dpi", "dpcm"])
-        self.image_dpi_unit_combo.setCurrentText("dpi")
-        resolution_layout.addWidget(self.image_dpi_spin)
-        resolution_layout.addWidget(self.image_dpi_unit_combo)
-        plot_layout.addRow("Resolution:", resolution_widget)
+        self.image_dpi_spin.setToolTip("Resolution: 300 DPI for publications, 96 for screen")
+        basic_layout.addRow("Resolution (DPI):", self.image_dpi_spin)
 
-        # Font size (value + unit)
+        # Number of bins
+        self.image_numbins_spin = QSpinBox()
+        self.image_numbins_spin.setMinimum(5)
+        self.image_numbins_spin.setMaximum(200)
+        self.image_numbins_spin.setValue(35)
+        self.image_numbins_spin.setToolTip("Number of bins for accuracy histogram")
+        basic_layout.addRow("Histogram Bins:", self.image_numbins_spin)
+
+        # Plot method
+        method_widget = QWidget()
+        method_layout = QHBoxLayout(method_widget)
+        method_layout.setContentsMargins(0, 0, 0, 0)
+        self.plot_method_wls_radio = QRadioButton("WLS")
+        self.plot_method_ols_radio = QRadioButton("OLS")
+        self.plot_method_wls_radio.setChecked(True)
+        self.plot_method_wls_radio.setToolTip("Weighted Least Squares (recommended)")
+        self.plot_method_ols_radio.setToolTip("Ordinary Least Squares")
+        method_layout.addWidget(self.plot_method_wls_radio)
+        method_layout.addWidget(self.plot_method_ols_radio)
+        method_layout.addStretch()
+        basic_layout.addRow("Fit Method:", method_widget)
+
+        # Reset button
+        basic_reset_btn = QPushButton("Reset to Defaults")
+        basic_reset_btn.setProperty("class", "reset-button")
+        basic_reset_btn.clicked.connect(self._reset_basic_plot_settings)
+        basic_layout.addRow("", basic_reset_btn)
+
+        layout.addWidget(basic_group)
+
+        # === Advanced Settings (collapsible) ===
+        self.advanced_plot_group = CollapsibleGroupBox(
+            "Advanced Settings",
+            settings_key="output_advanced",
+            initially_collapsed=True
+        )
+
+        advanced_content = QWidget()
+        advanced_layout = QFormLayout(advanced_content)
+
+        # Font size
         font_widget = QWidget()
         font_layout = QHBoxLayout(font_widget)
         font_layout.setContentsMargins(0, 0, 0, 0)
@@ -977,23 +1155,13 @@ class DiceGUI(QMainWindow):
         self.image_font_size_spin.setMinimum(4)
         self.image_font_size_spin.setMaximum(72)
         self.image_font_size_spin.setValue(6)
-        self.image_font_size_spin.setToolTip(
-            "Font size for axis labels, titles, and annotations.\n\n"
-            "Publication guidelines:\n"
-            "- Minimum: 6-8 pt (must be readable when printed)\n"
-            "- Standard: 8-10 pt\n"
-            "- Larger: 12-14 pt (for presentations)\n\n"
-            "Font size should scale with image dimensions.\n"
-            "Points (pt) are standard for print; pixels (px) for screen."
-        )
         self.image_font_unit_combo = QComboBox()
         self.image_font_unit_combo.addItems(["pt", "px"])
-        self.image_font_unit_combo.setCurrentText("pt")
         font_layout.addWidget(self.image_font_size_spin)
         font_layout.addWidget(self.image_font_unit_combo)
-        plot_layout.addRow("Font Size:", font_widget)
+        advanced_layout.addRow("Font Size:", font_widget)
 
-        # Tick length (value + unit)
+        # Tick length
         tick_length_widget = QWidget()
         tick_length_layout = QHBoxLayout(tick_length_widget)
         tick_length_layout.setContentsMargins(0, 0, 0, 0)
@@ -1001,22 +1169,13 @@ class DiceGUI(QMainWindow):
         self.image_tick_length_spin.setMinimum(1)
         self.image_tick_length_spin.setMaximum(50)
         self.image_tick_length_spin.setValue(6)
-        self.image_tick_length_spin.setToolTip(
-            "Length of axis tick marks in points or pixels.\n\n"
-            "Typical values:\n"
-            "- Short: 3-4 pt (subtle)\n"
-            "- Standard: 5-7 pt (recommended)\n"
-            "- Long: 8-12 pt (emphasis)\n\n"
-            "Should be proportional to plot size and line widths."
-        )
         self.image_tick_length_unit_combo = QComboBox()
         self.image_tick_length_unit_combo.addItems(["pt", "px"])
-        self.image_tick_length_unit_combo.setCurrentText("pt")
         tick_length_layout.addWidget(self.image_tick_length_spin)
         tick_length_layout.addWidget(self.image_tick_length_unit_combo)
-        plot_layout.addRow("Tick Length:", tick_length_widget)
+        advanced_layout.addRow("Tick Length:", tick_length_widget)
 
-        # Tick width (value + unit)
+        # Tick width
         tick_width_widget = QWidget()
         tick_width_layout = QHBoxLayout(tick_width_widget)
         tick_width_layout.setContentsMargins(0, 0, 0, 0)
@@ -1024,88 +1183,31 @@ class DiceGUI(QMainWindow):
         self.image_tick_width_spin.setMinimum(1)
         self.image_tick_width_spin.setMaximum(20)
         self.image_tick_width_spin.setValue(2)
-        self.image_tick_width_spin.setToolTip(
-            "Thickness of axis tick marks and plot borders.\n\n"
-            "Typical values:\n"
-            "- Thin: 0.5-1 pt (delicate)\n"
-            "- Standard: 1-2 pt (recommended)\n"
-            "- Thick: 2-4 pt (bold)\n\n"
-            "Should match axis line width for consistency."
-        )
         self.image_tick_width_unit_combo = QComboBox()
         self.image_tick_width_unit_combo.addItems(["pt", "px"])
-        self.image_tick_width_unit_combo.setCurrentText("pt")
         tick_width_layout.addWidget(self.image_tick_width_spin)
         tick_width_layout.addWidget(self.image_tick_width_unit_combo)
-        plot_layout.addRow("Tick Width:", tick_width_widget)
+        advanced_layout.addRow("Tick Width:", tick_width_widget)
 
-        # Number of bins (no unit)
-        self.image_numbins_spin = QSpinBox()
-        self.image_numbins_spin.setMinimum(5)
-        self.image_numbins_spin.setMaximum(200)
-        self.image_numbins_spin.setValue(35)
-        self.image_numbins_spin.setToolTip(
-            "Number of bins for accuracy histogram.\n\n"
-            "More bins show finer distribution detail but may appear noisy with few data points.\n"
-            "Fewer bins smooth the distribution but may hide features.\n\n"
-            "Rule of thumb: sqrt(N) to N/10 bins, where N is number of Monte Carlo runs.\n"
-            "For 1000 runs: 30-100 bins is reasonable.\n\n"
-            "Typical values: 20-50 bins"
-        )
-        plot_layout.addRow("Histogram Bins:", self.image_numbins_spin)
+        # Reset button
+        advanced_reset_btn = QPushButton("Reset to Defaults")
+        advanced_reset_btn.setProperty("class", "reset-button")
+        advanced_reset_btn.clicked.connect(self._reset_advanced_plot_settings)
+        advanced_layout.addRow("", advanced_reset_btn)
 
-        # Plot method selection (WLS vs OLS)
-        method_widget = QWidget()
-        method_layout = QHBoxLayout(method_widget)
-        method_layout.setContentsMargins(0, 0, 0, 0)
-        self.plot_method_wls_radio = QRadioButton("Weighted Least Squares (WLS)")
-        self.plot_method_ols_radio = QRadioButton("Ordinary Least Squares (OLS)")
-        self.plot_method_wls_radio.setChecked(True)
-        self.plot_method_wls_radio.setToolTip(
-            "Use Weighted Least Squares for diffusion coefficient estimation.\n\n"
-            "WLS accounts for heteroscedasticity (varying uncertainty across time points).\n"
-            "Weights are calculated from Gaussian fit parameter uncertainties.\n\n"
-            "Recommended for most cases as it provides more accurate estimates when\n"
-            "measurement precision varies with time (e.g., due to intensity decay).\n\n"
-            "This affects which data column is plotted in histograms."
-        )
-        self.plot_method_ols_radio.setToolTip(
-            "Use Ordinary Least Squares for diffusion coefficient estimation.\n\n"
-            "OLS treats all time points equally regardless of measurement uncertainty.\n"
-            "Simpler method, appropriate when all points have similar precision.\n\n"
-            "May be less accurate than WLS when signal quality varies with time,\n"
-"but easier to interpret and faster to compute.\n\n"
-            "This affects which data column is plotted in histograms."
-        )
-        method_layout.addWidget(self.plot_method_wls_radio)
-        method_layout.addWidget(self.plot_method_ols_radio)
-        method_layout.addStretch()
-        plot_layout.addRow("Fit Method:", method_widget)
+        self.advanced_plot_group.set_content_widget(advanced_content)
+        layout.addWidget(self.advanced_plot_group)
 
-        layout.addWidget(plot_group)
-
-        # Plot Actions group
+        # === Plot Actions ===
         actions_group = QGroupBox("Plot Actions")
         actions_layout = QHBoxLayout(actions_group)
 
         self.regenerate_plot_button = QPushButton("Regenerate Plot")
-        self.regenerate_plot_button.setToolTip(
-            "Regenerate plot using data currently in memory with updated settings.\n\n"
-            "Use this to adjust plot appearance (size, resolution, fonts, bins) without\n"
-            "re-running the entire simulation.\n\n"
-            "Requires data from a completed simulation or loaded CSV file.\n"
-            "All plot settings above will be applied to the regenerated plot."
-        )
+        self.regenerate_plot_button.setToolTip("Regenerate plot with current settings")
         self.regenerate_plot_button.clicked.connect(self.regenerate_plot)
 
         self.load_results_button = QPushButton("Load Results")
-        self.load_results_button.setToolTip(
-            "Load simulation results from a previously saved CSV file.\n\n"
-            "Opens a file dialog to select a results CSV file.\n"
-            "Generates accuracy histogram plot with current image settings.\n\n"
-            "Useful for creating plots with different formatting or proximity levels\n"
-            "without re-running time-consuming simulations."
-        )
+        self.load_results_button.setToolTip("Load results from CSV file")
         self.load_results_button.clicked.connect(self.load_and_plot_results)
 
         actions_layout.addWidget(self.regenerate_plot_button)
@@ -1113,43 +1215,106 @@ class DiceGUI(QMainWindow):
         actions_layout.addStretch()
 
         layout.addWidget(actions_group)
-
-        # Info label
-        info_label = QLabel(
-            "These settings control the appearance and format of output plots.\n\n"
-            "Image Type: File format for saved plots (PNG recommended for most uses).\n\n"
-            "Image Width/Height: Physical dimensions of the output image.\n\n"
-            "Resolution: Higher DPI values produce sharper images but larger file sizes.\n\n"
-            "Font/Tick sizes: Typography units (pt = points, px = pixels)."
-        )
-        info_label.setWordWrap(True)
-        info_label.setProperty("class", "info-text")
-        layout.addWidget(info_label)
-
         layout.addStretch()
 
         return tab
 
-    def create_control_panel(self) -> QWidget:
-        """Create the bottom control panel."""
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+    def _apply_output_preset(self, index: int):
+        """Apply selected output preset."""
+        from dice_gui.presets import get_preset
 
-        # Progress bar
+        preset_key = self.preset_combo.currentData()
+        if preset_key is None:
+            return
+
+        preset = get_preset(preset_key)
+        if preset is None:
+            return
+
+        settings = preset.settings
+
+        self.image_type_combo.setCurrentText(settings.get("image_type", "png"))
+        self.image_width_spin.setValue(settings.get("image_width", 16.0))
+        self.image_width_unit_combo.setCurrentText(settings.get("image_width_unit", "cm"))
+        self.image_height_spin.setValue(settings.get("image_height", 10.0))
+        self.image_height_unit_combo.setCurrentText(settings.get("image_height_unit", "cm"))
+        self.image_dpi_spin.setValue(settings.get("image_dpi", 300))
+        self.image_numbins_spin.setValue(settings.get("image_numbins", 35))
+        self.image_font_size_spin.setValue(settings.get("image_font_size", 6))
+        self.image_font_unit_combo.setCurrentText(settings.get("image_font_unit", "pt"))
+        self.image_tick_length_spin.setValue(settings.get("image_tick_length", 6))
+        self.image_tick_width_spin.setValue(settings.get("image_tick_width", 2))
+
+    def _reset_basic_plot_settings(self):
+        """Reset basic plot settings to defaults."""
+        from dice_gui.presets import OUTPUT_DEFAULTS
+
+        self.image_type_combo.setCurrentText(OUTPUT_DEFAULTS["image_type"])
+        self.image_width_spin.setValue(OUTPUT_DEFAULTS["image_width"])
+        self.image_width_unit_combo.setCurrentText(OUTPUT_DEFAULTS["image_width_unit"])
+        self.image_height_spin.setValue(OUTPUT_DEFAULTS["image_height"])
+        self.image_height_unit_combo.setCurrentText(OUTPUT_DEFAULTS["image_height_unit"])
+        self.image_dpi_spin.setValue(OUTPUT_DEFAULTS["image_dpi"])
+        self.image_numbins_spin.setValue(OUTPUT_DEFAULTS["image_numbins"])
+        self.preset_combo.setCurrentIndex(0)
+
+    def _reset_advanced_plot_settings(self):
+        """Reset advanced plot settings to defaults."""
+        from dice_gui.presets import OUTPUT_DEFAULTS
+
+        self.image_font_size_spin.setValue(OUTPUT_DEFAULTS["image_font_size"])
+        self.image_font_unit_combo.setCurrentText(OUTPUT_DEFAULTS["image_font_unit"])
+        self.image_tick_length_spin.setValue(OUTPUT_DEFAULTS["image_tick_length"])
+        self.image_tick_length_unit_combo.setCurrentText(OUTPUT_DEFAULTS["image_tick_length_unit"])
+        self.image_tick_width_spin.setValue(OUTPUT_DEFAULTS["image_tick_width"])
+        self.image_tick_width_unit_combo.setCurrentText(OUTPUT_DEFAULTS["image_tick_width_unit"])
+
+    def create_control_panel(self) -> QWidget:
+        """Create the sticky bottom control panel."""
+        from PyQt6.QtCore import QElapsedTimer
+
+        panel = QWidget()
+        panel.setObjectName("sticky-action-bar")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Progress row
+        progress_layout = QHBoxLayout()
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.progress_bar, stretch=1)
+
+        self.elapsed_label = QLabel("Elapsed: 00:00")
+        self.elapsed_label.setVisible(False)
+        self.elapsed_label.setMinimumWidth(100)
+        progress_layout.addWidget(self.elapsed_label)
+
+        layout.addLayout(progress_layout)
 
         # Status label
-        self.status_label = QLabel("")
+        self.status_label = QLabel("Ready to run")
         self.status_label.setProperty("class", "status-info")
         layout.addWidget(self.status_label)
 
-        # Buttons
+        # Buttons row
         button_layout = QHBoxLayout()
 
-        self.run_button = QPushButton("Run Simulation")
+        # Load Example dropdown
+        self.example_button = QPushButton("Load Example...")
+        self.example_button.setToolTip("Load pre-configured example parameters")
+        self.example_menu = QMenu()
+        self.example_menu.addAction("Quick Test (100 runs)",
+                                    lambda: self.load_example("quick_test"))
+        self.example_menu.addAction("High Precision (10,000 runs)",
+                                    lambda: self.load_example("high_precision"))
+        self.example_menu.addAction("Publication Quality",
+                                    lambda: self.load_example("publication"))
+        self.example_button.setMenu(self.example_menu)
+
+        self.run_button = QPushButton("Run Simulation (Ctrl+R)")
         self.run_button.setObjectName("run-button")
+        self.run_button.setShortcut(QKeySequence("Ctrl+R"))
         self.run_button.clicked.connect(self.run_simulation)
 
         self.stop_button = QPushButton("Stop")
@@ -1157,14 +1322,28 @@ class DiceGUI(QMainWindow):
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop_simulation)
 
+        button_layout.addWidget(self.example_button)
         button_layout.addStretch()
         button_layout.addWidget(self.run_button)
         button_layout.addWidget(self.stop_button)
-        button_layout.addStretch()
 
         layout.addLayout(button_layout)
 
+        # Initialize elapsed time timer
+        self.elapsed_timer = QElapsedTimer()
+        from PyQt6.QtCore import QTimer
+        self.elapsed_display_timer = QTimer()
+        self.elapsed_display_timer.timeout.connect(self._update_elapsed_time)
+
         return panel
+
+    def _update_elapsed_time(self):
+        """Update elapsed time display."""
+        elapsed_ms = self.elapsed_timer.elapsed()
+        seconds = elapsed_ms // 1000
+        minutes = seconds // 60
+        secs = seconds % 60
+        self.elapsed_label.setText(f"Elapsed: {minutes:02d}:{secs:02d}")
 
     def set_default_values(self):
         """Set default values for all inputs."""
@@ -1313,6 +1492,24 @@ class DiceGUI(QMainWindow):
         proximity_value = self.proximity_spin.value()
         self.proximity_target.set_proximity(proximity_value)
 
+    def _update_output_path_preview(self):
+        """Update the output path preview based on current slug."""
+        from pathlib import Path
+
+        slug = self.filename_slug_input.text().strip()
+        if not slug:
+            self.output_path_preview.setText("Enter a filename slug to see output paths")
+            return
+
+        output_dir = Path.cwd() / 'output' / slug
+        image_type = getattr(self, 'image_type_combo', None)
+        ext = image_type.currentText() if image_type else 'png'
+
+        self.output_path_preview.setText(
+            f"<b>Directory:</b> {output_dir}<br>"
+            f"<b>Files:</b> {slug}.csv, {slug}_summary.txt, {slug}_accuracy_histogram.{ext}"
+        )
+
     def browse_noise_file(self):
         """Open file dialog to select noise data file."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1347,13 +1544,8 @@ class DiceGUI(QMainWindow):
         else:  # cm
             height_cm = height_value
 
-        # Convert resolution to dpi (standard unit)
-        dpi_value = self.image_dpi_spin.value()
-        dpi_unit = self.image_dpi_unit_combo.currentText()
-        if dpi_unit == "dpcm":
-            dpi = dpi_value * 2.54
-        else:  # dpi
-            dpi = dpi_value
+        # Resolution in DPI
+        dpi = self.image_dpi_spin.value()
 
         # Convert font size to points
         font_size = self.image_font_size_spin.value()
@@ -1634,13 +1826,8 @@ class DiceGUI(QMainWindow):
         else:  # cm
             height_cm = height_value
 
-        # Convert resolution to dpi (standard unit)
-        dpi_value = self.image_dpi_spin.value()
-        dpi_unit = self.image_dpi_unit_combo.currentText()
-        if dpi_unit == "dpcm":
-            dpi = dpi_value * 2.54
-        else:  # dpi
-            dpi = dpi_value
+        # Resolution in DPI
+        dpi = self.image_dpi_spin.value()
 
         # Font size, tick length, and tick width units
         # For now, we'll pass both value and unit, but matplotlib expects points
@@ -1743,16 +1930,30 @@ class DiceGUI(QMainWindow):
             QMessageBox.critical(self, "Parameter Validation Error", error_message)
             return
 
-        # Update UI
+        # Update UI for running state
         self.run_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # Indeterminate progress
+        self.elapsed_label.setVisible(True)
+
+        # Set progress bar mode based on multiprocessing
+        if dice_params.get('multiprocessing', True):
+            self.progress_bar.setRange(0, 0)  # Indeterminate
+        else:
+            num_runs = dice_params.get('number of runs', 1000)
+            self.progress_bar.setRange(0, num_runs)
+            self.progress_bar.setValue(0)
+
         self.status_label.setText("Running simulation...")
+
+        # Start elapsed time tracking
+        self.elapsed_timer.start()
+        self.elapsed_display_timer.start(1000)
 
         # Create and start simulation thread
         self.simulation_thread = SimulationThread(self.interface, dice_params)
         self.simulation_thread.progress.connect(self.update_progress)
+        self.simulation_thread.iteration_progress.connect(self._update_iteration_progress)
         self.simulation_thread.finished.connect(self.simulation_finished)
         self.simulation_thread.error.connect(self.simulation_error)
         self.simulation_thread.start()
@@ -1768,6 +1969,11 @@ class DiceGUI(QMainWindow):
     def update_progress(self, message: str):
         """Update progress display."""
         self.status_label.setText(message)
+
+    def _update_iteration_progress(self, current: int, total: int):
+        """Update progress bar with iteration count."""
+        self.progress_bar.setValue(current)
+        self.status_label.setText(f"Running {current}/{total}")
 
     def simulation_finished(self, result):
         """Handle simulation completion."""
@@ -1796,6 +2002,8 @@ class DiceGUI(QMainWindow):
         self.run_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
+        self.elapsed_label.setVisible(False)
+        self.elapsed_display_timer.stop()
 
     # ============ Menu Actions ============
 
@@ -1875,6 +2083,42 @@ class DiceGUI(QMainWindow):
             self, "Parameters Loaded",
             f"Parameters loaded from:\n{file_path}"
         )
+
+    def load_example(self, example_name: str):
+        """Load example parameters."""
+        if self.parameters_modified:
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "You have unsaved changes. Load example anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
+        # Try to load from file first
+        example_file = Path(__file__).parent.parent / "data" / "examples" / f"{example_name}.txt"
+        if example_file.exists():
+            try:
+                self.load_parameters_from_file(str(example_file))
+                return
+            except Exception:
+                pass  # Fall back to embedded
+
+        # Use embedded parameters
+        if example_name in EXAMPLE_PARAMETERS:
+            self._populating = True
+            try:
+                self.populate_gui_from_parameters(EXAMPLE_PARAMETERS[example_name])
+            finally:
+                self._populating = False
+            self.current_parameter_file = None
+            self.parameters_modified = False
+            self.update_window_title()
+
+            QMessageBox.information(
+                self, "Example Loaded",
+                f"Loaded '{example_name}' example parameters."
+            )
 
     def save_parameters(self):
         """Save parameters to the current file or prompt for location."""
@@ -2189,6 +2433,10 @@ class DiceGUI(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
+        # Validation status (shows error count when present)
+        self.validation_status_label = QLabel()
+        self.status_bar.addPermanentWidget(self.validation_status_label)
+
         # Permanent version label on right
         version_label = QLabel(f"DICE v{__version__}")
         self.status_bar.addPermanentWidget(version_label)
@@ -2266,6 +2514,202 @@ class DiceGUI(QMainWindow):
             return  # Don't mark modified during initial population
         self.parameters_modified = True
         self.update_window_title()
+
+    def setup_validation(self):
+        """Configure real-time validation for all input fields."""
+        self.validation_manager = ValidationManager(self)
+
+        # Connect validation manager signals
+        self.validation_manager.validity_changed.connect(self._on_validity_changed)
+        self.validation_manager.field_validated.connect(self._on_field_validated)
+
+        # Register always-required fields
+        self.validation_manager.register_field(
+            "filename_slug", self.filename_slug_input,
+            lambda v: validate_filename_slug(v)
+        )
+        self.validation_manager.register_field(
+            "amplitude", self.amplitude_input,
+            lambda v: validate_positive_float(v, "Amplitude", allow_zero=True)
+        )
+        self.validation_manager.register_field(
+            "mean", self.mean_input,
+            lambda v: validate_float(v, "Mean position")
+        )
+        self.validation_manager.register_field(
+            "width", self.width_input,
+            lambda v: validate_positive_float(v, "Profile width")
+        )
+        self.validation_manager.register_field(
+            "spatial_width", self.spatial_width_input,
+            lambda v: validate_positive_float(v, "Spatial width")
+        )
+
+        # Register conditional diffusion fields
+        self.validation_manager.register_field(
+            "diffusion_length", self.diffusion_length_input,
+            lambda v: validate_positive_float(v, "Diffusion length"),
+            condition_group="diffusion_length", condition_category="diffusion"
+        )
+        self.validation_manager.register_field(
+            "diffusion_coeff", self.diffusion_coeff_input,
+            lambda v: validate_positive_float(v, "Diffusion coefficient", allow_zero=True),
+            condition_group="diffusion_coeff", condition_category="diffusion"
+        )
+        self.validation_manager.register_field(
+            "lifetime", self.lifetime_input,
+            lambda v: validate_positive_float(v, "Lifetime", allow_zero=True),
+            condition_group="diffusion_coeff", condition_category="diffusion"
+        )
+
+        # Register conditional noise fields
+        self.validation_manager.register_field(
+            "noise_value", self.noise_value_input,
+            lambda v: validate_positive_float(v, "Noise value", allow_zero=True),
+            condition_group="noise_fixed", condition_category="noise"
+        )
+        self.validation_manager.register_field(
+            "noise_file", self.noise_file_input,
+            lambda v: validate_file_path(v),
+            condition_group="noise_estimate", condition_category="noise"
+        )
+
+        # Register conditional time fields
+        self.validation_manager.register_field(
+            "time_start", self.time_start_input,
+            lambda v: validate_float(v, "Start time"),
+            condition_group="time_range", condition_category="time"
+        )
+        self.validation_manager.register_field(
+            "time_stop", self.time_stop_input,
+            lambda v: validate_float(v, "Stop time"),
+            condition_group="time_range", condition_category="time"
+        )
+        self.validation_manager.register_field(
+            "time_series", self.time_series_input,
+            lambda v: validate_time_series(v),
+            condition_group="time_series", condition_category="time"
+        )
+
+        # Connect radio buttons to condition manager
+        self.diffusion_length_radio.toggled.connect(
+            lambda checked: self.validation_manager.set_condition_active(
+                "diffusion", "diffusion_length" if checked else "diffusion_coeff"
+            ) if checked else None
+        )
+        self.noise_fixed_radio.toggled.connect(
+            lambda checked: self.validation_manager.set_condition_active(
+                "noise", "noise_fixed" if checked else "noise_estimate"
+            ) if checked else None
+        )
+        self.time_range_radio.toggled.connect(
+            lambda checked: self.validation_manager.set_condition_active(
+                "time", "time_range" if checked else "time_series"
+            ) if checked else None
+        )
+
+        # Set initial condition states
+        self.validation_manager.set_condition_active("diffusion", "diffusion_length")
+        self.validation_manager.set_condition_active("noise", "noise_fixed")
+        self.validation_manager.set_condition_active("time", "time_range")
+
+    def _create_error_label(self) -> QLabel:
+        """Create an inline error label for a validated field."""
+        error_label = QLabel("")
+        error_label.setProperty("class", "validation-error")
+        error_label.setWordWrap(True)
+        error_label.setMinimumHeight(20)
+        error_label.setVisible(False)
+        return error_label
+
+    def _on_validity_changed(self, is_valid: bool) -> None:
+        """Handle overall form validity change."""
+        self.run_button.setEnabled(is_valid)
+        if is_valid:
+            self.status_label.setText("Ready to run")
+            self.status_label.setProperty("class", "status-info")
+        else:
+            self.status_label.setText("Please fix validation errors before running")
+            self.status_label.setProperty("class", "status-error")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+
+    def _on_field_validated(self, field_id: str, is_valid: bool, error_message: str) -> None:
+        """Handle individual field validation result."""
+        field = self.validation_manager._fields.get(field_id)
+        if not field:
+            return
+
+        apply_validation_style(field.widget, is_valid)
+
+        # Update inline error label
+        error_label = self._error_labels.get(field_id)
+        if error_label:
+            if is_valid:
+                error_label.setText("")
+                error_label.setVisible(False)
+            else:
+                error_label.setText(error_message)
+                error_label.setVisible(True)
+
+        # Update tooltip with error message
+        if not is_valid:
+            original_tooltip = field.widget.property("original_tooltip")
+            if original_tooltip is None:
+                original_tooltip = field.widget.toolTip()
+                field.widget.setProperty("original_tooltip", original_tooltip)
+            field.widget.setToolTip(f"⚠ {error_message}\n\n{original_tooltip}")
+        else:
+            original_tooltip = field.widget.property("original_tooltip")
+            if original_tooltip:
+                field.widget.setToolTip(original_tooltip)
+
+        # Update tab completion indicators
+        self._update_tab_indicators()
+
+        # Update status bar validation count
+        self._update_validation_status_bar()
+
+    def _update_tab_indicators(self):
+        """Update tab labels with validation status indicators."""
+        tab_names = [
+            "Simulation Setup",
+            "Physical Parameters",
+            "Experimental Conditions",
+            "Analysis Settings",
+            "Output Settings"
+        ]
+
+        for tab_idx, field_ids in self._tab_fields.items():
+            if not field_ids:
+                self.tabs.setTabText(tab_idx, tab_names[tab_idx])
+                continue
+
+            has_invalid = False
+            for fid in field_ids:
+                field = self.validation_manager._fields.get(fid)
+                if field and field.is_active and not field.last_result.is_valid:
+                    has_invalid = True
+                    break
+
+            indicator = " ⚠" if has_invalid else ""
+            self.tabs.setTabText(tab_idx, f"{tab_names[tab_idx]}{indicator}")
+
+    def _update_validation_status_bar(self):
+        """Update status bar with validation error count."""
+        error_count = sum(
+            1 for f in self.validation_manager._fields.values()
+            if f.is_active and not f.last_result.is_valid
+        )
+        if error_count:
+            self.validation_status_label.setText(
+                f"{error_count} validation error{'s' if error_count != 1 else ''}"
+            )
+            self.validation_status_label.setProperty("class", "status-error")
+        else:
+            self.validation_status_label.setText("")
+        self.validation_status_label.style().unpolish(self.validation_status_label)
+        self.validation_status_label.style().polish(self.validation_status_label)
 
     def show_about_dialog(self):
         """Show the About DICE dialog."""

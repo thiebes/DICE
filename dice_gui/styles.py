@@ -221,6 +221,109 @@ class DiceTheme:
                 width: 18px;
                 height: 18px;
             }}
+
+            /* Validation states for input fields */
+            QLineEdit[validation-state="invalid"],
+            QTextEdit[validation-state="invalid"] {{
+                border: 2px solid {to_css(colors['error'])};
+                background-color: rgba({colors['error'].red()}, {colors['error'].green()}, {colors['error'].blue()}, 0.05);
+            }}
+
+            QLineEdit[validation-state="valid"],
+            QTextEdit[validation-state="valid"] {{
+                border: 2px solid {to_css(colors['success'])};
+            }}
+
+            /* Disabled run button styling */
+            QPushButton#run-button:disabled {{
+                background-color: palette(mid);
+                color: palette(midlight);
+            }}
+
+            /* Collapsible group box styling */
+            CollapsibleGroupBox {{
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 4px;
+            }}
+
+            CollapsibleGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px 0 24px;
+            }}
+
+            /* Required field indicators */
+            QLabel.required-label {{
+                font-weight: 600;
+            }}
+
+            /* Optional field styling */
+            QLabel.optional-label {{
+                color: {to_css(colors['info_text'])};
+            }}
+
+            /* Card-style containers for radio-dependent options */
+            QFrame.option-card {{
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                padding: 12px;
+                margin-left: 18px;
+                margin-top: 4px;
+                margin-bottom: 4px;
+            }}
+
+            QFrame.option-card:disabled {{
+                background-color: transparent;
+                border-color: palette(midlight);
+            }}
+
+            /* Advanced section styling */
+            CollapsibleGroupBox.advanced-section {{
+                border-left: 2px dashed palette(mid);
+            }}
+
+            /* Reset button styling */
+            QPushButton.reset-button {{
+                padding: 4px 8px;
+                font-size: 10pt;
+                min-height: 28px;
+            }}
+
+            /* Preset combo box */
+            QComboBox.preset-selector {{
+                min-width: 150px;
+                padding: 6px 12px;
+            }}
+
+            /* Sticky action bar */
+            QWidget#sticky-action-bar {{
+                border-top: 1px solid palette(mid);
+                padding: 10px;
+                background-color: palette(window);
+            }}
+
+            /* Inline validation error labels */
+            QLabel.validation-error {{
+                color: {to_css(colors['error'])};
+                font-size: 9pt;
+                padding-left: 2px;
+                margin-top: 2px;
+                min-height: 20px;
+            }}
+
+            /* Output path preview styling */
+            QLabel.output-path-preview {{
+                color: {to_css(colors['info_text'])};
+                font-family: monospace;
+                font-size: 9pt;
+                background-color: palette(base);
+                border: 1px solid palette(mid);
+                border-radius: 3px;
+                padding: 8px;
+                margin-top: 4px;
+            }}
         """
 
     def get_button_style(self, button_type: str = 'primary') -> str:
