@@ -124,24 +124,27 @@ def estimates_precision(
     """
     if len(df) == 0:
         raise ValueError("The DataFrame is empty.")
-    
+
+    # Work on a copy to avoid SettingWithCopyWarning
+    df = df.copy()
+
     p_low = 1 - proximity_level
     p_high = 1 + proximity_level
-    
+
     # Calculate ratios for WLS and OLS
     if 'weighted fit diffusion coeff [cm^2/s]' in df.columns:
         df['d_wls_over_d_nom'] = (
-            df['weighted fit diffusion coeff [cm^2/s]'] / 
+            df['weighted fit diffusion coeff [cm^2/s]'] /
             df['nominal diffusion coeff [cm^2/s]']
         )
         wls_within = df['d_wls_over_d_nom'].between(p_low, p_high)
         wls_portion_pct = 100 * wls_within.sum() / len(df)
     else:
         wls_portion_pct = 0.0
-    
+
     if 'unweighted fit diffusion coeff [cm^2/s]' in df.columns:
         df['d_ols_over_d_nom'] = (
-            df['unweighted fit diffusion coeff [cm^2/s]'] / 
+            df['unweighted fit diffusion coeff [cm^2/s]'] /
             df['nominal diffusion coeff [cm^2/s]']
         )
         ols_within = df['d_ols_over_d_nom'].between(p_low, p_high)

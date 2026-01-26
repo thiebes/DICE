@@ -51,7 +51,7 @@ class TestEndToEndSimulation:
         # Create minimal parameters
         x_axis = np.linspace(-5, 5, 50)
         time_axis = np.array([0.0, 0.5, 1.0])
-        noise_values = [0.02, 0.02, 0.02]
+        noise_values = [0.02]  # Single noise value for predictable run count
 
         sim_params = create_parameters_from_legacy(
             parameters_dict={
@@ -76,25 +76,24 @@ class TestEndToEndSimulation:
         )
 
         assert result is not None
-        assert len(result) == 3  # 3 runs
+        assert result.num_runs == 3
+        assert len(result.run_results) == 3
 
     def test_statistics_analysis(self):
         """Verify statistical analysis functions work correctly."""
-        from dice.analysis.statistics import (
-            calculate_proximity_percentage,
-            calculate_mean_and_std
-        )
+        from dice.analysis.statistics import calculate_precision
 
         # Test proximity calculation
         estimates = np.array([0.95, 1.0, 1.05, 1.1, 0.9])
         nominal = 1.0
         proximity = 0.1
 
-        pct = calculate_proximity_percentage(estimates, nominal, proximity)
-        assert 0 <= pct <= 100
+        pct = calculate_precision(estimates, nominal, proximity)
+        assert 0 <= pct <= 1  # Returns fraction, not percentage
 
-        # Test mean/std calculation
-        mean, std = calculate_mean_and_std(estimates)
+        # Test basic statistics
+        mean = np.mean(estimates)
+        std = np.std(estimates)
         assert np.isclose(mean, 1.0, atol=0.1)
         assert std > 0
 
@@ -212,13 +211,16 @@ class TestCoreModules:
 
         x = np.linspace(-5, 5, 100)
         signal = np.exp(-x**2 / 2)
+        # add_noise expects 2D array (time_frames x spatial_points)
+        signal_2d = signal.reshape(1, -1)
 
-        noisy = add_noise(signal, noise_std=0.01, seed=42)
+        result = add_noise(signal_2d, noise_sigma=0.01, seed=42)
+        noisy = result['y_values_t']  # add_noise returns dict with 'y_values_t' key
 
-        assert noisy.shape == signal.shape
-        assert not np.allclose(noisy, signal)  # Noise was added
+        assert noisy.shape == signal_2d.shape
+        assert not np.allclose(noisy, signal_2d)  # Noise was added
         # Signal correlation should be high
-        correlation = np.corrcoef(signal, noisy)[0, 1]
+        correlation = np.corrcoef(signal_2d.flatten(), noisy.flatten())[0, 1]
         assert correlation > 0.9
 
 

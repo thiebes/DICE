@@ -4,7 +4,7 @@ version = "1.3.0"
 description = "Diffusion Insight Computation Engine - Monte Carlo simulation tool for quantifying noise effects in optical measures of excited state transport"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "CC-BY-4.0"}
+license = {text = "MIT"}
 authors = [
     {name = "Joseph J. Thiebes"}
 ]
@@ -13,7 +13,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Physics",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

@@ -9,62 +9,58 @@ __version__ = "1.3.0"
 __author__ = "Joseph J. Thiebes"
 __license__ = "CC BY 4.0"
 
-# Import main functionality for backward compatibility with original dice.py
-try:
-    # Import the original dice_runner function from the monolithic file
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from dice import dice_runner
-except ImportError:
-    # Fallback to modular implementation if monolithic file not available
-    from .io.parameters import open_parameters
-    from .analysis.simulation import run_monte_carlo_simulation
-    from .analysis.statistics import analyze_simulation_results
-    from .utils.legacy_compatibility import create_parameters_from_legacy
-    from .utils.axes import make_x_axis, make_time_axis
-    import numpy as np
+# Import main functionality from modular implementation
+from .io.parameters import open_parameters
+from .analysis.simulation import run_monte_carlo_simulation
+from .analysis.statistics import analyze_simulation_results
+from .utils.legacy_compatibility import create_parameters_from_legacy
+from .utils.axes import make_x_axis, make_time_axis
 
-    def dice_runner(parameters_filename):
-        """
-        Modular implementation of dice_runner for backward compatibility.
 
-        Parameters
-        ----------
-        parameters_filename : str
-            Path to parameters file.
-        """
-        # Load parameters
-        parameters = open_parameters(parameters_filename)
+def dice_runner(parameters_filename):
+    """
+    Run a DICE simulation from a parameters file.
 
-        # Create axes
-        x_axis = parameters['x array']
-        time_axis = parameters['time series']
+    Parameters
+    ----------
+    parameters_filename : str
+        Path to parameters file.
 
-        # Create simulation parameters
-        sim_params = create_parameters_from_legacy(
-            parameters_dict=parameters,
-            diffusion_coefficient=parameters['nominal diffusion coefficient'],
-            lifetime=parameters['nominal lifetime (tau)'],
-            diffusion_length=parameters['nominal diffusion length']
-        )
+    Returns
+    -------
+    SimulationResult
+        The simulation results.
+    """
+    # Load parameters
+    parameters = open_parameters(parameters_filename)
 
-        # Run simulation
-        result = run_monte_carlo_simulation(
-            parameters=sim_params,
-            x_axis=x_axis,
-            time_axis=time_axis,
-            noise_values=parameters['noise series'],
-            num_runs=parameters['number of runs'],
-            multiprocessing=parameters.get('multiprocessing', 1) != 0,
-            retain_profile_data=parameters.get('retain profile data', 0) != 0
-        )
+    # Create axes
+    x_axis = parameters['x array']
+    time_axis = parameters['time series']
 
-        # Analyze results
-        analysis = analyze_simulation_results(result)
+    # Create simulation parameters
+    sim_params = create_parameters_from_legacy(
+        parameters_dict=parameters,
+        diffusion_coefficient=parameters['nominal diffusion coefficient'],
+        lifetime=parameters['nominal lifetime (tau)'],
+        diffusion_length=parameters['nominal diffusion length']
+    )
 
-        print("DICE simulation completed using modular implementation.")
-        return result
+    # Run simulation
+    result = run_monte_carlo_simulation(
+        parameters=sim_params,
+        x_axis=x_axis,
+        time_axis=time_axis,
+        noise_values=parameters['noise series'],
+        num_runs=parameters['number of runs'],
+        multiprocessing=parameters.get('multiprocessing', 1) != 0,
+        retain_profile_data=parameters.get('retain profile data', 0) != 0
+    )
+
+    # Analyze results
+    analyze_simulation_results(result)
+
+    return result
 
 # Export main functions
 __all__ = [

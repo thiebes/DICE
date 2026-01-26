@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="dice-diffusion",
-    version="1.2.0",
+    version="1.3.0",
     author="Joseph J. Thiebes",
     author_email="joseph@thiebes.org",
     description="Diffusion Insight Computation Engine - A tool for quantifying noise effects in optical measures of excited state transport",

@@ -269,11 +269,10 @@ class TestParameterParser:
         }
         
         result = parameter_parser(params)
-        
-        # Check defaults
+
+        # Check defaults (proximity level is NOT defaulted - handled by CLI)
         assert result['multiprocessing'] == 1
         assert result['filename slug'] == 'dice_simulation'
-        assert result['proximity level'] == 0.1
         assert result['retain profile data'] == 0
         assert result['image type'] == 'png'
 

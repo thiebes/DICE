@@ -5,6 +5,14 @@ This module provides functions for creating histograms and statistical
 distribution plots from simulation results.
 """
 
+import os
+import matplotlib
+
+# Use non-interactive backend for thread safety in GUI/CI contexts
+# Allow override via MPLBACKEND environment variable
+if os.environ.get('MPLBACKEND') is None:
+    matplotlib.use('Agg')
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
