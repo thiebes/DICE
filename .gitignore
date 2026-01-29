@@ -7,6 +7,10 @@ __pycache__/
 # Ignore DICE output directories
 output/
 
+# PyInstaller build artifacts
+build/
+dist/
+
 # Claude-related
 CLAUDE.md
 .claude/
