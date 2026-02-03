@@ -8,7 +8,7 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union
-from ..models.results import SimulationResult
+from ..models.results import MonteCarloOutput
 
 
 def calculate_precision(
@@ -161,7 +161,7 @@ def estimates_precision(
 
 
 def analyze_simulation_results(
-    result: SimulationResult,
+    result: MonteCarloOutput,
     proximity_levels: Optional[List[float]] = None
 ) -> Dict:
     """
@@ -169,7 +169,7 @@ def analyze_simulation_results(
     
     Parameters
     ----------
-    result : SimulationResult
+    result : MonteCarloOutput
         Simulation results to analyze.
     proximity_levels : List[float], optional
         List of proximity levels to test. If None, uses [0.05, 0.1, 0.2, 0.5].

@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Union, TextIO
 import json
 import csv
 
-from ..models.results import SimulationResult, RunResult
+from ..models.results import MonteCarloOutput, RunResult
 from ..utils.converters import slope_to_diffusion_constant
 
 
@@ -37,7 +37,7 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
 
 
 def export_collated_results(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     filename: Union[str, Path],
     length_unit: str = 'micrometer',
     time_unit: str = 'nanosecond'
@@ -47,7 +47,7 @@ def export_collated_results(
     
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Simulation results to export.
     filename : str or Path
         Output CSV filename.
@@ -124,7 +124,7 @@ def export_collated_results(
 
 
 def write_summary_file(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     filename: Union[str, Path],
     parameters: Dict[str, Any],
     analysis: Optional[Dict[str, Any]] = None,
@@ -136,7 +136,7 @@ def write_summary_file(
     
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Simulation results.
     filename : str or Path
         Output filename.
@@ -220,7 +220,7 @@ def write_summary_file(
 
 
 def export_to_json(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     filename: Union[str, Path],
     include_profile_data: bool = False
 ) -> None:
@@ -229,7 +229,7 @@ def export_to_json(
     
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Simulation results.
     filename : str or Path
         Output JSON filename.
@@ -334,7 +334,7 @@ def load_multiple_results(
 
 
 def export_legacy_format(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     result_dictionary: Dict[str, Any],
     csv_filename: Union[str, Path],
     summary_filename: Union[str, Path],
@@ -346,7 +346,7 @@ def export_legacy_format(
     
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Modern format results.
     result_dictionary : dict
         Legacy format result dictionary.

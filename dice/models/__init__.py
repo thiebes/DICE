@@ -14,9 +14,11 @@ from .parameters import (
     OutputParameters,
 )
 from .results import (
-    SimulationResults,
+    MonteCarloOutput,
+    ProcessedSimulationResult,
     RunResult,
     StatisticalAnalysis,
+    SimulationResults,  # Deprecated alias
 )
 from .profiles import (
     ProfileData,
@@ -33,9 +35,11 @@ __all__ = [
     "TemporalParameters",
     "OutputParameters",
     # Results
-    "SimulationResults",
+    "MonteCarloOutput",
+    "ProcessedSimulationResult",
     "RunResult",
     "StatisticalAnalysis",
+    "SimulationResults",  # Deprecated alias
     # Profiles
     "ProfileData",
     "TimeSeriesProfile",

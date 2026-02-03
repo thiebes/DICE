@@ -14,15 +14,8 @@ from dice.analysis.statistics import (
     calculate_confidence_intervals,
     analyze_cnr_dependence,
 )
-from dice.models.results import RunResult
+from dice.models.results import RunResult, MonteCarloOutput
 
-
-class SimulationResult:
-    def __init__(self, parameters, run_results, num_runs, noise_values):
-        self.parameters = parameters
-        self.run_results = run_results
-        self.num_runs = num_runs
-        self.noise_values = noise_values
 # Import mock classes for testing
 from dice.utils.legacy_compatibility import MockSimulationParameters as SimulationParameters
 
@@ -180,7 +173,7 @@ class TestEstimatesPrecision:
         assert result['% fits within proximity']['unweighted fit'] == 0.0
 
 
-class TestAnalyzeSimulationResults:
+class TestAnalyzeMonteCarloOutputs:
     """Test comprehensive simulation analysis."""
     
     def test_basic_analysis(self):
@@ -213,7 +206,7 @@ class TestAnalyzeSimulationResults:
             )
             runs.append(run)
         
-        result = SimulationResult(
+        result = MonteCarloOutput(
             parameters=params,
             run_results=runs,
             num_runs=10,
@@ -267,7 +260,7 @@ class TestAnalyzeSimulationResults:
                 )
                 runs.append(run)
         
-        result = SimulationResult(
+        result = MonteCarloOutput(
             parameters=params,
             run_results=runs,
             num_runs=9,

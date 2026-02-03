@@ -171,10 +171,38 @@ class StatisticalAnalysis:
 
 
 @dataclass
-class SimulationResults:
+class MonteCarloOutput:
     """
-    Complete results from a DICE simulation.
-    
+    Raw output from Monte Carlo simulation runs.
+
+    Contains the direct results from run_monte_carlo_simulation() before
+    any statistical analysis is performed.
+
+    Attributes
+    ----------
+    parameters : Any
+        Simulation parameters object (SimulationParameters or None for CSV-loaded data).
+    run_results : List[RunResult]
+        Individual results from each Monte Carlo run.
+    num_runs : int
+        Total number of simulation runs completed.
+    noise_values : List[float]
+        List of noise sigma values used in the simulation.
+    """
+    parameters: Any
+    run_results: List[RunResult]
+    num_runs: int
+    noise_values: List[float] = field(default_factory=list)
+
+
+@dataclass
+class ProcessedSimulationResult:
+    """
+    Processed results from a DICE simulation with statistical analysis.
+
+    Contains fully analyzed simulation data with DataFrame representation
+    and statistical metrics, ready for export and reporting.
+
     Attributes
     ----------
     parameters : Dict[str, Any]
@@ -253,22 +281,22 @@ class SimulationResults:
             f.write(f"Total runs: {len(self.run_results)}\n")
             f.write(f"Output files: {self.filename_slug}_*\n")
     
-    def filter_by_cnr(self, min_cnr: float = None, 
-                     max_cnr: float = None) -> 'SimulationResults':
+    def filter_by_cnr(self, min_cnr: float = None,
+                     max_cnr: float = None) -> 'ProcessedSimulationResult':
         """
         Filter results by CNR range.
-        
+
         Parameters
         ----------
         min_cnr : float, optional
             Minimum CNR value.
         max_cnr : float, optional
             Maximum CNR value.
-        
+
         Returns
         -------
-        SimulationResults
-            New SimulationResults object with filtered data.
+        ProcessedSimulationResult
+            New ProcessedSimulationResult object with filtered data.
         """
         mask = np.ones(len(self.run_results), dtype=bool)
         
@@ -281,11 +309,11 @@ class SimulationResults:
             mask &= np.array(cnrs) <= max_cnr
         
         filtered_runs = [run for i, run in enumerate(self.run_results) if mask[i]]
-        
+
         # Recalculate analysis for filtered data
         # This would need the analysis calculation logic
         # For now, return with same analysis
-        return SimulationResults(
+        return ProcessedSimulationResult(
             parameters=self.parameters,
             run_results=filtered_runs,
             analysis=self.analysis,  # Should recalculate
@@ -294,5 +322,6 @@ class SimulationResults:
         )
 
 
-# Alias for compatibility
-SimulationResult = SimulationResults
+# Deprecated aliases for backward compatibility
+SimulationResults = ProcessedSimulationResult
+SimulationResult = ProcessedSimulationResult

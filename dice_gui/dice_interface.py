@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, Callable
 import sys
 import os
 
-from dice.models.results import RunResult
+from dice.models.results import RunResult, MonteCarloOutput
 
 
 class DiceInterface:
@@ -470,15 +470,12 @@ class DiceInterface:
                 )
                 run_results.append(run_result)
 
-            # Create mock SimpleSimulationResult
-            class SimpleSimulationResult:
-                def __init__(self, run_results, num_runs):
-                    self.run_results = run_results
-                    self.num_runs = num_runs
-
-            self.last_result = SimpleSimulationResult(
+            # Create MonteCarloOutput (parameters and noise_values unavailable from CSV)
+            self.last_result = MonteCarloOutput(
+                parameters=None,
                 run_results=run_results,
-                num_runs=num_runs
+                num_runs=num_runs,
+                noise_values=[]
             )
 
             # Store parameters for regeneration

@@ -14,7 +14,7 @@ from ..core.profiles import gaussian, make_diffusion_decay
 from ..core.noise import add_noise, fft_cnr
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit
 from ..models.parameters import SimulationParameters
-from ..models.results import RunResult, SimulationResult
+from ..models.results import RunResult, MonteCarloOutput
 from ..utils.legacy_compatibility import (
     create_parameters_from_legacy,
     convert_legacy_result_to_dict
@@ -204,7 +204,7 @@ def run_monte_carlo_simulation(
     
     Returns
     -------
-    SimulationResult
+    MonteCarloOutput
         Aggregated simulation results.
     """
     # Create parameter sets for all runs
@@ -258,22 +258,14 @@ def run_monte_carlo_simulation(
             if progress_callback:
                 progress_callback(i + 1, total_runs)
     
-    # Create aggregated result with simplified structure
-    # We'll create a basic object that matches what the tests expect
-    class SimpleSimulationResult:
-        def __init__(self, parameters, run_results, num_runs, noise_values):
-            self.parameters = parameters
-            self.run_results = run_results
-            self.num_runs = num_runs
-            self.noise_values = noise_values
-    
-    simulation_result = SimpleSimulationResult(
+    # Create aggregated result
+    simulation_result = MonteCarloOutput(
         parameters=parameters,
         run_results=results,
         num_runs=total_runs,
         noise_values=noise_values
     )
-    
+
     return simulation_result
 
 

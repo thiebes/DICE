@@ -28,7 +28,7 @@ def dice_runner(parameters_filename):
 
     Returns
     -------
-    SimulationResult
+    MonteCarloOutput
         The simulation results.
     """
     # Load parameters
