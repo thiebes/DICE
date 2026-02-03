@@ -96,7 +96,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         # Initial guesses
         mu0 = x_axis[max_amp_idx]  # Mean at maximum within bounds
         sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
-        a0 = this_profile[max_amp_idx]  # Amplitude guess: max value within bounds
+        a0 = np.abs(this_profile[max_amp_idx])  # Amplitude guess: absolute max value within bounds
         
         # Set bounds for sigma^2
         sigma2_min = (xwid / xpix) ** 2  # Minimum: ~1 pixel width
