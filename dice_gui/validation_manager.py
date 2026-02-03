@@ -3,7 +3,7 @@ Real-time validation management for DICE GUI.
 """
 
 from typing import Dict, Callable, Optional, Set
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QLineEdit, QSpinBox, QDoubleSpinBox, QTextEdit
 
 from dice_gui.validators import ValidationResult
@@ -44,14 +44,11 @@ class ValidationManager(QObject):
     validity_changed = pyqtSignal(bool)
     field_validated = pyqtSignal(str, bool, str)  # field_id, is_valid, error_message
 
-    DEBOUNCE_MS = 300
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self._fields: Dict[str, FieldValidation] = {}
         self._condition_groups: Dict[str, Set[str]] = {}
         self._active_condition: Dict[str, str] = {}
-        self._debounce_timers: Dict[str, QTimer] = {}
         self._is_valid = True
 
     def register_field(
@@ -75,24 +72,24 @@ class ValidationManager(QObject):
         self._connect_widget_signals(field_id, widget)
 
     def _connect_widget_signals(self, field_id: str, widget: QWidget) -> None:
-        """Connect widget signals for real-time validation."""
+        """Connect widget signals for validation on focus loss."""
         if isinstance(widget, QLineEdit):
-            widget.textChanged.connect(lambda: self._on_text_changed(field_id))
+            widget.editingFinished.connect(lambda: self._validate_field(field_id))
         elif isinstance(widget, QTextEdit):
-            widget.textChanged.connect(lambda: self._on_text_changed(field_id))
+            # QTextEdit doesn't have editingFinished, use focusOutEvent via event filter
+            widget.installEventFilter(self)
+            widget.setProperty("field_id", field_id)
         elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
-            widget.valueChanged.connect(lambda: self._validate_field(field_id))
+            widget.editingFinished.connect(lambda: self._validate_field(field_id))
 
-    def _on_text_changed(self, field_id: str) -> None:
-        """Handle text change with debouncing."""
-        if field_id not in self._debounce_timers:
-            timer = QTimer()
-            timer.setSingleShot(True)
-            timer.timeout.connect(lambda: self._validate_field(field_id))
-            self._debounce_timers[field_id] = timer
-
-        self._debounce_timers[field_id].stop()
-        self._debounce_timers[field_id].start(self.DEBOUNCE_MS)
+    def eventFilter(self, obj: QWidget, event) -> bool:
+        """Handle focus out events for QTextEdit widgets."""
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.FocusOut:
+            field_id = obj.property("field_id")
+            if field_id:
+                self._validate_field(field_id)
+        return super().eventFilter(obj, event)
 
     def _validate_field(self, field_id: str) -> None:
         """Validate a single field and update state."""
@@ -169,5 +166,12 @@ class ValidationManager(QObject):
 def apply_validation_style(widget: QWidget, is_valid: bool) -> None:
     """Apply or remove validation error styling to a widget."""
     widget.setProperty("validation-state", "valid" if is_valid else "invalid")
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+def clear_validation_style(widget: QWidget) -> None:
+    """Remove validation styling from a widget (return to neutral state)."""
+    widget.setProperty("validation-state", None)
     widget.style().unpolish(widget)
     widget.style().polish(widget)

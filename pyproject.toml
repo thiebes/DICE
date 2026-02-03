@@ -48,7 +48,7 @@ dev = [
 
 [project.scripts]
 dice = "dice.cli.main:main"
-dice-gui = "dice_gui.dice_gui:main"
+dice-gui = "dice_gui.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
