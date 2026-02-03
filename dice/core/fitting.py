@@ -340,36 +340,47 @@ def diffusion_wls_fit(time_axis: np.ndarray, gaussfit_sigma2_t: np.ndarray,
     }
 
 
-def calculate_fit_weights(sigma2_errors: np.ndarray, 
-                         method: str = 'inverse_variance') -> np.ndarray:
+def calculate_wls_weights(
+    sigma2_values: np.ndarray,
+    sigma2_errors: np.ndarray
+) -> np.ndarray:
     """
     Calculate weights for weighted least squares fitting.
-    
+
+    Weights are calculated as the inverse of squared relative error,
+    which is appropriate for diffusion analysis where MSD grows with time.
+
     Parameters
     ----------
+    sigma2_values : np.ndarray
+        Fitted variance values (MSD measurements).
     sigma2_errors : np.ndarray
-        Standard errors of variance estimates.
-    method : str
-        Weighting method ('inverse_variance' or 'uniform').
-    
+        Standard errors of variance values.
+
     Returns
     -------
     np.ndarray
-        Weights for each data point.
+        Normalized weights for WLS fitting (sum = N).
     """
+    sigma2_values = validate_array_like(sigma2_values, "sigma2_values")
     sigma2_errors = validate_array_like(sigma2_errors, "sigma2_errors")
-    
-    if method == 'inverse_variance':
-        # Weight by inverse of variance (1/sigma^2)
-        # Avoid division by zero
-        safe_errors = np.maximum(sigma2_errors, 1e-10)
-        weights = 1.0 / (safe_errors ** 2)
-        # Normalize
-        weights = weights / np.mean(weights)
-    elif method == 'uniform':
-        # Equal weights
-        weights = np.ones_like(sigma2_errors)
+
+    # Calculate weights as inverse of relative variance
+    weights = np.zeros_like(sigma2_values)
+
+    for i, (sig2, stderr) in enumerate(zip(sigma2_values, sigma2_errors)):
+        if sig2 != 0 and stderr != 0 and not np.isnan(stderr):
+            # Weight = 1 / (relative_variance)^2
+            relative_var = stderr / sig2
+            weights[i] = 1.0 / (relative_var ** 2)
+        else:
+            weights[i] = 0
+
+    # Normalize weights to sum to number of points
+    if np.sum(weights) > 0:
+        weights = weights / np.sum(weights) * len(weights)
     else:
-        raise ValueError(f"Unknown weighting method: {method}")
-    
+        # Fallback to uniform weights if all are zero
+        weights = np.ones_like(sigma2_values)
+
     return weights

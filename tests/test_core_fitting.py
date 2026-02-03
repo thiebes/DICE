@@ -9,7 +9,7 @@ from dice.core.fitting import (
     fit_gaussian_profile,
     diffusion_ols_fit,
     diffusion_wls_fit,
-    calculate_fit_weights,
+    calculate_wls_weights,
 )
 from dice.core.profiles import gaussian
 
@@ -334,57 +334,77 @@ class TestDiffusionWLSFit:
         assert result['r_squared'] == 1.0
 
 
-class TestCalculateFitWeights:
+class TestCalculateWlsWeights:
     """Test weight calculation for WLS fitting."""
-    
-    def test_inverse_variance_weights(self):
-        """Test inverse variance weighting."""
-        errors = np.array([0.1, 0.2, 0.5, 1.0])
-        
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
+
+    def test_basic_weights(self):
+        """Test basic weight calculation."""
+        values = np.array([1.0, 2.0, 3.0, 4.0])
+        errors = np.array([0.1, 0.2, 0.3, 0.4])
+
+        weights = calculate_wls_weights(values, errors)
+
         assert len(weights) == 4
-        # Smaller errors should have larger weights
-        assert weights[0] > weights[1] > weights[2] > weights[3]
-        
-        # Check normalization
-        assert np.isclose(np.mean(weights), 1.0)
-    
-    def test_uniform_weights(self):
-        """Test uniform weighting."""
-        errors = np.array([0.1, 0.2, 0.5, 1.0])
-        
-        weights = calculate_fit_weights(errors, method='uniform')
-        
-        assert len(weights) == 4
-        assert np.all(weights == 1.0)
-    
+        # All have same relative error (10%), so weights should be equal
+        assert np.allclose(weights, 1.0)
+
+    def test_varying_relative_error(self):
+        """Test weights with varying relative errors."""
+        values = np.array([1.0, 1.0, 1.0])
+        errors = np.array([0.1, 0.2, 0.4])  # 10%, 20%, 40% relative error
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # Smaller relative errors should have larger weights
+        assert weights[0] > weights[1] > weights[2]
+        # Check normalization: sum equals N
+        assert np.isclose(np.sum(weights), 3.0)
+
     def test_zero_error_handling(self):
         """Test handling of zero errors."""
+        values = np.array([1.0, 2.0, 3.0])
         errors = np.array([0.0, 0.1, 0.2])
-        
-        # Should not crash with zero error
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
+
+        weights = calculate_wls_weights(values, errors)
+
         assert len(weights) == 3
+        # First weight should be 0 due to zero error
+        assert weights[0] == 0
         assert not np.any(np.isnan(weights))
         assert not np.any(np.isinf(weights))
-    
-    def test_invalid_method_error(self):
-        """Test error for invalid method."""
-        errors = np.array([0.1, 0.2])
-        
-        with pytest.raises(ValueError, match="Unknown weighting method"):
-            calculate_fit_weights(errors, method='invalid')
-    
-    def test_single_value(self):
-        """Test with single error value."""
-        errors = np.array([0.5])
-        
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
-        assert len(weights) == 1
-        assert weights[0] == 1.0  # Normalized to 1
+
+    def test_zero_value_handling(self):
+        """Test handling of zero values."""
+        values = np.array([0.0, 2.0, 3.0])
+        errors = np.array([0.1, 0.1, 0.1])
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # First weight should be 0 due to zero value
+        assert weights[0] == 0
+
+    def test_nan_handling(self):
+        """Test handling of NaN errors."""
+        values = np.array([1.0, 2.0, 3.0])
+        errors = np.array([np.nan, 0.1, 0.2])
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # First weight should be 0 due to NaN error
+        assert weights[0] == 0
+
+    def test_all_zero_fallback(self):
+        """Test fallback to uniform weights when all weights are zero."""
+        values = np.array([0.0, 0.0, 0.0])
+        errors = np.array([0.1, 0.2, 0.3])
+
+        weights = calculate_wls_weights(values, errors)
+
+        # Should fall back to uniform weights
+        assert np.all(weights == 1.0)
 
 
 if __name__ == "__main__":

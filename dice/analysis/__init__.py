@@ -9,8 +9,8 @@ from .simulation import (
     run_single_simulation,
     run_monte_carlo_simulation,
     scan_runner_compatibility,
-    calculate_wls_weights,
 )
+from ..core.fitting import calculate_wls_weights
 
 from .statistics import (
     calculate_precision,

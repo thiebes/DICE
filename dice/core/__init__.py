@@ -34,7 +34,7 @@ from .fitting import (
     diffusion_ols_fit,
     diffusion_wls_fit,
     fit_gaussian_profile,
-    calculate_fit_weights,
+    calculate_wls_weights,
 )
 
 __all__ = [
@@ -61,5 +61,5 @@ __all__ = [
     "diffusion_ols_fit",
     "diffusion_wls_fit",
     "fit_gaussian_profile",
-    "calculate_fit_weights",
+    "calculate_wls_weights",
 ]

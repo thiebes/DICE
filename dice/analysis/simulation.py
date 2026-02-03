@@ -12,7 +12,7 @@ import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
 from ..core.noise import add_noise, fft_cnr
-from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit
+from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.legacy_compatibility import (
@@ -127,47 +127,6 @@ def run_single_simulation(
         result.weights = weights
     
     return result
-
-
-def calculate_wls_weights(
-    sigma2_values: np.ndarray, 
-    sigma2_errors: np.ndarray
-) -> np.ndarray:
-    """
-    Calculate weights for weighted least squares fitting.
-    
-    Parameters
-    ----------
-    sigma2_values : np.ndarray
-        Fitted variance values.
-    sigma2_errors : np.ndarray
-        Standard errors of variance values.
-    
-    Returns
-    -------
-    np.ndarray
-        Normalized weights for WLS fitting.
-    """
-    # Calculate weights as inverse of relative variance
-    # Avoid division by zero
-    weights = np.zeros_like(sigma2_values)
-    
-    for i, (sig2, stderr) in enumerate(zip(sigma2_values, sigma2_errors)):
-        if sig2 != 0 and stderr != 0 and not np.isnan(stderr):
-            # Weight = 1 / (relative_variance)^2
-            relative_var = stderr / sig2
-            weights[i] = 1.0 / (relative_var ** 2)
-        else:
-            weights[i] = 0
-    
-    # Normalize weights to sum to number of points
-    if np.sum(weights) > 0:
-        weights = weights / np.sum(weights) * len(weights)
-    else:
-        # Fallback to uniform weights if all are zero
-        weights = np.ones_like(sigma2_values)
-    
-    return weights
 
 
 def run_monte_carlo_simulation(

@@ -238,5 +238,124 @@ def validate_file_path(path: str, must_exist: bool = False,
     if extension is not None:
         if not path.endswith(extension):
             raise ValueError(f"{name} must have extension {extension}, got {path}")
-    
+
     return path
+
+
+def validate_filename_slug(value: str, name: str = "filename") -> str:
+    """
+    Validate that a filename slug contains no forbidden characters.
+
+    Parameters
+    ----------
+    value : str
+        The filename slug to validate.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    str
+        The validated filename slug.
+
+    Raises
+    ------
+    TypeError
+        If the value is not a string.
+    ValueError
+        If the value is empty or contains forbidden characters.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string, got {type(value).__name__}")
+
+    if not value or not value.strip():
+        raise ValueError(f"{name} cannot be empty")
+
+    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    for char in invalid_chars:
+        if char in value:
+            raise ValueError(f"{name} cannot contain: {', '.join(invalid_chars)}")
+
+    return value
+
+
+def validate_time_values(values: List[float], name: str = "time values") -> List[float]:
+    """
+    Validate a list of time values (must be finite, unique, and non-empty).
+
+    Parameters
+    ----------
+    values : list of float
+        The time values to validate.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    list of float
+        The validated time values.
+
+    Raises
+    ------
+    TypeError
+        If values is not a list or contains non-numeric types.
+    ValueError
+        If values is empty, contains non-finite numbers, or has duplicates.
+    """
+    if not isinstance(values, list):
+        raise TypeError(f"{name} must be a list, got {type(values).__name__}")
+
+    if len(values) == 0:
+        raise ValueError(f"{name} must contain at least one value")
+
+    validated = []
+    for i, v in enumerate(values):
+        if not isinstance(v, (int, float, np.number)):
+            raise TypeError(f"{name}[{i}] must be numeric, got {type(v).__name__}")
+        float_v = float(v)
+        if not np.isfinite(float_v):
+            raise ValueError(f"All {name} must be finite, got {float_v}")
+        validated.append(float_v)
+
+    if len(validated) != len(set(validated)):
+        raise ValueError(f"{name} must be unique")
+
+    return validated
+
+
+def validate_range(start: float, stop: float, steps: int,
+                   name: str = "range") -> Tuple[float, float, int]:
+    """
+    Validate range parameters (start < stop, steps > 0).
+
+    Parameters
+    ----------
+    start : float
+        The start value of the range.
+    stop : float
+        The stop value of the range.
+    steps : int
+        The number of steps in the range.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    tuple
+        A tuple of (start, stop, steps).
+
+    Raises
+    ------
+    TypeError
+        If parameters have wrong types.
+    ValueError
+        If start >= stop or steps <= 0.
+    """
+    start = validate_numeric(start, name=f"{name} start")
+    stop = validate_numeric(stop, name=f"{name} stop")
+    steps = validate_integer(steps, name=f"{name} steps", min_val=1)
+
+    if start >= stop:
+        raise ValueError(f"{name} start must be less than stop, got {start} >= {stop}")
+
+    return (start, stop, steps)
