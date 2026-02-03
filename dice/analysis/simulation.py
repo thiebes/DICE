@@ -14,18 +14,11 @@ from ..core.profiles import gaussian, make_diffusion_decay
 from ..core.noise import add_noise, fft_cnr
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit
 from ..models.parameters import SimulationParameters
-from ..models.results import DiffusionFitResult, RunResult as BaseRunResult, SimulationResult
+from ..models.results import RunResult, SimulationResult
 from ..utils.legacy_compatibility import (
     create_parameters_from_legacy,
     convert_legacy_result_to_dict
 )
-
-# Create a simplified RunResult for this module
-class RunResult:
-    """Simplified run result for simulation module."""
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
 
 def run_single_simulation(

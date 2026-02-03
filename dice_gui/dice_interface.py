@@ -8,6 +8,8 @@ from typing import Dict, Any, Optional, Callable
 import sys
 import os
 
+from dice.models.results import RunResult
+
 
 class DiceInterface:
     """Interface for running DICE simulations from GUI."""
@@ -446,22 +448,23 @@ class DiceInterface:
             )
 
             # Store loaded data in memory for regeneration
-            # Create mock RunResult objects
-            class RunResult:
-                """Mock run result for loaded CSV data."""
-                def __init__(self, **kwargs):
-                    for key, value in kwargs.items():
-                        setattr(self, key, value)
-
             # Get both WLS and OLS slopes if available for future regeneration
             wls_slopes = df['weighted fit diffusion slope'].dropna().values if 'weighted fit diffusion slope' in df.columns else None
             ols_slopes = df['unweighted fit diffusion slope'].dropna().values if 'unweighted fit diffusion slope' in df.columns else None
 
             # Create RunResult objects with both WLS and OLS slopes
+            # Use placeholder values for required fields not available in CSV
             run_results = []
             num_runs = len(slopes)
             for i in range(num_runs):
                 run_result = RunResult(
+                    run_id=i,
+                    nominal_diffusion_coefficient=d_nominal,
+                    nominal_lifetime=0.0,
+                    nominal_diffusion_length=0.0,
+                    nominal_sigma2_0=0.0,
+                    noise_sigma=0.0,
+                    cnr_0_estimate=0.0,
                     wls_slope=wls_slopes[i] if wls_slopes is not None and i < len(wls_slopes) else None,
                     ols_slope=ols_slopes[i] if ols_slopes is not None and i < len(ols_slopes) else None
                 )

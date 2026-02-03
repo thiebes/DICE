@@ -12,97 +12,102 @@ import pandas as pd
 
 
 @dataclass
-class DiffusionFitResult:
-    """
-    Results from fitting MSD vs time to extract diffusion coefficient.
-    
-    Attributes
-    ----------
-    slope : float
-        Slope of the linear fit (2*D in 1D).
-    slope_error : float
-        Standard error of the slope.
-    intercept : float
-        Y-intercept of the linear fit.
-    intercept_error : float
-        Standard error of the intercept.
-    r_squared : float
-        Coefficient of determination.
-    diffusion_coefficient : float
-        Calculated diffusion coefficient (slope/2).
-    method : str
-        Fitting method used ('OLS' or 'WLS').
-    """
-    slope: float
-    slope_error: float
-    intercept: float
-    intercept_error: float
-    r_squared: float
-    diffusion_coefficient: float
-    method: str = 'OLS'
-    
-    @property
-    def relative_error(self) -> float:
-        """Calculate relative error of the slope."""
-        if self.slope != 0:
-            return abs(self.slope_error / self.slope)
-        return float('inf')
-
-
-@dataclass
 class RunResult:
     """
     Results from a single Monte Carlo simulation run.
-    
+
     Attributes
     ----------
-    run_number : int
+    run_id : int
         Identifier for this run.
-    nominal_diffusion : float
+    nominal_diffusion_coefficient : float
         Input diffusion coefficient.
     nominal_lifetime : float
         Input lifetime.
     nominal_diffusion_length : float
         Input diffusion length.
+    nominal_sigma2_0 : float
+        Input initial variance.
     noise_sigma : float
         Noise standard deviation used.
-    cnr_estimate : float
-        Estimated contrast-to-noise ratio.
-    sigma2_t : np.ndarray
+    cnr_0_estimate : float
+        Estimated contrast-to-noise ratio at t=0.
+    estimated_sigma2_0 : float, optional
+        Estimated initial variance from fitting.
+    ols_slope : float, optional
+        OLS fit slope (2*D).
+    ols_slope_stderr : float, optional
+        Standard error of OLS slope.
+    ols_intercept : float, optional
+        OLS fit intercept.
+    ols_intercept_stderr : float, optional
+        Standard error of OLS intercept.
+    wls_slope : float, optional
+        WLS fit slope (2*D).
+    wls_slope_stderr : float, optional
+        Standard error of WLS slope.
+    wls_intercept : float, optional
+        WLS fit intercept.
+    wls_intercept_stderr : float, optional
+        Standard error of WLS intercept.
+    nominal_profiles : np.ndarray, optional
+        Nominal profile data if retained.
+    noisy_profiles : np.ndarray, optional
+        Noisy profile data if retained.
+    fitted_sigma2_t : np.ndarray, optional
         Fitted variance values at each time point.
-    msd_t : np.ndarray
-        Mean squared displacement at each time point.
-    ols_fit : DiffusionFitResult
-        Ordinary least squares fit result.
-    wls_fit : Optional[DiffusionFitResult]
-        Weighted least squares fit result.
-    profiles : Optional[Dict]
-        Raw profile data if retained.
+    fitted_sigma2_stderrs : np.ndarray, optional
+        Standard errors of fitted variances.
+    weights : np.ndarray, optional
+        Weights used in WLS fitting.
     """
-    run_number: int
-    nominal_diffusion: float
+    # Core identifier
+    run_id: int
+
+    # Nominal physics parameters
+    nominal_diffusion_coefficient: float
     nominal_lifetime: float
     nominal_diffusion_length: float
+    nominal_sigma2_0: float
+
+    # Noise and CNR
     noise_sigma: float
-    cnr_estimate: float
-    sigma2_t: np.ndarray
-    msd_t: np.ndarray
-    ols_fit: DiffusionFitResult
-    wls_fit: Optional[DiffusionFitResult] = None
-    profiles: Optional[Dict] = None
-    
+    cnr_0_estimate: float
+
+    # Estimated values
+    estimated_sigma2_0: Optional[float] = None
+
+    # OLS fit results
+    ols_slope: Optional[float] = None
+    ols_slope_stderr: Optional[float] = None
+    ols_intercept: Optional[float] = None
+    ols_intercept_stderr: Optional[float] = None
+
+    # WLS fit results
+    wls_slope: Optional[float] = None
+    wls_slope_stderr: Optional[float] = None
+    wls_intercept: Optional[float] = None
+    wls_intercept_stderr: Optional[float] = None
+
+    # Optional profile data
+    nominal_profiles: Optional[np.ndarray] = None
+    noisy_profiles: Optional[np.ndarray] = None
+    fitted_sigma2_t: Optional[np.ndarray] = None
+    fitted_sigma2_stderrs: Optional[np.ndarray] = None
+    weights: Optional[np.ndarray] = None
+
     @property
     def ols_accuracy(self) -> float:
         """Calculate OLS estimate accuracy relative to nominal."""
-        if self.nominal_diffusion > 0:
-            return self.ols_fit.diffusion_coefficient / self.nominal_diffusion
+        if self.ols_slope is not None and self.nominal_diffusion_coefficient > 0:
+            return (self.ols_slope / 2) / self.nominal_diffusion_coefficient
         return float('nan')
-    
+
     @property
     def wls_accuracy(self) -> float:
         """Calculate WLS estimate accuracy relative to nominal."""
-        if self.wls_fit and self.nominal_diffusion > 0:
-            return self.wls_fit.diffusion_coefficient / self.nominal_diffusion
+        if self.wls_slope is not None and self.nominal_diffusion_coefficient > 0:
+            return (self.wls_slope / 2) / self.nominal_diffusion_coefficient
         return float('nan')
 
 
@@ -203,32 +208,32 @@ class SimulationResults:
         data = []
         for run in self.run_results:
             row = {
-                'run_number': run.run_number,
-                'nominal_diffusion': run.nominal_diffusion,
+                'run_id': run.run_id,
+                'nominal_diffusion_coefficient': run.nominal_diffusion_coefficient,
                 'nominal_lifetime': run.nominal_lifetime,
                 'nominal_diffusion_length': run.nominal_diffusion_length,
+                'nominal_sigma2_0': run.nominal_sigma2_0,
                 'noise_sigma': run.noise_sigma,
-                'cnr_estimate': run.cnr_estimate,
-                'ols_diffusion': run.ols_fit.diffusion_coefficient,
-                'ols_slope': run.ols_fit.slope,
-                'ols_slope_error': run.ols_fit.slope_error,
-                'ols_intercept': run.ols_fit.intercept,
-                'ols_r_squared': run.ols_fit.r_squared,
+                'cnr_0_estimate': run.cnr_0_estimate,
+                'estimated_sigma2_0': run.estimated_sigma2_0,
+                'ols_slope': run.ols_slope,
+                'ols_slope_stderr': run.ols_slope_stderr,
+                'ols_intercept': run.ols_intercept,
+                'ols_intercept_stderr': run.ols_intercept_stderr,
                 'ols_accuracy': run.ols_accuracy,
             }
-            
-            if run.wls_fit:
+
+            if run.wls_slope is not None:
                 row.update({
-                    'wls_diffusion': run.wls_fit.diffusion_coefficient,
-                    'wls_slope': run.wls_fit.slope,
-                    'wls_slope_error': run.wls_fit.slope_error,
-                    'wls_intercept': run.wls_fit.intercept,
-                    'wls_r_squared': run.wls_fit.r_squared,
+                    'wls_slope': run.wls_slope,
+                    'wls_slope_stderr': run.wls_slope_stderr,
+                    'wls_intercept': run.wls_intercept,
+                    'wls_intercept_stderr': run.wls_intercept_stderr,
                     'wls_accuracy': run.wls_accuracy,
                 })
-            
+
             data.append(row)
-        
+
         return pd.DataFrame(data)
     
     def save_csv(self, filepath: Optional[str] = None):

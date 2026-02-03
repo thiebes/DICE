@@ -14,11 +14,8 @@ from dice.analysis.statistics import (
     calculate_confidence_intervals,
     analyze_cnr_dependence,
 )
-# Use simplified classes for testing
-class RunResult:
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+from dice.models.results import RunResult
+
 
 class SimulationResult:
     def __init__(self, parameters, run_results, num_runs, noise_values):

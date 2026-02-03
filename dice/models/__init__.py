@@ -16,7 +16,6 @@ from .parameters import (
 from .results import (
     SimulationResults,
     RunResult,
-    DiffusionFitResult,
     StatisticalAnalysis,
 )
 from .profiles import (
@@ -36,7 +35,6 @@ __all__ = [
     # Results
     "SimulationResults",
     "RunResult",
-    "DiffusionFitResult",
     "StatisticalAnalysis",
     # Profiles
     "ProfileData",
