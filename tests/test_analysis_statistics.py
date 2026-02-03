@@ -3,6 +3,7 @@ Tests for dice.analysis.statistics module.
 """
 
 import pytest
+import warnings
 import numpy as np
 import pandas as pd
 from dice.analysis.statistics import (
@@ -16,8 +17,18 @@ from dice.analysis.statistics import (
 )
 from dice.models.results import RunResult, MonteCarloOutput
 
-# Import mock classes for testing
-from dice.utils.legacy_compatibility import MockSimulationParameters as SimulationParameters
+
+def get_legacy_simulation_params():
+    """
+    Get legacy simulation parameters for testing.
+
+    Uses MockSimulationParameters with deprecation warning suppressed.
+    For new tests, prefer using the default_simulation_params fixture.
+    """
+    from dice.utils.legacy_compatibility import MockSimulationParameters
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return MockSimulationParameters()
 
 
 class TestCalculatePrecision:
@@ -179,7 +190,7 @@ class TestAnalyzeMonteCarloOutputs:
     def test_basic_analysis(self):
         """Test basic analysis of simulation results."""
         # Create mock simulation results
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.physics.diffusion_coefficient = 1.0
         params.physics.lifetime = 10.0
         params.physics.diffusion_length = np.sqrt(10.0)
@@ -234,7 +245,7 @@ class TestAnalyzeMonteCarloOutputs:
     
     def test_multiple_noise_levels(self):
         """Test analysis with multiple noise levels."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.physics.diffusion_coefficient = 1.0
         
         runs = []

@@ -5,7 +5,8 @@ This module defines dataclasses that organize and validate simulation parameters
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Union, List, Literal
+from typing import Optional, Union, List, Literal, Dict, Any
+import warnings
 import numpy as np
 
 
@@ -55,6 +56,73 @@ class GaussianParameters:
         """Get sigma from sigma^2."""
         return np.sqrt(self.sigma2)
 
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'GaussianParameters':
+        """
+        Create GaussianParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary. Can contain keys in either
+            legacy format (e.g., 'sigma^2_0') or canonical format.
+
+        Returns
+        -------
+        GaussianParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        # Handle sigma2 from various sources
+        if 'sigma2_0' in normalized:
+            sigma2 = normalized['sigma2_0']
+        elif 'sigma_0' in normalized:
+            sigma2 = normalized['sigma_0'] ** 2
+        elif 'fwhm_0' in normalized:
+            from ..utils.converters import fwhm_to_sigma2
+            sigma2 = fwhm_to_sigma2(normalized['fwhm_0'])
+        else:
+            sigma2 = 1.0
+
+        return cls(
+            amplitude=normalized.get('amplitude_0', 1.0),
+            sigma2=sigma2,
+            mu=normalized.get('mu_0', 0.0)
+        )
+
+    # Deprecated property aliases for legacy compatibility
+    @property
+    def sigma2_0(self) -> float:
+        """Legacy alias for sigma2. Deprecated."""
+        warnings.warn(
+            "sigma2_0 is deprecated, use sigma2 instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.sigma2
+
+    @property
+    def amplitude_0(self) -> float:
+        """Legacy alias for amplitude. Deprecated."""
+        warnings.warn(
+            "amplitude_0 is deprecated, use amplitude instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.amplitude
+
+    @property
+    def mu_0(self) -> float:
+        """Legacy alias for mu. Deprecated."""
+        warnings.warn(
+            "mu_0 is deprecated, use mu instead",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        return self.mu
+
 
 @dataclass
 class NoiseParameters:
@@ -102,6 +170,41 @@ class NoiseParameters:
             if self.range[0] >= self.range[1]:
                 raise ValueError("Range min must be less than max")
 
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'NoiseParameters':
+        """
+        Create NoiseParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with noise configuration.
+
+        Returns
+        -------
+        NoiseParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        if 'noise_value' in normalized:
+            return cls(mode='single', value=normalized['noise_value'])
+        elif 'estimate_noise_from_data' in normalized:
+            return cls(mode='estimate', data_file=normalized['estimate_noise_from_data'])
+        elif 'noise_range_reciprocal' in normalized:
+            range_val = normalized['noise_range_reciprocal']
+            return cls(mode='range', range=tuple(range_val[:2]),
+                       num_values=int(range_val[2]) if len(range_val) > 2 else 1)
+        elif 'noise_range_reciprocal_log' in normalized:
+            range_val = normalized['noise_range_reciprocal_log']
+            return cls(mode='range', range=tuple(range_val[:2]),
+                       num_values=int(range_val[2]) if len(range_val) > 2 else 1,
+                       logarithmic=True)
+        else:
+            # Default to single mode with default value
+            return cls(mode='single', value=0.01)
+
 
 @dataclass
 class SpatialParameters:
@@ -136,6 +239,30 @@ class SpatialParameters:
         """Generate the spatial axis array."""
         from ..utils.axes import make_x_axis
         return make_x_axis(self.width, self.pixels, self.center)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'SpatialParameters':
+        """
+        Create SpatialParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with spatial axis configuration.
+
+        Returns
+        -------
+        SpatialParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        return cls(
+            width=normalized['spatial_width'],
+            pixels=int(normalized['pixel_width']),
+            center=normalized.get('mu_0', 0.0)
+        )
 
 
 @dataclass
@@ -185,6 +312,37 @@ class TemporalParameters:
         else:
             from ..utils.axes import make_time_series
             return make_time_series(self.series)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'TemporalParameters':
+        """
+        Create TemporalParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with temporal axis configuration.
+
+        Returns
+        -------
+        TemporalParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        if 'time_series' in normalized:
+            return cls(mode='series', series=np.asarray(normalized['time_series']))
+        elif 'time_range' in normalized:
+            time_range = normalized['time_range']
+            return cls(
+                mode='range',
+                start=time_range[0],
+                end=time_range[1],
+                frames=int(time_range[2])
+            )
+        else:
+            raise ValueError("Either 'time_series' or 'time_range' must be specified")
 
 
 @dataclass
@@ -236,6 +394,36 @@ class OutputParameters:
         
         if self.num_bins <= 0:
             raise ValueError("Number of bins must be positive")
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'OutputParameters':
+        """
+        Create OutputParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with output configuration.
+
+        Returns
+        -------
+        OutputParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        return cls(
+            filename_slug=normalized.get('filename_slug', 'dice_output'),
+            image_type=normalized.get('image_type', 'png'),
+            image_width=normalized.get('image_width', 15.0),
+            image_height=normalized.get('image_height', 10.0),
+            image_dpi=normalized.get('image_dpi', 300),
+            font_size=normalized.get('image_font_size', 12),
+            num_bins=normalized.get('image_numbins', 50),
+            x_limits=normalized.get('image_x_lim'),
+            retain_profiles=normalized.get('retain_profile_data', False)
+        )
 
 
 @dataclass
@@ -299,11 +487,11 @@ class SimulationParameters:
         return np.sqrt(self.diffusion_coefficient * self.lifetime)
     
     @classmethod
-    def from_diffusion_length(cls, diffusion_length: float, 
+    def from_diffusion_length(cls, diffusion_length: float,
                              lifetime: float, **kwargs):
         """
         Create parameters from diffusion length instead of coefficient.
-        
+
         Parameters
         ----------
         diffusion_length : float
@@ -315,3 +503,89 @@ class SimulationParameters:
         """
         diff_coeff = (diffusion_length ** 2) / lifetime if lifetime > 0 else 0
         return cls(diffusion_coefficient=diff_coeff, lifetime=lifetime, **kwargs)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'SimulationParameters':
+        """
+        Create SimulationParameters from legacy dictionary format.
+
+        This method handles all legacy key naming conventions including
+        space-separated keys, special characters, and alternative names.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with any mix of legacy and
+            canonical key formats.
+
+        Returns
+        -------
+        SimulationParameters
+            New instance with values from the dictionary.
+
+        Examples
+        --------
+        >>> params = {
+        ...     'number of runs': 100,
+        ...     'nominal diffusion length': 1.0,
+        ...     'sigma^2_0': 1.0,
+        ...     'amplitude_0': 1.0,
+        ...     'mean_0': 0.0,
+        ...     'spatial width': 10.0,
+        ...     'pixel width': 100,
+        ...     'time range': (0, 5, 6),
+        ...     'noise value': 0.01
+        ... }
+        >>> sim_params = SimulationParameters.from_legacy(params)
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        # Build nested parameter objects
+        gaussian = GaussianParameters.from_legacy(normalized)
+        noise = NoiseParameters.from_legacy(normalized)
+        spatial = SpatialParameters.from_legacy(normalized)
+        temporal = TemporalParameters.from_legacy(normalized)
+        output = OutputParameters.from_legacy(normalized)
+
+        # Extract common parameters
+        num_runs = normalized['number_of_runs']
+        proximity_level = normalized.get('proximity_level', 0.1)
+        length_unit = normalized.get('length_unit', 'micrometer')
+        time_unit = normalized.get('time_unit', 'nanosecond')
+        multiprocessing = normalized.get('multiprocessing', True)
+
+        # Extract diffusion parameters - either from diffusion_length or coefficient+lifetime
+        if 'diffusion_length' in normalized:
+            # Derive coefficient from diffusion length
+            # Need lifetime - use default if not provided
+            lifetime = normalized.get('lifetime', 1.0)
+            return cls.from_diffusion_length(
+                diffusion_length=normalized['diffusion_length'],
+                lifetime=lifetime,
+                num_runs=num_runs,
+                gaussian=gaussian,
+                noise=noise,
+                spatial=spatial,
+                temporal=temporal,
+                output=output,
+                proximity_level=proximity_level,
+                length_unit=length_unit,
+                time_unit=time_unit,
+                multiprocessing=multiprocessing
+            )
+        else:
+            return cls(
+                num_runs=num_runs,
+                diffusion_coefficient=normalized['diffusion_coefficient'],
+                lifetime=normalized['lifetime'],
+                gaussian=gaussian,
+                noise=noise,
+                spatial=spatial,
+                temporal=temporal,
+                output=output,
+                proximity_level=proximity_level,
+                length_unit=length_unit,
+                time_unit=time_unit,
+                multiprocessing=multiprocessing
+            )

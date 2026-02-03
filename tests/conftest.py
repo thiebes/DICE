@@ -107,3 +107,82 @@ def mock_parameters_file(tmp_path):
     }
     param_path.write_text(str(params))
     return str(param_path)
+
+
+# Modern dataclass-based fixtures (replacements for MockSimulationParameters)
+
+@pytest.fixture
+def default_gaussian_params():
+    """Default GaussianParameters for testing."""
+    from dice.models.parameters import GaussianParameters
+    return GaussianParameters(amplitude=1.0, sigma2=1.0, mu=0.0)
+
+
+@pytest.fixture
+def default_noise_params():
+    """Default NoiseParameters for testing."""
+    from dice.models.parameters import NoiseParameters
+    return NoiseParameters(mode='single', value=0.05)
+
+
+@pytest.fixture
+def default_spatial_params():
+    """Default SpatialParameters for testing."""
+    from dice.models.parameters import SpatialParameters
+    return SpatialParameters(width=10.0, pixels=100, center=0.0)
+
+
+@pytest.fixture
+def default_temporal_params():
+    """Default TemporalParameters for testing."""
+    from dice.models.parameters import TemporalParameters
+    return TemporalParameters(mode='range', start=0.0, end=5.0, frames=6)
+
+
+@pytest.fixture
+def default_output_params():
+    """Default OutputParameters for testing."""
+    from dice.models.parameters import OutputParameters
+    return OutputParameters()
+
+
+@pytest.fixture
+def default_simulation_params(
+    default_gaussian_params,
+    default_noise_params,
+    default_spatial_params,
+    default_temporal_params,
+    default_output_params
+):
+    """
+    Default SimulationParameters for testing.
+
+    This fixture replaces MockSimulationParameters with modern dataclasses.
+    Values match the original mock defaults: D=1.0, tau=10.0, num_runs=100.
+    """
+    from dice.models.parameters import SimulationParameters
+    return SimulationParameters(
+        num_runs=100,
+        diffusion_coefficient=1.0,
+        lifetime=10.0,
+        gaussian=default_gaussian_params,
+        noise=default_noise_params,
+        spatial=default_spatial_params,
+        temporal=default_temporal_params,
+        output=default_output_params,
+        multiprocessing=False  # Disable for tests
+    )
+
+
+@pytest.fixture
+def legacy_simulation_params():
+    """
+    Parameters with legacy .profile/.physics structure for compatibility testing.
+
+    Use this fixture when testing code that expects the legacy parameter format.
+    """
+    from dice.utils.legacy_compatibility import MockSimulationParameters
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return MockSimulationParameters()

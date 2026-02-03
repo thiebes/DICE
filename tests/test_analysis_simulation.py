@@ -3,6 +3,7 @@ Tests for dice.analysis.simulation module.
 """
 
 import pytest
+import warnings
 import numpy as np
 from dice.analysis.simulation import (
     run_single_simulation,
@@ -10,8 +11,19 @@ from dice.analysis.simulation import (
     run_monte_carlo_simulation,
     scan_runner_compatibility,
 )
-# Import mock classes for testing
-from dice.utils.legacy_compatibility import MockSimulationParameters as SimulationParameters
+
+
+def get_legacy_simulation_params():
+    """
+    Get legacy simulation parameters for testing.
+
+    Uses MockSimulationParameters with deprecation warning suppressed.
+    For new tests, prefer using the default_simulation_params fixture.
+    """
+    from dice.utils.legacy_compatibility import MockSimulationParameters
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return MockSimulationParameters()
 
 
 class TestCalculateWLSWeights:
@@ -81,7 +93,7 @@ class TestRunSingleSimulation:
     def test_basic_simulation(self):
         """Test basic simulation run."""
         # Set up parameters
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -114,7 +126,7 @@ class TestRunSingleSimulation:
     
     def test_single_timepoint(self):
         """Test with single time point (no diffusion fit)."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -142,7 +154,7 @@ class TestRunSingleSimulation:
     
     def test_retain_profile_data(self):
         """Test retaining profile data."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -176,7 +188,7 @@ class TestRunSingleSimulation:
     
     def test_high_noise(self):
         """Test with high noise level."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -206,7 +218,7 @@ class TestRunMonteCarloSimulation:
     
     def test_basic_monte_carlo(self):
         """Test basic Monte Carlo simulation."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -245,7 +257,7 @@ class TestRunMonteCarloSimulation:
     
     def test_single_noise_value(self):
         """Test with single noise value."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -271,7 +283,7 @@ class TestRunMonteCarloSimulation:
     
     def test_progress_callback(self):
         """Test progress callback functionality."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
