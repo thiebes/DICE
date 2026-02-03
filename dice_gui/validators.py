@@ -16,6 +16,12 @@ from dice.utils.validators import (
     validate_time_values as _validate_time_values,
     validate_range as _validate_range,
 )
+from dice.utils.converters import (
+    fwhm_to_sigma as _fwhm_to_sigma,
+    sigma_to_fwhm as _sigma_to_fwhm,
+    calculate_pixel_size as _calculate_pixel_size,
+)
+from dice.core.diffusion import calculate_diffusion_length as _calculate_diffusion_length
 
 
 class ValidationResult:
@@ -185,9 +191,11 @@ def convert_fwhm_to_sigma(fwhm_str: str) -> ValidationResult:
     if not result:
         return result
 
-    import math
-    sigma = result.value / (2 * math.sqrt(2 * math.log(2)))
-    return ValidationResult(True, value=sigma)
+    try:
+        sigma = _fwhm_to_sigma(result.value)
+        return ValidationResult(True, value=sigma)
+    except ValueError as e:
+        return ValidationResult(False, str(e))
 
 
 def convert_sigma_to_fwhm(sigma_str: str) -> ValidationResult:
@@ -196,9 +204,11 @@ def convert_sigma_to_fwhm(sigma_str: str) -> ValidationResult:
     if not result:
         return result
 
-    import math
-    fwhm = result.value * 2 * math.sqrt(2 * math.log(2))
-    return ValidationResult(True, value=fwhm)
+    try:
+        fwhm = _sigma_to_fwhm(result.value)
+        return ValidationResult(True, value=fwhm)
+    except ValueError as e:
+        return ValidationResult(False, str(e))
 
 
 def calculate_diffusion_length(d_str: str, tau_str: str) -> ValidationResult:
@@ -211,9 +221,11 @@ def calculate_diffusion_length(d_str: str, tau_str: str) -> ValidationResult:
     if not tau_result:
         return tau_result
 
-    import math
-    length = math.sqrt(d_result.value * tau_result.value)
-    return ValidationResult(True, value=length)
+    try:
+        length = _calculate_diffusion_length(d_result.value, tau_result.value)
+        return ValidationResult(True, value=length)
+    except ValueError as e:
+        return ValidationResult(False, str(e))
 
 
 def calculate_pixel_size(spatial_str: str, pixel_count: int) -> ValidationResult:
@@ -222,8 +234,8 @@ def calculate_pixel_size(spatial_str: str, pixel_count: int) -> ValidationResult
     if not result:
         return result
 
-    if pixel_count <= 0:
-        return ValidationResult(False, "Pixel count must be positive")
-
-    pixel_size = result.value / pixel_count
-    return ValidationResult(True, value=pixel_size)
+    try:
+        pixel_size = _calculate_pixel_size(result.value, pixel_count)
+        return ValidationResult(True, value=pixel_size)
+    except ValueError as e:
+        return ValidationResult(False, str(e))

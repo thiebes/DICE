@@ -9,6 +9,7 @@ from dice.utils.converters import (
     sigma2_to_fwhm,
     fwhm_to_sigma,
     fwhm_to_sigma2,
+    calculate_pixel_size,
     slope_to_diffusion_constant,
 )
 
@@ -115,6 +116,42 @@ class TestDiffusionConversion:
         slope = 0.0
         D = slope_to_diffusion_constant(slope, 'micrometer', 'nanosecond')
         assert D == 0.0
+
+
+class TestPixelSizeConversion:
+    """Test pixel size calculation."""
+
+    def test_basic_calculation(self):
+        """Test basic pixel size calculation."""
+        pixel_size = calculate_pixel_size(10.0, 100)
+        assert np.isclose(pixel_size, 0.1, rtol=1e-10)
+
+        pixel_size = calculate_pixel_size(50.0, 500)
+        assert np.isclose(pixel_size, 0.1, rtol=1e-10)
+
+    def test_different_values(self):
+        """Test with different input values."""
+        pixel_size = calculate_pixel_size(1.0, 10)
+        assert np.isclose(pixel_size, 0.1, rtol=1e-10)
+
+        pixel_size = calculate_pixel_size(100.0, 1)
+        assert np.isclose(pixel_size, 100.0, rtol=1e-10)
+
+    def test_invalid_spatial_width(self):
+        """Test error handling for invalid spatial width."""
+        with pytest.raises(ValueError, match="Spatial width must be positive"):
+            calculate_pixel_size(0, 100)
+
+        with pytest.raises(ValueError, match="Spatial width must be positive"):
+            calculate_pixel_size(-10, 100)
+
+    def test_invalid_pixel_count(self):
+        """Test error handling for invalid pixel count."""
+        with pytest.raises(ValueError, match="Pixel count must be positive"):
+            calculate_pixel_size(10, 0)
+
+        with pytest.raises(ValueError, match="Pixel count must be positive"):
+            calculate_pixel_size(10, -1)
 
 
 if __name__ == "__main__":

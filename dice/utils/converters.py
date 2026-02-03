@@ -107,6 +107,34 @@ def fwhm_to_sigma2(fwhm: float) -> float:
     return fwhm_to_sigma(fwhm) ** 2
 
 
+def calculate_pixel_size(spatial_width: float, pixel_count: int) -> float:
+    """
+    Calculate the physical size of each pixel.
+
+    Parameters
+    ----------
+    spatial_width : float
+        Total spatial width of the observation window.
+    pixel_count : int
+        Number of pixels across the spatial domain.
+
+    Returns
+    -------
+    float
+        Size of each pixel in the same units as spatial_width.
+
+    Raises
+    ------
+    ValueError
+        If spatial_width <= 0 or pixel_count <= 0.
+    """
+    if spatial_width <= 0:
+        raise ValueError("Spatial width must be positive")
+    if pixel_count <= 0:
+        raise ValueError("Pixel count must be positive")
+    return spatial_width / pixel_count
+
+
 def slope_to_diffusion_constant(slope: float, l_unit: str, t_unit: str) -> float:
     """
     Convert the slope from a linear fit of mean squared displacement vs. time 
