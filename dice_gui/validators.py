@@ -10,9 +10,10 @@ from typing import Optional, Tuple, List, Union
 class ValidationResult:
     """Result of a validation check."""
 
-    def __init__(self, is_valid: bool, error_message: str = ""):
+    def __init__(self, is_valid: bool, error_message: str = "", value=None):
         self.is_valid = is_valid
         self.error_message = error_message
+        self.value = value
 
     def __bool__(self):
         return self.is_valid
@@ -152,24 +153,55 @@ def validate_filename_slug(value: str) -> ValidationResult:
     return ValidationResult(True)
 
 
-def convert_fwhm_to_sigma(fwhm: float) -> float:
-    """Convert FWHM to sigma."""
+def convert_fwhm_to_sigma(fwhm_str: str) -> ValidationResult:
+    """Convert FWHM string to sigma, returning ValidationResult."""
     import math
-    return fwhm / (2 * math.sqrt(2 * math.log(2)))
+    try:
+        fwhm = float(fwhm_str)
+        if fwhm <= 0:
+            return ValidationResult(False, "FWHM must be positive")
+        sigma = fwhm / (2 * math.sqrt(2 * math.log(2)))
+        return ValidationResult(True, value=sigma)
+    except (ValueError, TypeError):
+        return ValidationResult(False, "Invalid FWHM value")
 
 
-def convert_sigma_to_fwhm(sigma: float) -> float:
-    """Convert sigma to FWHM."""
+def convert_sigma_to_fwhm(sigma_str: str) -> ValidationResult:
+    """Convert sigma string to FWHM, returning ValidationResult."""
     import math
-    return sigma * 2 * math.sqrt(2 * math.log(2))
+    try:
+        sigma = float(sigma_str)
+        if sigma <= 0:
+            return ValidationResult(False, "Sigma must be positive")
+        fwhm = sigma * 2 * math.sqrt(2 * math.log(2))
+        return ValidationResult(True, value=fwhm)
+    except (ValueError, TypeError):
+        return ValidationResult(False, "Invalid sigma value")
 
 
-def calculate_diffusion_length(D: float, tau: float) -> float:
-    """Calculate diffusion length from D and tau."""
+def calculate_diffusion_length(d_str: str, tau_str: str) -> ValidationResult:
+    """Calculate diffusion length from D and tau strings, returning ValidationResult."""
     import math
-    return math.sqrt(D * tau)
+    try:
+        D = float(d_str)
+        tau = float(tau_str)
+        if D < 0 or tau < 0:
+            return ValidationResult(False, "D and tau must be non-negative")
+        length = math.sqrt(D * tau)
+        return ValidationResult(True, value=length)
+    except (ValueError, TypeError):
+        return ValidationResult(False, "Invalid D or tau value")
 
 
-def calculate_pixel_size(spatial_width: float, pixel_width: int) -> float:
-    """Calculate pixel size from spatial width and number of pixels."""
-    return spatial_width / pixel_width
+def calculate_pixel_size(spatial_str: str, pixel_count: int) -> ValidationResult:
+    """Calculate pixel size from spatial width string and pixel count, returning ValidationResult."""
+    try:
+        spatial_width = float(spatial_str)
+        if spatial_width <= 0:
+            return ValidationResult(False, "Spatial width must be positive")
+        if pixel_count <= 0:
+            return ValidationResult(False, "Pixel count must be positive")
+        pixel_size = spatial_width / pixel_count
+        return ValidationResult(True, value=pixel_size)
+    except (ValueError, TypeError):
+        return ValidationResult(False, "Invalid spatial width")
