@@ -1,0 +1,17 @@
+{
+    'filename slug': 'quick_test',
+    'number of runs': 100,
+    'nominal diffusion length': 0.1,
+    'FWHM_0': 1,
+    'amplitude_0': 1,
+    'mean_0': 0,
+    'noise value': 0.02,
+    'spatial width': 5,
+    'pixel width': 50,
+    'time range': [0, 1, 5],
+    'proximity level': 0.1,
+    'multiprocessing': True,
+    'retain profile data': False,
+    'length unit': 'micrometer',
+    'time unit': 'nanosecond',
+}
