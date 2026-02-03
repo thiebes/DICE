@@ -106,7 +106,13 @@ class SimulationThread(QThread):
             else:
                 self.progress.emit("Starting simulation...")
 
-            result = self.interface.run_simulation(self.parameters)
+            def progress_callback(current: int, total: int):
+                self.iteration_progress.emit(current, total)
+
+            result = self.interface.run_simulation(
+                self.parameters,
+                progress_callback=progress_callback
+            )
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
@@ -1271,6 +1277,11 @@ class DiceGUI(QMainWindow):
         self.elapsed_label.setMinimumWidth(100)
         progress_layout.addWidget(self.elapsed_label)
 
+        self.remaining_label = QLabel("")
+        self.remaining_label.setVisible(False)
+        self.remaining_label.setMinimumWidth(120)
+        progress_layout.addWidget(self.remaining_label)
+
         layout.addLayout(progress_layout)
 
         # Status label
@@ -1985,9 +1996,25 @@ class DiceGUI(QMainWindow):
         self.status_label.setText(message)
 
     def _update_iteration_progress(self, current: int, total: int):
-        """Update progress bar with iteration count."""
+        """Update progress bar with iteration count and estimated time remaining."""
         self.progress_bar.setValue(current)
-        self.status_label.setText(f"Running {current}/{total}")
+        self.status_label.setText(f"Running {current:,}/{total:,}")
+
+        # Calculate estimated time remaining after first batch (10%)
+        if current > 0:
+            elapsed_ms = self.elapsed_timer.elapsed()
+            fraction_complete = current / total
+
+            if fraction_complete >= 0.1:  # Only estimate after first 10%
+                estimated_total_ms = elapsed_ms / fraction_complete
+                remaining_ms = estimated_total_ms - elapsed_ms
+
+                remaining_secs = max(0, int(remaining_ms / 1000))
+                minutes = remaining_secs // 60
+                secs = remaining_secs % 60
+
+                self.remaining_label.setText(f"Remaining: ~{minutes:02d}:{secs:02d}")
+                self.remaining_label.setVisible(True)
 
     def simulation_finished(self, result):
         """Handle simulation completion."""
@@ -2017,6 +2044,8 @@ class DiceGUI(QMainWindow):
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
         self.elapsed_label.setVisible(False)
+        self.remaining_label.setVisible(False)
+        self.remaining_label.setText("")
         self.elapsed_display_timer.stop()
 
     # ============ Menu Actions ============

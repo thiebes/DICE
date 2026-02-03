@@ -4,7 +4,7 @@ Interface between GUI and DICE simulation engine.
 This module handles parameter conversion and simulation execution.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 import sys
 import os
 
@@ -104,12 +104,14 @@ class DiceInterface:
 
         return params
 
-    def run_simulation(self, parameters: Dict[str, Any]) -> Optional[Any]:
+    def run_simulation(self, parameters: Dict[str, Any],
+                       progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[Any]:
         """
         Run DICE simulation with given parameters.
 
         Args:
             parameters: Dictionary of parameters
+            progress_callback: Optional callback for progress updates (current, total)
 
         Returns:
             Simulation results or None if error occurred
@@ -154,7 +156,8 @@ class DiceInterface:
                 noise_values=processed_params['noise series'],
                 num_runs=processed_params['number of runs'],
                 multiprocessing=processed_params.get('multiprocessing', 1) != 0,
-                retain_profile_data=processed_params.get('retain profile data', 0) != 0
+                retain_profile_data=processed_params.get('retain profile data', 0) != 0,
+                progress_callback=progress_callback
             )
 
             # Analyze results

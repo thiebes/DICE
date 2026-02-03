@@ -234,11 +234,27 @@ def run_monte_carlo_simulation(
     
     # Run simulations
     if multiprocessing:
-        # Parallel execution
-        results = Parallel(n_jobs=-1)(
-            delayed(run_single_simulation)(*params) 
-            for params in run_parameters
-        )
+        # Batched parallel execution for progress updates
+        num_batches = 10
+        batch_size = (total_runs + num_batches - 1) // num_batches  # Ceiling division
+        results = []
+
+        for batch_idx in range(num_batches):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, total_runs)
+            batch_params = run_parameters[start:end]
+
+            if not batch_params:
+                break
+
+            batch_results = Parallel(n_jobs=-1)(
+                delayed(run_single_simulation)(*params)
+                for params in batch_params
+            )
+            results.extend(batch_results)
+
+            if progress_callback:
+                progress_callback(end, total_runs)
     else:
         # Sequential execution with optional progress updates
         results = []
