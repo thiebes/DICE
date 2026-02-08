@@ -11,6 +11,79 @@ import numpy as np
 
 
 @dataclass
+class UnitOverrides:
+    """
+    Per-parameter unit overrides.
+
+    When a field is None, the parameter uses the global simulation unit
+    (length_unit or time_unit from SimulationParameters). When set to a
+    unit string, the corresponding parameter value is in that unit and
+    will be converted to the global unit before simulation.
+
+    Attributes
+    ----------
+    fwhm_0 : str, optional
+        Length unit for FWHM_0.
+    sigma_0 : str, optional
+        Length unit for sigma_0.
+    mu_0 : str, optional
+        Length unit for mean position.
+    spatial_width : str, optional
+        Length unit for spatial width.
+    diffusion_length : str, optional
+        Length unit for diffusion length.
+    diffusion_coefficient_length : str, optional
+        Length unit for diffusion coefficient (length^2 component).
+    diffusion_coefficient_time : str, optional
+        Time unit for diffusion coefficient (per-time component).
+    lifetime : str, optional
+        Time unit for lifetime.
+    time_start : str, optional
+        Time unit for time range start.
+    time_stop : str, optional
+        Time unit for time range stop.
+    time_series : str, optional
+        Time unit for time series values.
+    """
+    fwhm_0: Optional[str] = None
+    sigma_0: Optional[str] = None
+    mu_0: Optional[str] = None
+    spatial_width: Optional[str] = None
+    diffusion_length: Optional[str] = None
+    diffusion_coefficient_length: Optional[str] = None
+    diffusion_coefficient_time: Optional[str] = None
+    lifetime: Optional[str] = None
+    time_start: Optional[str] = None
+    time_stop: Optional[str] = None
+    time_series: Optional[str] = None
+
+
+@dataclass
+class OutputUnitPreferences:
+    """
+    Units for output display.
+
+    When a field is None, the output uses the global simulation unit or
+    the default output convention (cm^2/s for diffusion coefficients).
+
+    Attributes
+    ----------
+    length : str, optional
+        Length unit for output display.
+    time : str, optional
+        Time unit for output display.
+    diffusion_length : str, optional
+        Length unit for diffusion coefficient output (defaults to 'centimeter').
+    diffusion_time : str, optional
+        Time unit for diffusion coefficient output (defaults to 'second').
+    """
+    length: Optional[str] = None
+    time: Optional[str] = None
+    diffusion_length: Optional[str] = None
+    diffusion_time: Optional[str] = None
+
+
+@dataclass
 class GaussianParameters:
     """
     Parameters defining the initial Gaussian profile.
@@ -470,7 +543,9 @@ class SimulationParameters:
     length_unit: str = "micrometer"
     time_unit: str = "nanosecond"
     multiprocessing: bool = True
-    
+    unit_overrides: UnitOverrides = field(default_factory=UnitOverrides)
+    output_units: OutputUnitPreferences = field(default_factory=OutputUnitPreferences)
+
     def __post_init__(self):
         if self.num_runs <= 0:
             raise ValueError("Number of runs must be positive")

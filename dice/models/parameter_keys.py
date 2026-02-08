@@ -46,6 +46,27 @@ class ParameterKey:
     NOISE_RANGE_RECIPROCAL = "noise_range_reciprocal"
     NOISE_RANGE_RECIPROCAL_LOG = "noise_range_reciprocal_log"
 
+    # Per-parameter unit overrides
+    FWHM_0_UNIT = "fwhm_0_unit"
+    SIGMA_0_UNIT = "sigma_0_unit"
+    SIGMA2_0_UNIT = "sigma2_0_unit"
+    MU_0_UNIT = "mu_0_unit"
+    SPATIAL_WIDTH_UNIT = "spatial_width_unit"
+    DIFFUSION_LENGTH_UNIT = "diffusion_length_unit"
+    DIFFUSION_COEFFICIENT_LENGTH_UNIT = "diffusion_coefficient_length_unit"
+    DIFFUSION_COEFFICIENT_TIME_UNIT = "diffusion_coefficient_time_unit"
+    LIFETIME_UNIT = "lifetime_unit"
+    TIME_START_UNIT = "time_start_unit"
+    TIME_STOP_UNIT = "time_stop_unit"
+    TIME_SERIES_UNIT = "time_series_unit"
+    TIME_RANGE_UNIT = "time_range_unit"
+
+    # Output unit preferences
+    OUTPUT_LENGTH_UNIT = "output_length_unit"
+    OUTPUT_TIME_UNIT = "output_time_unit"
+    OUTPUT_DIFFUSION_LENGTH_UNIT = "output_diffusion_length_unit"
+    OUTPUT_DIFFUSION_TIME_UNIT = "output_diffusion_time_unit"
+
     # Output parameters
     FILENAME_SLUG = "filename_slug"
     LENGTH_UNIT = "length_unit"
@@ -93,6 +114,27 @@ PARAMETER_ALIASES: Dict[str, str] = {
     "estimate noise from data": ParameterKey.ESTIMATE_NOISE_FROM_DATA,
     "noise range, reciprocal": ParameterKey.NOISE_RANGE_RECIPROCAL,
     "noise range, reciprocal log": ParameterKey.NOISE_RANGE_RECIPROCAL_LOG,
+
+    # Per-parameter unit overrides
+    "FWHM_0_unit": ParameterKey.FWHM_0_UNIT,
+    "sigma_0_unit": ParameterKey.SIGMA_0_UNIT,
+    "sigma2_0_unit": ParameterKey.SIGMA2_0_UNIT,
+    "mu_0_unit": ParameterKey.MU_0_UNIT,
+    "spatial_width_unit": ParameterKey.SPATIAL_WIDTH_UNIT,
+    "spatial width unit": ParameterKey.SPATIAL_WIDTH_UNIT,
+    "diffusion_length_unit": ParameterKey.DIFFUSION_LENGTH_UNIT,
+    "diffusion length unit": ParameterKey.DIFFUSION_LENGTH_UNIT,
+    "diffusion_coefficient_length_unit": ParameterKey.DIFFUSION_COEFFICIENT_LENGTH_UNIT,
+    "diffusion_coefficient_time_unit": ParameterKey.DIFFUSION_COEFFICIENT_TIME_UNIT,
+    "lifetime_unit": ParameterKey.LIFETIME_UNIT,
+    "time_start_unit": ParameterKey.TIME_START_UNIT,
+    "time_stop_unit": ParameterKey.TIME_STOP_UNIT,
+    "time_series_unit": ParameterKey.TIME_SERIES_UNIT,
+    "time_range_unit": ParameterKey.TIME_RANGE_UNIT,
+    "output_length_unit": ParameterKey.OUTPUT_LENGTH_UNIT,
+    "output_time_unit": ParameterKey.OUTPUT_TIME_UNIT,
+    "output_diffusion_length_unit": ParameterKey.OUTPUT_DIFFUSION_LENGTH_UNIT,
+    "output_diffusion_time_unit": ParameterKey.OUTPUT_DIFFUSION_TIME_UNIT,
 
     # Output parameters
     "filename slug": ParameterKey.FILENAME_SLUG,

@@ -131,22 +131,25 @@ def estimates_precision(
     p_low = 1 - proximity_level
     p_high = 1 + proximity_level
 
+    # Find diffusion coefficient columns by prefix (unit label may vary)
+    def _find_column(prefix):
+        matches = [c for c in df.columns if c.startswith(prefix)]
+        return matches[0] if matches else None
+
+    wls_col = _find_column('weighted fit diffusion coeff')
+    ols_col = _find_column('unweighted fit diffusion coeff')
+    nom_col = _find_column('nominal diffusion coeff [')
+
     # Calculate ratios for WLS and OLS
-    if 'weighted fit diffusion coeff [cm^2/s]' in df.columns:
-        df['d_wls_over_d_nom'] = (
-            df['weighted fit diffusion coeff [cm^2/s]'] /
-            df['nominal diffusion coeff [cm^2/s]']
-        )
+    if wls_col and nom_col:
+        df['d_wls_over_d_nom'] = df[wls_col] / df[nom_col]
         wls_within = df['d_wls_over_d_nom'].between(p_low, p_high)
         wls_portion_pct = 100 * wls_within.sum() / len(df)
     else:
         wls_portion_pct = 0.0
 
-    if 'unweighted fit diffusion coeff [cm^2/s]' in df.columns:
-        df['d_ols_over_d_nom'] = (
-            df['unweighted fit diffusion coeff [cm^2/s]'] /
-            df['nominal diffusion coeff [cm^2/s]']
-        )
+    if ols_col and nom_col:
+        df['d_ols_over_d_nom'] = df[ols_col] / df[nom_col]
         ols_within = df['d_ols_over_d_nom'].between(p_low, p_high)
         ols_portion_pct = 100 * ols_within.sum() / len(df)
     else:

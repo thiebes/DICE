@@ -104,6 +104,17 @@ class DiceInterface:
         if 'multiprocessing' in gui_params:
             params['multiprocessing'] = gui_params['multiprocessing']
 
+        # Per-parameter unit overrides (pass through for resolve_units)
+        unit_keys = [
+            'fwhm_0_unit', 'sigma_0_unit', 'mu_0_unit', 'spatial_width_unit',
+            'diffusion_length_unit', 'diffusion_coefficient_length_unit',
+            'diffusion_coefficient_time_unit', 'lifetime_unit',
+            'time_start_unit', 'time_stop_unit',
+        ]
+        for key in unit_keys:
+            if key in gui_params:
+                params[key] = gui_params[key]
+
         return params
 
     def run_simulation(self, parameters: Dict[str, Any],
@@ -128,6 +139,12 @@ class DiceInterface:
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
             import numpy as np
             from pathlib import Path
+
+            # Resolve per-parameter unit overrides before parsing,
+            # so that values are in the global unit system when the
+            # parser converts between representations (e.g., FWHM -> sigma^2).
+            from dice.utils.units import resolve_units
+            parameters = resolve_units(parameters)
 
             # Parse and process parameters (same as open_parameters does)
             processed_params = parameter_parser(parameters)

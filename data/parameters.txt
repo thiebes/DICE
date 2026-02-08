@@ -27,13 +27,22 @@
     ### Nominal diffusion and lifetime parameters ###
     # Provide either diffusion length OR both diffusion coefficient and lifetime:
     'nominal diffusion length': 0.1,
-    # 'nominal diffusion coefficient': 0.01, 
-    # 'nominal lifetime (tau)': 1, 
+    # 'nominal diffusion coefficient': 0.01,
+    # 'nominal lifetime (tau)': 1,
+    #
+    # Per-parameter unit overrides (optional):
+    # Each dimensioned parameter can specify its own unit, overriding the
+    # global length/time unit above. When omitted, the global unit applies.
+    # 'diffusion_length_unit': 'nanometer',
+    # 'diffusion_coefficient_length_unit': 'centimeter',
+    # 'diffusion_coefficient_time_unit': 'second',
+    # 'lifetime_unit': 'picosecond',
 
     ### Initial profile parameters ###
     # Initial profile width (choose one):
     'FWHM_0': 1,                  # Full Width at Half Maximum.
     # 'sigma_0': 0.4032,           # Standard deviation.
+    # 'FWHM_0_unit': 'nanometer',  # Per-parameter unit override for FWHM.
 
     # Initial amplitude and mean:
     'amplitude_0': 1,             # Initial amplitude.
@@ -46,6 +55,7 @@
 
     ### Spatial axis parameters ###
     'spatial width': 5,           # Spatial width across entire x-axis of profiles (units parameterized above).
+    # 'spatial_width_unit': 'nanometer',  # Per-parameter unit override.
     'pixel width': 100,           # Pixel width across entire x-axis of profiles.
 
     ### Time axis parameters ###

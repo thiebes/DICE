@@ -141,7 +141,6 @@ class TestFFTCNR:
         # Should have high CNR (low noise)
         assert cnr > 50
     
-    @pytest.mark.skip
     def test_noisy_profile(self):
         """Test CNR estimation on noisy profile."""
         from dice.core.profiles import gaussian
@@ -186,7 +185,6 @@ class TestFFTCNR:
 class TestEstimateNoiseFromProfile:
     """Test noise estimation from profile."""
     
-    @pytest.mark.skip
     def test_fft_method(self):
         """Test FFT-based noise estimation."""
         from dice.core.profiles import gaussian

@@ -68,6 +68,7 @@ class DiceGUI(QMainWindow):
         self.settings = QSettings("DICE", "DICE_GUI")
         self.loaded_data_file = None  # Track loaded CSV file for status bar
         self._populating = False      # Prevent modification marking during load
+        self._syncing_units = False   # Prevent _user_modified marking during sync
         self.validation_manager = None  # Will be initialized in init_ui
         self._error_labels = {}  # field_id -> inline error QLabel
 
@@ -292,34 +293,39 @@ class DiceGUI(QMainWindow):
 
     def create_unit_panel(self) -> QWidget:
         """Create the unit selection panel."""
-        panel = QGroupBox("Units")
+        from dice_gui.tabs.base import LENGTH_UNITS_DISPLAY, TIME_UNITS_DISPLAY
+
+        panel = QGroupBox("Global Units")
         layout = QHBoxLayout(panel)
 
         # Length unit
         length_label = QLabel("Length Unit:")
         self.length_unit_combo = QComboBox()
-        self.length_unit_combo.addItems([
-            "angstrom", "picometer", "nanometer", "micrometer",
-            "millimeter", "centimeter", "meter"
-        ])
+        self.length_unit_combo.addItems(LENGTH_UNITS_DISPLAY)
         self.length_unit_combo.setCurrentText("micrometer")
-        self.length_unit_combo.currentTextChanged.connect(self.update_unit_labels)
+        self.length_unit_combo.currentTextChanged.connect(self.sync_unit_combos)
 
         # Time unit
         time_label = QLabel("Time Unit:")
         self.time_unit_combo = QComboBox()
-        self.time_unit_combo.addItems([
-            "attosecond", "femtosecond", "picosecond", "nanosecond",
-            "microsecond", "millisecond", "second"
-        ])
+        self.time_unit_combo.addItems(TIME_UNITS_DISPLAY)
         self.time_unit_combo.setCurrentText("nanosecond")
-        self.time_unit_combo.currentTextChanged.connect(self.update_unit_labels)
+        self.time_unit_combo.currentTextChanged.connect(self.sync_unit_combos)
+
+        # Reset per-parameter overrides
+        reset_button = QPushButton("Reset All to Global")
+        reset_button.setToolTip(
+            "Reset all per-parameter unit selections to follow the global units"
+        )
+        reset_button.clicked.connect(self.reset_per_param_units)
 
         layout.addWidget(length_label)
         layout.addWidget(self.length_unit_combo)
         layout.addStretch()
         layout.addWidget(time_label)
         layout.addWidget(self.time_unit_combo)
+        layout.addStretch()
+        layout.addWidget(reset_button)
 
         return panel
 
@@ -414,38 +420,73 @@ class DiceGUI(QMainWindow):
         toggle_noise_inputs(self, self.noise_fixed_radio.isChecked())
         toggle_time_inputs(self, self.time_range_radio.isChecked())
 
-    def update_unit_labels(self):
-        """Update all unit labels based on selected units."""
-        length_unit = self.length_unit_combo.currentText()
-        time_unit = self.time_unit_combo.currentText()
+    def sync_unit_combos(self):
+        """Sync per-parameter unit combos with the global unit selection.
 
-        # Map full names to abbreviations
-        length_abbrev = {
-            "meter": "m", "centimeter": "cm", "millimeter": "mm",
-            "micrometer": "μm", "nanometer": "nm", "angstrom": "Å",
-            "picometer": "pm"
-        }.get(length_unit, length_unit)
+        For each per-parameter combo that the user has not explicitly changed,
+        update it to match the current global unit. Then refresh all calculated
+        value displays.
+        """
+        global_length = self.length_unit_combo.currentText()
+        global_time = self.time_unit_combo.currentText()
 
-        time_abbrev = {
-            "second": "s", "millisecond": "ms", "microsecond": "μs",
-            "nanosecond": "ns", "picosecond": "ps", "femtosecond": "fs",
-            "attosecond": "as"
-        }.get(time_unit, time_unit)
+        self._syncing_units = True
+        try:
+            # Length-dimension combos
+            for combo in [
+                self.diffusion_length_unit_combo,
+                self.mean_unit_combo,
+                self.width_unit_combo,
+                self.spatial_width_unit_combo,
+                self.diffusion_coeff_length_unit_combo,
+            ]:
+                if not combo.property("_user_modified"):
+                    combo.setCurrentText(global_length)
 
-        # Update all labels
-        self.diffusion_length_label.setText(length_abbrev)
-        self.diffusion_coeff_label.setText(f"{length_abbrev}²/{time_abbrev}")
-        self.lifetime_label.setText(time_abbrev)
-        self.mean_label.setText(length_abbrev)
-        self.width_unit_label.setText(length_abbrev)
-        self.spatial_width_label.setText(length_abbrev)
-        self.time_start_label.setText(time_abbrev)
-        self.time_stop_label.setText(time_abbrev)
+            # Time-dimension combos
+            for combo in [
+                self.lifetime_unit_combo,
+                self.time_start_unit_combo,
+                self.time_stop_unit_combo,
+                self.diffusion_coeff_time_unit_combo,
+            ]:
+                if not combo.property("_user_modified"):
+                    combo.setCurrentText(global_time)
+        finally:
+            self._syncing_units = False
 
         # Update calculated values
         update_calculated_length(self)
         update_width_conversion(self)
         update_pixel_size(self)
+
+    def _on_per_param_unit_changed(self, combo: QComboBox):
+        """Mark a per-parameter unit combo as user-modified.
+
+        Skipped during programmatic updates (sync_unit_combos, populate).
+        """
+        if not self._syncing_units and not self._populating:
+            combo.setProperty("_user_modified", True)
+
+    def reset_per_param_units(self):
+        """Reset all per-parameter unit combos to follow the global units."""
+        for combo in self._get_all_per_param_unit_combos():
+            combo.setProperty("_user_modified", False)
+        self.sync_unit_combos()
+
+    def _get_all_per_param_unit_combos(self):
+        """Return a list of all per-parameter unit combo boxes."""
+        return [
+            self.diffusion_length_unit_combo,
+            self.diffusion_coeff_length_unit_combo,
+            self.diffusion_coeff_time_unit_combo,
+            self.lifetime_unit_combo,
+            self.mean_unit_combo,
+            self.width_unit_combo,
+            self.spatial_width_unit_combo,
+            self.time_start_unit_combo,
+            self.time_stop_unit_combo,
+        ]
 
     def _update_output_path_preview(self):
         """Update the output path preview based on current slug."""
@@ -846,6 +887,54 @@ class DiceGUI(QMainWindow):
             params['time_type'] = 'series'
             params['time_series'] = self.time_series_input.toPlainText()
 
+        # Per-parameter unit overrides (only when different from global)
+        global_length = self.length_unit_combo.currentText()
+        global_time = self.time_unit_combo.currentText()
+
+        # FWHM / sigma width unit
+        w_unit = self.width_unit_combo.currentText()
+        if w_unit != global_length:
+            if self.fwhm_radio.isChecked():
+                params['fwhm_0_unit'] = w_unit
+            else:
+                params['sigma_0_unit'] = w_unit
+
+        # Mean position unit
+        mu_unit = self.mean_unit_combo.currentText()
+        if mu_unit != global_length:
+            params['mu_0_unit'] = mu_unit
+
+        # Diffusion length unit
+        dl_unit = self.diffusion_length_unit_combo.currentText()
+        if dl_unit != global_length:
+            params['diffusion_length_unit'] = dl_unit
+
+        # Diffusion coefficient units (compound: length^2/time)
+        dcl_unit = self.diffusion_coeff_length_unit_combo.currentText()
+        dct_unit = self.diffusion_coeff_time_unit_combo.currentText()
+        if dcl_unit != global_length:
+            params['diffusion_coefficient_length_unit'] = dcl_unit
+        if dct_unit != global_time:
+            params['diffusion_coefficient_time_unit'] = dct_unit
+
+        # Lifetime unit
+        lt_unit = self.lifetime_unit_combo.currentText()
+        if lt_unit != global_time:
+            params['lifetime_unit'] = lt_unit
+
+        # Spatial width unit
+        sw_unit = self.spatial_width_unit_combo.currentText()
+        if sw_unit != global_length:
+            params['spatial_width_unit'] = sw_unit
+
+        # Time start/stop units
+        ts_unit = self.time_start_unit_combo.currentText()
+        if ts_unit != global_time:
+            params['time_start_unit'] = ts_unit
+        tp_unit = self.time_stop_unit_combo.currentText()
+        if tp_unit != global_time:
+            params['time_stop_unit'] = tp_unit
+
         return params
 
     def run_simulation(self):
@@ -1181,19 +1270,33 @@ class DiceGUI(QMainWindow):
         lines.append("    ### Nominal diffusion and lifetime parameters ###")
         if gui_params['diffusion_type'] == 'length':
             lines.append(f"    'nominal diffusion length': {gui_params['diffusion_length']},")
+            if 'diffusion_length_unit' in gui_params:
+                lines.append(f"    'diffusion_length_unit': '{gui_params['diffusion_length_unit']}',")
         else:
             lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
+            if 'diffusion_coefficient_length_unit' in gui_params:
+                lines.append(f"    'diffusion_coefficient_length_unit': '{gui_params['diffusion_coefficient_length_unit']}',")
+            if 'diffusion_coefficient_time_unit' in gui_params:
+                lines.append(f"    'diffusion_coefficient_time_unit': '{gui_params['diffusion_coefficient_time_unit']}',")
             lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
+            if 'lifetime_unit' in gui_params:
+                lines.append(f"    'lifetime_unit': '{gui_params['lifetime_unit']}',")
         lines.append("")
 
         # Initial profile
         lines.append("    ### Initial profile parameters ###")
         if gui_params['profile_width_type'] == 'fwhm':
             lines.append(f"    'FWHM_0': {gui_params['profile_width_value']},")
+            if 'fwhm_0_unit' in gui_params:
+                lines.append(f"    'FWHM_0_unit': '{gui_params['fwhm_0_unit']}',")
         else:
             lines.append(f"    'sigma_0': {gui_params['profile_width_value']},")
+            if 'sigma_0_unit' in gui_params:
+                lines.append(f"    'sigma_0_unit': '{gui_params['sigma_0_unit']}',")
         lines.append(f"    'amplitude_0': {gui_params['amplitude_0']},")
         lines.append(f"    'mean_0': {gui_params['mean_0']},")
+        if 'mu_0_unit' in gui_params:
+            lines.append(f"    'mu_0_unit': '{gui_params['mu_0_unit']}',")
         lines.append("")
 
         # Noise
@@ -1207,6 +1310,8 @@ class DiceGUI(QMainWindow):
         # Spatial axis
         lines.append("    ### Spatial axis parameters ###")
         lines.append(f"    'spatial width': {gui_params['spatial_width']},")
+        if 'spatial_width_unit' in gui_params:
+            lines.append(f"    'spatial_width_unit': '{gui_params['spatial_width_unit']}',")
         lines.append(f"    'pixel width': {gui_params['pixel_width']},")
         lines.append("")
 
@@ -1214,6 +1319,10 @@ class DiceGUI(QMainWindow):
         lines.append("    ### Time axis parameters ###")
         if gui_params['time_type'] == 'range':
             lines.append(f"    'time range': [{gui_params['time_start']}, {gui_params['time_stop']}, {gui_params['time_steps']}],")
+            if 'time_start_unit' in gui_params:
+                lines.append(f"    'time_start_unit': '{gui_params['time_start_unit']}',")
+            if 'time_stop_unit' in gui_params:
+                lines.append(f"    'time_stop_unit': '{gui_params['time_stop_unit']}',")
         else:
             lines.append(f"    'time series': [{gui_params['time_series']}],")
         lines.append("")
@@ -1322,6 +1431,9 @@ class DiceGUI(QMainWindow):
             if 'retain profile data' in params:
                 self.retain_profile_check.setChecked(params['retain profile data'])
 
+            # Per-parameter unit overrides
+            self._load_per_param_units(params)
+
             # Image settings (with defaults if not present)
             if 'image type' in params:
                 self.image_type_combo.setCurrentText(params['image type'])
@@ -1341,6 +1453,30 @@ class DiceGUI(QMainWindow):
                 self.image_numbins_spin.setValue(params['image numbins'])
         finally:
             self._populating = False  # Re-enable modification marking
+
+    def _load_per_param_units(self, params: dict):
+        """Set per-parameter unit combos from parameter dict _unit keys.
+
+        If a _unit key is present, the corresponding combo is set and marked
+        as user-modified so that subsequent global unit changes do not
+        override it.
+        """
+        def _set_combo(combo, *keys):
+            for key in keys:
+                if key in params:
+                    combo.setCurrentText(params[key])
+                    combo.setProperty("_user_modified", True)
+                    return
+
+        _set_combo(self.width_unit_combo, 'FWHM_0_unit', 'fwhm_0_unit', 'sigma_0_unit')
+        _set_combo(self.mean_unit_combo, 'mu_0_unit')
+        _set_combo(self.diffusion_length_unit_combo, 'diffusion_length_unit')
+        _set_combo(self.diffusion_coeff_length_unit_combo, 'diffusion_coefficient_length_unit')
+        _set_combo(self.diffusion_coeff_time_unit_combo, 'diffusion_coefficient_time_unit')
+        _set_combo(self.lifetime_unit_combo, 'lifetime_unit')
+        _set_combo(self.spatial_width_unit_combo, 'spatial_width_unit', 'spatial width unit')
+        _set_combo(self.time_start_unit_combo, 'time_start_unit')
+        _set_combo(self.time_stop_unit_combo, 'time_stop_unit')
 
     def add_to_recent_files(self, file_path: str):
         """Add a file to the recent files list."""
@@ -1431,6 +1567,13 @@ class DiceGUI(QMainWindow):
         # Units
         self.length_unit_combo.currentTextChanged.connect(self.mark_modified)
         self.time_unit_combo.currentTextChanged.connect(self.mark_modified)
+
+        # Per-parameter unit combos: mark modified and track user changes
+        for combo in self._get_all_per_param_unit_combos():
+            combo.currentTextChanged.connect(self.mark_modified)
+            combo.currentTextChanged.connect(
+                lambda _text, c=combo: self._on_per_param_unit_changed(c)
+            )
 
         # Initial profile parameters
         self.amplitude_input.textChanged.connect(self.mark_modified)

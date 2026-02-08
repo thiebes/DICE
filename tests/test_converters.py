@@ -105,10 +105,10 @@ class TestDiffusionConversion:
         """Test error handling for invalid units."""
         slope = 1.0
         
-        with pytest.raises(ValueError, match="Invalid length unit"):
+        with pytest.raises(ValueError, match="Unknown length unit"):
             slope_to_diffusion_constant(slope, 'invalid_unit', 'second')
-        
-        with pytest.raises(ValueError, match="Invalid time unit"):
+
+        with pytest.raises(ValueError, match="Unknown time unit"):
             slope_to_diffusion_constant(slope, 'meter', 'invalid_unit')
     
     def test_zero_slope(self):

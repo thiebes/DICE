@@ -47,6 +47,11 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
         with open(filename, 'r') as f:
             parms_txt = f.read()
             parms_dict = ast.literal_eval(parms_txt)
+            # Resolve per-parameter unit overrides before parsing,
+            # so that values are in the global unit system when the
+            # parser converts between representations (e.g., FWHM -> sigma^2).
+            from ..utils.units import resolve_units
+            parms_dict = resolve_units(parms_dict)
             result = parameter_parser(parms_dict)
         return result
     except FileNotFoundError:

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QPushButton, QSpinBox, QTextEdit, QFileDialog
 )
 
-from dice_gui.tabs.base import create_option_card, create_error_label
+from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
 from dice_gui.validators import calculate_pixel_size
 
 if TYPE_CHECKING:
@@ -123,9 +123,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For diffusion length L and max time t_max: width ≈ 5*sqrt(sigma_0² + 2*D*t_max)\n\n"
         "Typical values: 5-50 μm for microscopy experiments"
     )
-    main_window.spatial_width_label = QLabel("μm")
+    main_window.spatial_width_unit_combo = create_unit_combo('length')
     spatial_width_layout.addWidget(main_window.spatial_width_input)
-    spatial_width_layout.addWidget(main_window.spatial_width_label)
+    spatial_width_layout.addWidget(main_window.spatial_width_unit_combo)
     spatial_layout.addRow("Spatial Width:", spatial_width_widget)
     main_window._error_labels["spatial_width"] = create_error_label()
     spatial_layout.addRow("", main_window._error_labels["spatial_width"])
@@ -153,6 +153,7 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     # Connect for calculation
     main_window.spatial_width_input.textChanged.connect(lambda: update_pixel_size(main_window))
     main_window.pixel_width_input.valueChanged.connect(lambda: update_pixel_size(main_window))
+    main_window.spatial_width_unit_combo.currentTextChanged.connect(lambda: update_pixel_size(main_window))
 
     # Temporal domain group
     temporal_group = QGroupBox("Temporal Domain")
@@ -194,9 +195,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For non-zero start, initial profile still has width specified in Physical Parameters.\n\n"
         "Must be less than stop time."
     )
-    main_window.time_start_label = QLabel("ns")
+    main_window.time_start_unit_combo = create_unit_combo('time')
     start_widget_layout.addWidget(main_window.time_start_input)
-    start_widget_layout.addWidget(main_window.time_start_label)
+    start_widget_layout.addWidget(main_window.time_start_unit_combo)
 
     stop_widget = QWidget()
     stop_widget_layout = QHBoxLayout(stop_widget)
@@ -210,9 +211,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For diffusion, need enough time for measurable width increase (delta_sigma² > noise sensitivity)\n\n"
         "Must be greater than start time."
     )
-    main_window.time_stop_label = QLabel("ns")
+    main_window.time_stop_unit_combo = create_unit_combo('time')
     stop_widget_layout.addWidget(main_window.time_stop_input)
-    stop_widget_layout.addWidget(main_window.time_stop_label)
+    stop_widget_layout.addWidget(main_window.time_stop_unit_combo)
 
     main_window.time_steps_input = QSpinBox()
     main_window.time_steps_input.setMinimum(2)
@@ -320,13 +321,16 @@ def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:
 
 def update_pixel_size(main_window: "DiceGUI") -> None:
     """Update the calculated pixel size display."""
+    from dice.utils.units import length_abbreviation
+
     spatial_text = main_window.spatial_width_input.text().strip()
     pixel_count = main_window.pixel_width_input.value()
 
     result = calculate_pixel_size(spatial_text, pixel_count)
     if result.is_valid:
-        length_unit = main_window.length_unit_combo.currentText()
-        main_window.pixel_size_label.setText(f"Pixel Size: {result.value:.4g} {length_unit}/pixel")
+        width_unit = main_window.spatial_width_unit_combo.currentText()
+        unit_abbrev = length_abbreviation(width_unit)
+        main_window.pixel_size_label.setText(f"Pixel Size: {result.value:.4g} {unit_abbrev}/pixel")
     else:
         main_window.pixel_size_label.setText("Pixel Size: ---")
 

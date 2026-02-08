@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QScrollArea
 )
 
-from dice_gui.tabs.base import create_option_card, create_error_label
+from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
 from dice_gui.validators import (
     validate_positive_float, validate_float,
     convert_fwhm_to_sigma, convert_sigma_to_fwhm,
@@ -73,9 +73,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "The simulation assesses how accurately this value can be recovered from noisy measurements.\n\n"
         "Must be positive. Units set by length unit selector above."
     )
-    main_window.diffusion_length_label = QLabel("μm")
+    main_window.diffusion_length_unit_combo = create_unit_combo('length')
     length_widget_layout.addWidget(main_window.diffusion_length_input)
-    length_widget_layout.addWidget(main_window.diffusion_length_label)
+    length_widget_layout.addWidget(main_window.diffusion_length_unit_combo)
 
     length_layout.addRow("Diffusion Length:", length_widget)
     main_window._error_labels["diffusion_length"] = create_error_label()
@@ -100,9 +100,13 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "- Inorganic semiconductors: 0.1-100 cm²/s (10-10000 μm²/ns)\n\n"
         "Must be non-negative. Zero means no diffusion (only decay)."
     )
-    main_window.diffusion_coeff_label = QLabel("μm²/ns")
+    main_window.diffusion_coeff_length_unit_combo = create_unit_combo('length')
+    dc_unit_separator = QLabel("\u00b2/")
+    main_window.diffusion_coeff_time_unit_combo = create_unit_combo('time')
     d_widget_layout.addWidget(main_window.diffusion_coeff_input)
-    d_widget_layout.addWidget(main_window.diffusion_coeff_label)
+    d_widget_layout.addWidget(main_window.diffusion_coeff_length_unit_combo)
+    d_widget_layout.addWidget(dc_unit_separator)
+    d_widget_layout.addWidget(main_window.diffusion_coeff_time_unit_combo)
 
     tau_widget = QWidget()
     tau_widget_layout = QHBoxLayout(tau_widget)
@@ -118,9 +122,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "- Triplet excitons: 1-1000 ns\n\n"
         "Must be non-negative. Zero means no decay (infinite lifetime)."
     )
-    main_window.lifetime_label = QLabel("ns")
+    main_window.lifetime_unit_combo = create_unit_combo('time')
     tau_widget_layout.addWidget(main_window.lifetime_input)
-    tau_widget_layout.addWidget(main_window.lifetime_label)
+    tau_widget_layout.addWidget(main_window.lifetime_unit_combo)
 
     coeff_layout.addRow("Diffusion Coefficient (D):", d_widget)
     main_window._error_labels["diffusion_coeff"] = create_error_label()
@@ -141,6 +145,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.diffusion_length_radio.toggled.connect(lambda checked: toggle_diffusion_inputs(main_window, checked))
     main_window.diffusion_coeff_input.textChanged.connect(lambda: update_calculated_length(main_window))
     main_window.lifetime_input.textChanged.connect(lambda: update_calculated_length(main_window))
+    main_window.diffusion_coeff_length_unit_combo.currentTextChanged.connect(lambda: update_calculated_length(main_window))
+    main_window.diffusion_coeff_time_unit_combo.currentTextChanged.connect(lambda: update_calculated_length(main_window))
+    main_window.lifetime_unit_combo.currentTextChanged.connect(lambda: update_calculated_length(main_window))
 
     # Initial Profile group
     profile_group = QGroupBox("Initial Profile")
@@ -171,9 +178,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "The profile center does not move during diffusion (only spreads and decays).\n\n"
         "Should be within the spatial width defined in Experimental Conditions."
     )
-    main_window.mean_label = QLabel("μm")
+    main_window.mean_unit_combo = create_unit_combo('length')
     mean_layout.addWidget(main_window.mean_input)
-    mean_layout.addWidget(main_window.mean_label)
+    mean_layout.addWidget(main_window.mean_unit_combo)
     profile_layout.addRow("Mean Position (μ₀):", mean_widget)
     main_window._error_labels["mean"] = create_error_label()
     profile_layout.addRow("", main_window._error_labels["mean"])
@@ -220,9 +227,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "Should be smaller than the spatial window to avoid edge effects.\n\n"
         "Must be positive."
     )
-    main_window.width_unit_label = QLabel("μm")
+    main_window.width_unit_combo = create_unit_combo('length')
     width_layout_widget.addWidget(main_window.width_input)
-    width_layout_widget.addWidget(main_window.width_unit_label)
+    width_layout_widget.addWidget(main_window.width_unit_combo)
     profile_layout.addRow("Width Value:", width_widget)
     main_window._error_labels["width"] = create_error_label()
     profile_layout.addRow("", main_window._error_labels["width"])
@@ -236,6 +243,7 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.fwhm_radio.toggled.connect(lambda: update_width_conversion(main_window))
     main_window.sigma_radio.toggled.connect(lambda: update_width_conversion(main_window))
     main_window.width_input.textChanged.connect(lambda: update_width_conversion(main_window))
+    main_window.width_unit_combo.currentTextChanged.connect(lambda: update_width_conversion(main_window))
 
     # Two-column layout for groups
     columns = QHBoxLayout()
@@ -274,32 +282,67 @@ def toggle_diffusion_inputs(main_window: "DiceGUI", checked: bool) -> None:
 
 
 def update_calculated_length(main_window: "DiceGUI") -> None:
-    """Update the calculated diffusion length display."""
+    """Update the calculated diffusion length display.
+
+    Converts D and tau from their per-parameter units to SI, computes
+    L = sqrt(D * tau), then displays the result in the global length unit.
+    """
+    import math
+    from dice.utils.units import (
+        convert_diffusion_coefficient, convert_time, convert_length,
+        length_abbreviation,
+    )
+
     d_text = main_window.diffusion_coeff_input.text().strip()
     tau_text = main_window.lifetime_input.text().strip()
 
     result = calculate_diffusion_length(d_text, tau_text)
     if result.is_valid:
-        length_unit = main_window.length_unit_combo.currentText()
-        main_window.calc_length_label.setText(f"Diffusion Length: {result.value:.4g} {length_unit}")
+        try:
+            d_value = float(d_text)
+            tau_value = float(tau_text)
+
+            d_l_unit = main_window.diffusion_coeff_length_unit_combo.currentText()
+            d_t_unit = main_window.diffusion_coeff_time_unit_combo.currentText()
+            tau_unit = main_window.lifetime_unit_combo.currentText()
+
+            d_si = convert_diffusion_coefficient(
+                d_value, d_l_unit, d_t_unit, 'meter', 'second'
+            )
+            tau_si = convert_time(tau_value, tau_unit, 'second')
+
+            l_si = math.sqrt(d_si * tau_si)
+
+            display_unit = main_window.length_unit_combo.currentText()
+            l_display = convert_length(l_si, 'meter', display_unit)
+            l_abbrev = length_abbreviation(display_unit)
+
+            main_window.calc_length_label.setText(
+                f"Diffusion Length: {l_display:.4g} {l_abbrev}"
+            )
+        except (ValueError, ZeroDivisionError):
+            main_window.calc_length_label.setText("Diffusion Length: ---")
     else:
         main_window.calc_length_label.setText("Diffusion Length: ---")
 
 
 def update_width_conversion(main_window: "DiceGUI") -> None:
     """Update the FWHM/sigma conversion display."""
+    from dice.utils.units import length_abbreviation
+
     width_text = main_window.width_input.text().strip()
-    length_unit = main_window.length_unit_combo.currentText()
+    width_unit = main_window.width_unit_combo.currentText()
+    unit_abbrev = length_abbreviation(width_unit)
 
     if main_window.fwhm_radio.isChecked():
         result = convert_fwhm_to_sigma(width_text)
         if result.is_valid:
-            main_window.width_conversion_label.setText(f"Equivalent: σ = {result.value:.4g} {length_unit}")
+            main_window.width_conversion_label.setText(f"Equivalent: \u03c3 = {result.value:.4g} {unit_abbrev}")
         else:
             main_window.width_conversion_label.setText("Equivalent: ---")
     else:
         result = convert_sigma_to_fwhm(width_text)
         if result.is_valid:
-            main_window.width_conversion_label.setText(f"Equivalent: FWHM = {result.value:.4g} {length_unit}")
+            main_window.width_conversion_label.setText(f"Equivalent: FWHM = {result.value:.4g} {unit_abbrev}")
         else:
             main_window.width_conversion_label.setText("Equivalent: ---")

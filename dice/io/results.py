@@ -13,7 +13,9 @@ import json
 import csv
 
 from ..models.results import MonteCarloOutput, RunResult
+from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
+from ..utils.units import convert_diffusion_coefficient, length_abbreviation, time_abbreviation
 
 
 def print_and_append(filename: Union[str, Path], message: str, print_to_console: bool = True) -> None:
@@ -40,11 +42,12 @@ def export_collated_results(
     results: MonteCarloOutput,
     filename: Union[str, Path],
     length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
+    time_unit: str = 'nanosecond',
+    output_units: Optional[OutputUnitPreferences] = None,
 ) -> pd.DataFrame:
     """
     Export collated results to CSV file.
-    
+
     Parameters
     ----------
     results : MonteCarloOutput
@@ -55,15 +58,39 @@ def export_collated_results(
         Unit of length used in simulation.
     time_unit : str
         Unit of time used in simulation.
-    
+    output_units : OutputUnitPreferences, optional
+        Preferred units for output columns. When None, diffusion
+        coefficients are exported in cm^2/s (default behavior).
+
     Returns
     -------
     pd.DataFrame
         DataFrame of collated results.
     """
+    # Determine output units for diffusion coefficient
+    out_l = 'centimeter'
+    out_t = 'second'
+    if output_units is not None:
+        if output_units.diffusion_length is not None:
+            out_l = output_units.diffusion_length
+        if output_units.diffusion_time is not None:
+            out_t = output_units.diffusion_time
+
+    # Build column label for diffusion coefficient
+    l_abbr = length_abbreviation(out_l)
+    t_abbr = time_abbreviation(out_t)
+    d_unit_label = f"{l_abbr}^2/{t_abbr}"
+
+    def _convert_slope_to_d(slope):
+        """Convert MSD slope in simulation units to D in output units."""
+        d_sim = slope / 2
+        return convert_diffusion_coefficient(
+            d_sim, length_unit, time_unit, out_l, out_t
+        )
+
     # Create list of dictionaries for DataFrame
     data_rows = []
-    
+
     for run in results.run_results:
         row = {
             'run number': run.run_id,
@@ -75,7 +102,7 @@ def export_collated_results(
             'nominal sigma^2_0': run.nominal_sigma2_0,
             'estimated sigma^2_0': run.estimated_sigma2_0,
         }
-        
+
         # Add OLS results if available
         if run.ols_slope is not None:
             row.update({
@@ -83,14 +110,10 @@ def export_collated_results(
                 'unweighted fit diffusion slope stderr': run.ols_slope_stderr,
                 'unweighted fit intercept': run.ols_intercept,
                 'unweighted fit intercept stderr': run.ols_intercept_stderr,
-                'unweighted fit diffusion coeff [cm^2/s]': slope_to_diffusion_constant(
-                    run.ols_slope, length_unit, time_unit
-                ),
-                'unweighted fit diffusion stderr [cm^2/s]': slope_to_diffusion_constant(
-                    run.ols_slope_stderr, length_unit, time_unit
-                ) if run.ols_slope_stderr else None,
+                f'unweighted fit diffusion coeff [{d_unit_label}]': _convert_slope_to_d(run.ols_slope),
+                f'unweighted fit diffusion stderr [{d_unit_label}]': _convert_slope_to_d(run.ols_slope_stderr) if run.ols_slope_stderr else None,
             })
-        
+
         # Add WLS results if available
         if run.wls_slope is not None:
             row.update({
@@ -98,28 +121,23 @@ def export_collated_results(
                 'weighted fit diffusion slope stderr': run.wls_slope_stderr,
                 'weighted fit intercept': run.wls_intercept,
                 'weighted fit intercept stderr': run.wls_intercept_stderr,
-                'weighted fit diffusion coeff [cm^2/s]': slope_to_diffusion_constant(
-                    run.wls_slope, length_unit, time_unit
-                ),
-                'weighted fit diffusion stderr [cm^2/s]': slope_to_diffusion_constant(
-                    run.wls_slope_stderr, length_unit, time_unit
-                ) if run.wls_slope_stderr else None,
+                f'weighted fit diffusion coeff [{d_unit_label}]': _convert_slope_to_d(run.wls_slope),
+                f'weighted fit diffusion stderr [{d_unit_label}]': _convert_slope_to_d(run.wls_slope_stderr) if run.wls_slope_stderr else None,
             })
-        
-        # Add nominal diffusion coefficient in cm^2/s
-        row['nominal diffusion coeff [cm^2/s]'] = slope_to_diffusion_constant(
-            run.nominal_diffusion_coefficient * 2,  # Convert to slope
-            length_unit, time_unit
+
+        # Add nominal diffusion coefficient in output units
+        row[f'nominal diffusion coeff [{d_unit_label}]'] = convert_diffusion_coefficient(
+            run.nominal_diffusion_coefficient, length_unit, time_unit, out_l, out_t
         )
-        
+
         data_rows.append(row)
-    
+
     # Create DataFrame
     df = pd.DataFrame(data_rows)
-    
+
     # Save to CSV
     df.to_csv(filename, index=False)
-    
+
     return df
 
 
@@ -129,11 +147,12 @@ def write_summary_file(
     parameters: Dict[str, Any],
     analysis: Optional[Dict[str, Any]] = None,
     length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
+    time_unit: str = 'nanosecond',
+    output_units: Optional[OutputUnitPreferences] = None,
 ) -> None:
     """
     Write comprehensive summary file.
-    
+
     Parameters
     ----------
     results : MonteCarloOutput
@@ -148,6 +167,8 @@ def write_summary_file(
         Unit of length.
     time_unit : str
         Unit of time.
+    output_units : OutputUnitPreferences, optional
+        Preferred units for output display. When None, uses simulation units.
     """
     with open(filename, 'w') as f:
         # Write header
