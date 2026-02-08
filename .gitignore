@@ -7,9 +7,21 @@ __pycache__/
 # Ignore DICE output directories
 output/
 
-# PyInstaller build artifacts
-build/
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+*.egg-info/
 dist/
+build/
+
+# Backup files
+*.bak
+
+# Virtual environment
+.venv/
 
 # Claude-related
 CLAUDE.md
