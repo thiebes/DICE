@@ -16,8 +16,9 @@ from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, 
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.legacy_compatibility import (
+    LegacySimulationParameters,
     create_parameters_from_legacy,
-    convert_legacy_result_to_dict
+    convert_legacy_result_to_dict,
 )
 
 
@@ -25,7 +26,7 @@ def run_single_simulation(
     run_id: int,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
-    parameters: SimulationParameters,
+    parameters: LegacySimulationParameters,
     noise_sigma: float,
     retain_profile_data: bool = False
 ) -> RunResult:
@@ -43,7 +44,7 @@ def run_single_simulation(
         Spatial axis values.
     time_axis : np.ndarray
         Time axis values.
-    parameters : SimulationParameters
+    parameters : LegacySimulationParameters
         Simulation parameters including initial conditions and physics.
     noise_sigma : float
         Standard deviation of noise to add.
@@ -130,7 +131,7 @@ def run_single_simulation(
 
 
 def run_monte_carlo_simulation(
-    parameters: SimulationParameters,
+    parameters: LegacySimulationParameters,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
     noise_values: List[float],
@@ -138,7 +139,7 @@ def run_monte_carlo_simulation(
     multiprocessing: bool = True,
     retain_profile_data: bool = False,
     progress_callback: Optional[callable] = None
-):
+) -> MonteCarloOutput:
     """
     Run Monte Carlo simulation with multiple noise values.
     
@@ -186,8 +187,10 @@ def run_monte_carlo_simulation(
     
     # Run simulations
     if multiprocessing:
-        # Batched parallel execution for progress updates
-        num_batches = 10
+        # Batch parallel execution to enable progress reporting.
+        # Each batch creates a joblib worker pool, trading some startup
+        # overhead for per-batch progress callbacks.
+        num_batches = min(10, total_runs)
         batch_size = (total_runs + num_batches - 1) // num_batches  # Ceiling division
         results = []
 

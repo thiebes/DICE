@@ -288,7 +288,7 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
             # Create legacy-format result for plotting
             legacy_result = {
                 'collated results': {
-                    'd_wls_over_d_nom': d_ratios.tolist()
+                    'd_est_over_d_nom': d_ratios.tolist()
                 }
             }
             
