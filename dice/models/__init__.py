@@ -18,7 +18,6 @@ from .results import (
     ProcessedSimulationResult,
     RunResult,
     StatisticalAnalysis,
-    SimulationResults,  # Deprecated alias
 )
 from .profiles import (
     ProfileData,
@@ -39,7 +38,6 @@ __all__ = [
     "ProcessedSimulationResult",
     "RunResult",
     "StatisticalAnalysis",
-    "SimulationResults",  # Deprecated alias
     # Profiles
     "ProfileData",
     "TimeSeriesProfile",

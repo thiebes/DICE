@@ -284,7 +284,7 @@ class ProcessedSimulationResult:
     def filter_by_cnr(self, min_cnr: float = None,
                      max_cnr: float = None) -> 'ProcessedSimulationResult':
         """
-        Filter results by CNR range.
+        Filter results by CNR range and recalculate analysis.
 
         Parameters
         ----------
@@ -296,32 +296,54 @@ class ProcessedSimulationResult:
         Returns
         -------
         ProcessedSimulationResult
-            New ProcessedSimulationResult object with filtered data.
+            New ProcessedSimulationResult object with filtered data
+            and recalculated statistical analysis.
         """
+        from ..analysis.statistics import calculate_precision, calculate_accuracy_metrics
+
         mask = np.ones(len(self.run_results), dtype=bool)
-        
-        if min_cnr is not None:
-            cnrs = [run.cnr_estimate for run in self.run_results]
-            mask &= np.array(cnrs) >= min_cnr
-        
-        if max_cnr is not None:
-            cnrs = [run.cnr_estimate for run in self.run_results]
-            mask &= np.array(cnrs) <= max_cnr
-        
+
+        if min_cnr is not None or max_cnr is not None:
+            cnrs = np.array([run.cnr_0_estimate for run in self.run_results])
+            if min_cnr is not None:
+                mask &= cnrs >= min_cnr
+            if max_cnr is not None:
+                mask &= cnrs <= max_cnr
+
         filtered_runs = [run for i, run in enumerate(self.run_results) if mask[i]]
 
-        # Recalculate analysis for filtered data
-        # This would need the analysis calculation logic
-        # For now, return with same analysis
+        # Recalculate analysis for the filtered subset
+        nominal_d = filtered_runs[0].nominal_diffusion_coefficient if filtered_runs else 0.0
+        wls_d_estimates = np.array([
+            r.wls_slope / 2 for r in filtered_runs if r.wls_slope is not None
+        ])
+
+        proximity_level = self.analysis.proximity_level
+        if len(wls_d_estimates) > 0 and nominal_d > 0:
+            precision = calculate_precision(wls_d_estimates, nominal_d, proximity_level)
+            accuracy = calculate_accuracy_metrics(wls_d_estimates, nominal_d)
+            new_analysis = StatisticalAnalysis(
+                proximity_level=proximity_level,
+                fraction_within_proximity=precision,
+                mean_estimate=accuracy['mean'],
+                median_estimate=accuracy['median'],
+                std_estimate=accuracy['std'],
+                mean_relative_error=accuracy['mean'] / nominal_d if nominal_d != 0 else np.nan,
+            )
+        else:
+            new_analysis = StatisticalAnalysis(
+                proximity_level=proximity_level,
+                fraction_within_proximity=0.0,
+                mean_estimate=np.nan,
+                median_estimate=np.nan,
+                std_estimate=np.nan,
+                mean_relative_error=np.nan,
+            )
+
         return ProcessedSimulationResult(
             parameters=self.parameters,
             run_results=filtered_runs,
-            analysis=self.analysis,  # Should recalculate
-            dataframe=self.dataframe[mask],
+            analysis=new_analysis,
+            dataframe=self.dataframe[mask].reset_index(drop=True),
             filename_slug=self.filename_slug + "_filtered"
         )
-
-
-# Deprecated aliases for backward compatibility
-SimulationResults = ProcessedSimulationResult
-SimulationResult = ProcessedSimulationResult
