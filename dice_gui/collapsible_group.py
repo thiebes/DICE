@@ -132,6 +132,7 @@ class CollapsibleGroupBox(QGroupBox):
                 lambda: self._content_container.setVisible(False)
             )
 
+        animation.finished.connect(lambda: setattr(self, '_current_animation', None))
         animation.start()
         self._current_animation = animation  # Keep reference
 

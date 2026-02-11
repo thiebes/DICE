@@ -51,12 +51,9 @@ class DiceInterface:
         else:  # sigma
             params['sigma_0'] = gui_params['profile_width_value']
 
-        # Diffusion (mutually exclusive)
-        if gui_params['diffusion_type'] == 'length':
-            params['nominal diffusion length'] = gui_params['diffusion_length']
-        else:  # coefficient + lifetime
-            params['nominal diffusion coefficient'] = gui_params['diffusion_coefficient']
-            params['nominal lifetime (tau)'] = gui_params['lifetime']
+        # Diffusion coefficient and lifetime
+        params['nominal diffusion coefficient'] = gui_params['diffusion_coefficient']
+        params['nominal lifetime (tau)'] = gui_params['lifetime']
 
         # Noise (mutually exclusive)
         if gui_params['noise_type'] == 'fixed':
@@ -77,7 +74,10 @@ class DiceInterface:
             ]
         else:  # series
             # Convert comma-separated string to list of floats
-            params['time series'] = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+            try:
+                params['time series'] = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+            except ValueError:
+                raise ValueError("Time series must be comma-separated numbers (e.g., '0, 1, 2, 3')")
 
         # Analysis
         params['proximity level'] = gui_params['proximity_level']
@@ -118,7 +118,7 @@ class DiceInterface:
         return params
 
     def run_simulation(self, parameters: Dict[str, Any],
-                       progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[Any]:
+                       progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[tuple]:
         """
         Run DICE simulation with given parameters.
 
@@ -127,7 +127,7 @@ class DiceInterface:
             progress_callback: Optional callback for progress updates (current, total)
 
         Returns:
-            Simulation results or None if error occurred
+            Tuple of (MonteCarloOutput, processed_params dict), or None if error occurred.
         """
         try:
             # Import required modules from dice
@@ -148,9 +148,6 @@ class DiceInterface:
 
             # Parse and process parameters (same as open_parameters does)
             processed_params = parameter_parser(parameters)
-
-            # Store parameters
-            self.last_parameters = processed_params
 
             # Validate parameters
             validate_parameters(processed_params)
@@ -211,7 +208,7 @@ class DiceInterface:
                 # Create legacy-format result for plotting
                 legacy_result = {
                     'collated results': {
-                        'd_wls_over_d_nom': d_ratios.tolist()
+                        'd_est_over_d_nom': d_ratios.tolist()
                     }
                 }
 
@@ -226,13 +223,13 @@ class DiceInterface:
                     width=processed_params.get('image width', 10),
                     height=processed_params.get('image height', 6),
                     dpi=processed_params.get('image dpi', 100),
-                    font_size=12
+                    font_size=processed_params.get('image font size', 12),
+                    tick_length=processed_params.get('image tick length', 6),
+                    tick_width=processed_params.get('image tick width', 2),
+                    num_bins=processed_params.get('image numbins', 35)
                 )
 
-            # Store result
-            self.last_result = result
-
-            return result
+            return result, processed_params
 
         except ImportError as e:
             raise ImportError(f"Failed to import dice module: {e}")
@@ -349,7 +346,7 @@ class DiceInterface:
             # Create legacy-format result for plotting
             legacy_result = {
                 'collated results': {
-                    'd_wls_over_d_nom': d_ratios.tolist()
+                    'd_est_over_d_nom': d_ratios.tolist()
                 }
             }
 
@@ -413,19 +410,31 @@ class DiceInterface:
             # Load CSV
             df = pd.read_csv(csv_file)
 
+            def _find_csv_column(prefix):
+                matches = [c for c in df.columns if c.startswith(prefix)]
+                return matches[0] if matches else None
+
             # Determine which columns to use
             if use_wls:
-                slope_col = 'weighted fit diffusion slope'
+                slope_col = _find_csv_column('weighted fit diffusion slope')
                 method_name = 'WLS'
             else:
-                slope_col = 'unweighted fit diffusion slope'
+                slope_col = _find_csv_column('unweighted fit diffusion slope')
                 method_name = 'OLS'
 
+            nom_col = _find_csv_column('nominal diffusion coeff')
+
             # Validate required columns exist
-            required_cols = [slope_col, 'nominal diffusion coeff']
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            if missing_cols:
-                raise ValueError(f"CSV missing required columns: {missing_cols}")
+            if slope_col is None:
+                raise ValueError(
+                    f"CSV missing {method_name} slope column. "
+                    f"Available columns: {list(df.columns)}"
+                )
+            if nom_col is None:
+                raise ValueError(
+                    f"CSV missing nominal diffusion coefficient column. "
+                    f"Available columns: {list(df.columns)}"
+                )
 
             # Extract slopes and nominal values
             slopes = df[slope_col].dropna().values
@@ -434,7 +443,7 @@ class DiceInterface:
                 raise ValueError(f"No valid {method_name} slopes found in CSV")
 
             # Get nominal diffusion coefficient (should be same for all runs)
-            d_nominal = df['nominal diffusion coeff'].iloc[0]
+            d_nominal = df[nom_col].iloc[0]
 
             # Calculate diffusion estimates (D = slope/2)
             d_estimates = slopes / 2
@@ -445,7 +454,7 @@ class DiceInterface:
             # Create legacy-format result for plotting
             legacy_result = {
                 'collated results': {
-                    'd_wls_over_d_nom': d_ratios.tolist()
+                    'd_est_over_d_nom': d_ratios.tolist()
                 }
             }
 

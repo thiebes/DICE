@@ -37,6 +37,8 @@ class SimulationThread(QThread):
                 self.progress.emit("Starting simulation...")
 
             def progress_callback(current: int, total: int):
+                if self._stop_requested:
+                    raise InterruptedError("Simulation cancelled by user")
                 self.iteration_progress.emit(current, total)
 
             result = self.interface.run_simulation(
@@ -44,6 +46,8 @@ class SimulationThread(QThread):
                 progress_callback=progress_callback
             )
             self.finished.emit(result)
+        except InterruptedError:
+            self.error.emit("Simulation cancelled by user")
         except Exception as e:
             self.error.emit(str(e))
 

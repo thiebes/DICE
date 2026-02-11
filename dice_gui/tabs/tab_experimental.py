@@ -57,6 +57,8 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
 
     # Fixed noise input
     fixed_container, fixed_layout = create_option_card()
+
+    # Noise sigma input
     main_window.noise_value_input = QLineEdit()
     main_window.noise_value_input.setPlaceholderText("e.g., 0.01")
     main_window.noise_value_input.setToolTip(
@@ -67,9 +69,35 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Higher noise makes diffusion coefficient estimation more difficult.\n\n"
         "Must be non-negative. Zero means no noise (perfect measurements)."
     )
-    fixed_layout.addRow("Noise σ:", main_window.noise_value_input)
+    fixed_layout.addRow("Noise \u03c3:", main_window.noise_value_input)
     main_window._error_labels["noise_value"] = create_error_label()
     fixed_layout.addRow("", main_window._error_labels["noise_value"])
+
+    # CNR input (linked to sigma via amplitude)
+    main_window.noise_cnr_input = QLineEdit()
+    main_window.noise_cnr_input.setPlaceholderText("e.g., 100")
+    main_window.noise_cnr_input.setToolTip(
+        "Contrast-to-noise ratio: the ratio of signal amplitude to noise "
+        "standard deviation.\n\n"
+        "Higher CNR means less noise.\n"
+        "For amplitude=1.0, CNR=100 corresponds to noise \u03c3=0.01.\n\n"
+        "CNR = amplitude / noise \u03c3\n\n"
+        "Must be positive."
+    )
+    fixed_layout.addRow("CNR:", main_window.noise_cnr_input)
+
+    # Noise linking state
+    main_window._updating_noise = False
+    main_window._noise_last_edited = 'sigma'
+
+    # Connect value changes for two-way linking
+    main_window.noise_value_input.textChanged.connect(
+        lambda: update_noise_cnr_display(main_window, 'sigma')
+    )
+    main_window.noise_cnr_input.textChanged.connect(
+        lambda: update_noise_cnr_display(main_window, 'cnr')
+    )
+
     noise_layout.addWidget(fixed_container)
 
     noise_layout.addWidget(main_window.noise_estimate_radio)
@@ -283,18 +311,76 @@ def toggle_noise_inputs(main_window: "DiceGUI", checked: bool) -> None:
     use_fixed = main_window.noise_fixed_radio.isChecked()
 
     main_window.noise_value_input.setEnabled(use_fixed)
+    main_window.noise_cnr_input.setEnabled(use_fixed)
     main_window.noise_file_input.setEnabled(not use_fixed)
     main_window.noise_browse_button.setEnabled(not use_fixed)
 
-    # Clear values when disabled
+    from dice_gui.validation_manager import clear_validation_style
     if use_fixed:
         main_window.noise_file_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
         clear_validation_style(main_window.noise_file_input)
     else:
         main_window.noise_value_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
+        main_window.noise_cnr_input.clear()
         clear_validation_style(main_window.noise_value_input)
+
+
+def update_noise_cnr_display(main_window: "DiceGUI", source: str = 'sigma') -> None:
+    """Update linked noise sigma/CNR fields.
+
+    Maintains the relationship CNR = amplitude / sigma. When one field
+    is edited, the other is computed. When amplitude changes, the
+    non-last-edited field is recomputed.
+
+    Args:
+        source: Which field triggered the update ('sigma', 'cnr', or 'amplitude').
+    """
+    if main_window._updating_noise:
+        return
+    if getattr(main_window, '_populating', False):
+        return
+
+    main_window._updating_noise = True
+    try:
+        if source in ('sigma', 'cnr'):
+            main_window._noise_last_edited = source
+
+        try:
+            amplitude = float(main_window.amplitude_input.text().strip())
+        except (ValueError, AttributeError):
+            return
+
+        if amplitude <= 0:
+            return
+
+        compute_cnr = (
+            source == 'sigma'
+            or (source == 'amplitude'
+                and main_window._noise_last_edited == 'sigma')
+        )
+
+        if compute_cnr:
+            try:
+                sigma = float(main_window.noise_value_input.text().strip())
+                if sigma > 0:
+                    cnr = amplitude / sigma
+                    main_window.noise_cnr_input.setText(f"{cnr:.4g}")
+                else:
+                    main_window.noise_cnr_input.clear()
+            except (ValueError, AttributeError):
+                main_window.noise_cnr_input.clear()
+        else:
+            try:
+                cnr = float(main_window.noise_cnr_input.text().strip())
+                if cnr > 0:
+                    sigma = amplitude / cnr
+                    main_window.noise_value_input.setText(f"{sigma:.4g}")
+                else:
+                    main_window.noise_value_input.clear()
+            except (ValueError, AttributeError):
+                main_window.noise_value_input.clear()
+    finally:
+        main_window._updating_noise = False
 
 
 def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:

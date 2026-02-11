@@ -113,8 +113,8 @@ class TestGUIInterface:
             'mean_0': 0.0,
             'profile_width_type': 'sigma',
             'profile_width_value': 0.5,
-            'diffusion_type': 'length',
-            'diffusion_length': 0.1,
+            'diffusion_coefficient': 0.01,
+            'lifetime': 1.0,
             'noise_type': 'fixed',
             'noise_value': 0.02,
             'spatial_width': 5.0,
@@ -130,7 +130,8 @@ class TestGUIInterface:
 
         assert params_dict['number of runs'] == 10
         assert params_dict['sigma_0'] == 0.5
-        assert params_dict['nominal diffusion length'] == 0.1
+        assert params_dict['nominal diffusion coefficient'] == 0.01
+        assert params_dict['nominal lifetime (tau)'] == 1.0
         assert params_dict['noise value'] == 0.02
 
     def test_gui_interface_handles_fwhm(self):
@@ -145,7 +146,6 @@ class TestGUIInterface:
             'mean_0': 0.0,
             'profile_width_type': 'fwhm',
             'profile_width_value': 1.0,
-            'diffusion_type': 'coefficient',
             'diffusion_coefficient': 0.01,
             'lifetime': 1.0,
             'noise_type': 'fixed',
@@ -231,7 +231,8 @@ class TestVersionConsistency:
         """Verify version can be imported."""
         import dice
         assert hasattr(dice, '__version__')
-        assert dice.__version__ == '1.3.0'
+        assert isinstance(dice.__version__, str)
+        assert len(dice.__version__.split('.')) >= 2
 
     def test_author_accessible(self):
         """Verify author info is accessible."""

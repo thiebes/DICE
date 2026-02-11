@@ -501,7 +501,6 @@ class TestGUIPipeline:
             'profile_width_type': 'fwhm',
             'profile_width_value': 500.0,
             'fwhm_0_unit': 'nanometer',
-            'diffusion_type': 'coefficient',
             'diffusion_coefficient': 5.0,
             'diffusion_coefficient_length_unit': 'centimeter',
             'diffusion_coefficient_time_unit': 'second',
@@ -556,6 +555,51 @@ class TestGUIPipeline:
             parsed_ref['nominal lifetime (tau)'],
             rtol=1e-10,
         )
+
+    def test_gui_time_start_stop_unit_overrides(self):
+        """time_start_unit/time_stop_unit overrides convert values in the
+        time range list assembled by build_parameters_dict."""
+        from dice_gui.dice_interface import DiceInterface
+
+        iface = DiceInterface()
+
+        gui_params = {
+            'number_of_runs': 5,
+            'filename_slug': 'test',
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'amplitude_0': 1.0,
+            'mean_0': 0.0,
+            'profile_width_type': 'fwhm',
+            'profile_width_value': 1.0,
+            'diffusion_coefficient': 0.01,
+            'lifetime': 2.0,
+            'noise_type': 'fixed',
+            'noise_value': 0.05,
+            'spatial_width': 10.0,
+            'pixel_width': 101,
+            'time_type': 'range',
+            'time_start': 500.0,       # 500 ps
+            'time_stop': 2000.0,       # 2000 ps
+            'time_steps': 10,
+            'time_start_unit': 'picosecond',
+            'time_stop_unit': 'picosecond',
+            'proximity_level': 0.1,
+            'multiprocessing': False,
+            'retain_profile_data': False,
+        }
+
+        params = iface.build_parameters_dict(gui_params)
+        # Before resolve_units, time range holds unconverted values
+        assert params['time range'] == [500.0, 2000.0, 10]
+
+        resolved = resolve_units(params)
+        # After resolve_units: 500 ps -> 0.5 ns, 2000 ps -> 2.0 ns
+        assert np.isclose(resolved['time range'][0], 0.5, rtol=1e-12)
+        assert np.isclose(resolved['time range'][1], 2.0, rtol=1e-12)
+        assert resolved['time range'][2] == 10
+        assert 'time_start_unit' not in resolved
+        assert 'time_stop_unit' not in resolved
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +687,51 @@ class TestParameterFileRoundTrip:
         assert not any(k.endswith('_unit') for k in resolved
                        if k not in ('length_unit', 'time_unit',
                                     'length unit', 'time unit'))
+
+
+# ---------------------------------------------------------------------------
+# 11: CSV round-trip (export -> read -> verify columns)
+# ---------------------------------------------------------------------------
+
+class TestCSVRoundTrip:
+    """Export simulation results to CSV, read back, and verify column prefixes."""
+
+    def test_csv_columns_present_after_export(self, tmp_path):
+        """Run a small simulation, export to CSV, and verify expected columns."""
+        import pandas as pd
+        from dice.io.results import export_collated_results
+
+        result = TestSimulationEquivalence._run_seeded_simulation(_base_params())
+
+        csv_file = tmp_path / "round_trip.csv"
+        export_collated_results(result, str(csv_file))
+
+        df = pd.read_csv(csv_file)
+
+        expected_prefixes = [
+            'nominal diffusion coeff',
+            'weighted fit diffusion coeff',
+            'unweighted fit diffusion coeff',
+            'weighted fit diffusion slope',
+            'unweighted fit diffusion slope',
+            'nominal CNR',
+            'run number',
+        ]
+
+        for prefix in expected_prefixes:
+            matches = [c for c in df.columns if c.startswith(prefix)]
+            assert len(matches) >= 1, (
+                f"Expected column starting with '{prefix}' not found. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        # Verify nominal values are consistent across rows
+        nom_col = [c for c in df.columns if c.startswith('nominal diffusion coeff')][0]
+        assert df[nom_col].nunique() == 1, "Nominal diffusion coefficient should be constant across runs"
+
+        # Verify slope columns have numeric data
+        wls_slope_col = [c for c in df.columns if c.startswith('weighted fit diffusion slope')][0]
+        assert df[wls_slope_col].notna().sum() > 0, "WLS slope column should contain non-null values"
 
 
 if __name__ == '__main__':

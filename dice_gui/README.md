@@ -31,10 +31,16 @@ The DICE GUI provides an intuitive interface for configuring and running DICE si
 
 ## Installation
 
-The GUI is included with DICE when you install using uv:
+### Using uv
 
 ```bash
 uv sync
+```
+
+### Using pip
+
+```bash
+pip install -e .
 ```
 
 This will install all dependencies including PyQt6.
@@ -47,10 +53,16 @@ This will install all dependencies including PyQt6.
 uv run dice-gui
 ```
 
-Or:
+Or with pip:
 
 ```bash
-uv run python -m dice_gui.dice_gui
+dice-gui
+```
+
+Or as a module:
+
+```bash
+python -m dice_gui.dice_gui
 ```
 
 ### From Python
@@ -190,7 +202,7 @@ Planned features for future releases:
 
 ## Requirements
 
-- Python >= 3.9
+- Python >= 3.11
 - PyQt6 >= 6.0.0
 - numpy >= 1.20.0
 - scipy >= 1.7.0

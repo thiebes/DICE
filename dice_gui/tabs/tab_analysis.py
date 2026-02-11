@@ -30,7 +30,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     proximity_label = QLabel("Proximity Level:")
     main_window.proximity_spin = QDoubleSpinBox()
     main_window.proximity_spin.setMinimum(0.001)
-    main_window.proximity_spin.setMaximum(1000.0)
+    main_window.proximity_spin.setMaximum(1.0)
     main_window.proximity_spin.setValue(0.10)
     main_window.proximity_spin.setDecimals(3)
     main_window.proximity_spin.setSingleStep(0.01)
