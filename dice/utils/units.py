@@ -273,7 +273,7 @@ def length_abbreviation(unit: str) -> str:
     Returns
     -------
     str
-        Abbreviation (e.g., 'micrometer' -> 'um').
+        Abbreviation (e.g., 'micrometer' -> 'μm').
     """
     return LENGTH_ABBREVIATIONS.get(unit, unit)
 
@@ -392,7 +392,12 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
                         result[vk] = convert_time(result[vk], from_unit, target_time)
             del result[matched_key]
 
-    # Time range: convert start and stop if override present
+    # Time range: convert start and stop if override present.
+    # Track which values have been converted to prevent double conversion
+    # when multiple overlapping time override keys are present.
+    converted_time_range = False
+    converted_time_series = False
+
     time_range_override = 'time_range_unit'
     if time_range_override in result:
         from_unit = result[time_range_override]
@@ -404,19 +409,21 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
                     tr[0] = convert_time(tr[0], from_unit, target_time)
                     tr[1] = convert_time(tr[1], from_unit, target_time)
                     result[vk] = tr
+                    converted_time_range = True
             # time series is a list of time values
             for vk in ['time series', 'time_series']:
                 if vk in result and result[vk] is not None:
                     result[vk] = [
                         convert_time(t, from_unit, target_time) for t in result[vk]
                     ]
+                    converted_time_series = True
         del result[time_range_override]
 
     # Time series override (separate from time range)
     time_series_override = 'time_series_unit'
     if time_series_override in result:
         from_unit = result[time_series_override]
-        if from_unit != target_time:
+        if not converted_time_series and from_unit != target_time:
             for vk in ['time series', 'time_series']:
                 if vk in result and result[vk] is not None:
                     result[vk] = [
@@ -425,11 +432,20 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
         del result[time_series_override]
 
     # Time start/stop overrides (for GUI which sends these separately)
-    for param, override_key in [('time_start', 'time_start_unit'), ('time_stop', 'time_stop_unit')]:
+    for param, override_key, idx in [('time_start', 'time_start_unit', 0),
+                                     ('time_stop', 'time_stop_unit', 1)]:
         if override_key in result:
             from_unit = result[override_key]
-            if from_unit != target_time and param in result:
-                result[param] = convert_time(result[param], from_unit, target_time)
+            if not converted_time_range and from_unit != target_time:
+                if param in result:
+                    result[param] = convert_time(result[param], from_unit, target_time)
+                else:
+                    # Value may be inside a time range list (GUI path)
+                    for vk in ['time range', 'time_range']:
+                        if vk in result and result[vk] is not None:
+                            tr = list(result[vk])
+                            tr[idx] = convert_time(tr[idx], from_unit, target_time)
+                            result[vk] = tr
             del result[override_key]
 
     # Diffusion coefficient (compound unit: length^2/time)

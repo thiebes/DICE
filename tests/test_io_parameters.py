@@ -356,28 +356,10 @@ class TestMixedUnitParameters:
         assert result.get('fwhm_0_unit') == 'nanometer'
         assert result.get('lifetime_unit') == 'picosecond'
 
-    def test_resolve_fwhm_nanometer_to_micrometer(self):
-        """FWHM specified in nm should be converted to um after resolve_units."""
-        from dice.utils.units import resolve_units
-        params = self._base_params()
-        params['FWHM_0'] = 500.0
-        params['fwhm_0_unit'] = 'nanometer'
-        result = parameter_parser(params)
-        result = resolve_units(result)
-        # 500 nm = 0.5 um; sigma^2_0 is derived from FWHM before resolve
-        # The parser converts FWHM_0 to sigma^2_0, so we can't directly
-        # check FWHM_0. Instead verify sigma^2_0 is correct.
-        # FWHM = 500 nm = 0.5 um. sigma = FWHM / 2.355. sigma^2 = (0.5/2.355)^2
-        # But the parser converts FWHM_0 BEFORE resolve_units gets called.
-        # So the FWHM was converted at 500 (nm) as if it were um, giving wrong sigma^2_0.
-        # This means we need resolve_units BEFORE the parser, or the parser
-        # needs to be unit-aware.
-        # Actually, let's verify what happens:
-        assert 'fwhm_0_unit' not in result  # override key removed
-
     def test_resolve_before_parser_flow(self):
-        """Test the correct flow: resolve_units should be called on raw params,
-        then the resolved params fed to parameter_parser."""
+        """resolve_units must be called before parameter_parser because the
+        parser converts FWHM to sigma^2 -- the FWHM value must already be
+        in the global unit system when the parser processes it."""
         from dice.utils.units import resolve_units
         params = self._base_params()
         params['FWHM_0'] = 500.0

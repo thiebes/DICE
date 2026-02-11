@@ -465,3 +465,62 @@ class TestResolveUnits:
         result = resolve_units(params)
         # 250000 nm^2 = 0.25 um^2
         assert np.isclose(result['sigma^2_0'], 0.25, rtol=1e-10)
+
+    def test_time_start_unit_in_time_range_list(self):
+        """time_start_unit converts the first element of a time range list."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time range': [1000, 5, 10],
+            'time_start_unit': 'picosecond',
+        }
+        result = resolve_units(params)
+        # 1000 ps -> 1 ns; stop and steps unchanged
+        assert np.isclose(result['time range'][0], 1.0, rtol=1e-12)
+        assert result['time range'][1] == 5
+        assert result['time range'][2] == 10
+        assert 'time_start_unit' not in result
+
+    def test_time_stop_unit_in_time_range_list(self):
+        """time_stop_unit converts the second element of a time range list."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time range': [0, 1000, 10],
+            'time_stop_unit': 'picosecond',
+        }
+        result = resolve_units(params)
+        # stop: 1000 ps -> 1 ns; start and steps unchanged
+        assert result['time range'][0] == 0
+        assert np.isclose(result['time range'][1], 1.0, rtol=1e-12)
+        assert result['time range'][2] == 10
+        assert 'time_stop_unit' not in result
+
+    def test_mixed_time_start_stop_units_in_time_range(self):
+        """Both time_start_unit and time_stop_unit with different source units."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time range': [5000, 1, 10],
+            'time_start_unit': 'picosecond',
+            'time_stop_unit': 'microsecond',
+        }
+        result = resolve_units(params)
+        # start: 5000 ps -> 5 ns; stop: 1 us -> 1000 ns
+        assert np.isclose(result['time range'][0], 5.0, rtol=1e-12)
+        assert np.isclose(result['time range'][1], 1000.0, rtol=1e-12)
+        assert result['time range'][2] == 10
+        assert 'time_start_unit' not in result
+        assert 'time_stop_unit' not in result
+
+    def test_time_start_unit_separate_key(self):
+        """time_start_unit converts a separate time_start key (CLI path)."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time_start': 1000.0,
+            'time_start_unit': 'picosecond',
+        }
+        result = resolve_units(params)
+        assert np.isclose(result['time_start'], 1.0, rtol=1e-12)
+        assert 'time_start_unit' not in result

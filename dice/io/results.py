@@ -15,7 +15,10 @@ import csv
 from ..models.results import MonteCarloOutput, RunResult
 from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
-from ..utils.units import convert_diffusion_coefficient, length_abbreviation, time_abbreviation
+from ..utils.units import (
+    convert_diffusion_coefficient, length_abbreviation, time_abbreviation,
+    diffusion_coefficient_label,
+)
 
 
 def print_and_append(filename: Union[str, Path], message: str, print_to_console: bool = True) -> None:
@@ -77,9 +80,7 @@ def export_collated_results(
             out_t = output_units.diffusion_time
 
     # Build column label for diffusion coefficient
-    l_abbr = length_abbreviation(out_l)
-    t_abbr = time_abbreviation(out_t)
-    d_unit_label = f"{l_abbr}^2/{t_abbr}"
+    d_unit_label = diffusion_coefficient_label(out_l, out_t)
 
     def _convert_slope_to_d(slope):
         """Convert MSD slope in simulation units to D in output units."""
