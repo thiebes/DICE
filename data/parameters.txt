@@ -1,6 +1,5 @@
 ##################################################################
-# DICE Parameter Configuration - compatible with DICE Version 1.X
-# Last updated: Dec 4, 2023
+# DICE Parameter Configuration
 # GitHub Repository: https://github.com/thiebes/DICE
 
 # Instructions:
