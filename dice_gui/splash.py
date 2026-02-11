@@ -2,30 +2,36 @@
 Splash screen for DICE GUI.
 
 Shows loading progress while heavy modules are imported.
+Uses a plain QWidget instead of QSplashScreen to avoid the ~1s
+overhead that QSplashScreen.show() incurs on Windows.
 """
 
-from PyQt6.QtWidgets import QSplashScreen, QProgressBar, QVBoxLayout, QLabel, QWidget
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPixmap, QFont, QPainter, QColor
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont, QPainter, QColor
 
 
-class DiceSplashScreen(QSplashScreen):
+class DiceSplashScreen(QWidget):
     """Splash screen with progress bar for DICE GUI."""
 
     def __init__(self):
-        # Create a pixmap for the splash screen
-        pixmap = QPixmap(400, 200)
-        pixmap.fill(QColor("#1a1a2e"))
+        super().__init__()
+        self.setFixedSize(400, 200)
+        self.setWindowFlags(
+            Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.FramelessWindowHint
+        )
 
-        super().__init__(pixmap)
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint)
-
-        # Create overlay widget for progress bar
         self._progress = 0
         self._message = "Starting..."
 
-    def drawContents(self, painter: QPainter):
+    def paintEvent(self, event):
         """Draw splash screen contents."""
+        painter = QPainter(self)
+
+        # Background
+        painter.fillRect(self.rect(), QColor("#1a1a2e"))
+
         # Title
         painter.setPen(QColor("#ffffff"))
         title_font = QFont("Arial", 24, QFont.Weight.Bold)
@@ -54,6 +60,8 @@ class DiceSplashScreen(QSplashScreen):
         status_font = QFont("Arial", 9)
         painter.setFont(status_font)
         painter.drawText(self.rect().adjusted(0, 150, 0, 0), Qt.AlignmentFlag.AlignHCenter, self._message)
+
+        painter.end()
 
     def set_progress(self, value: int, message: str = ""):
         """Update progress bar and message."""
