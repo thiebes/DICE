@@ -47,6 +47,11 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
         with open(filename, 'r') as f:
             parms_txt = f.read()
             parms_dict = ast.literal_eval(parms_txt)
+            # Resolve per-parameter unit overrides before parsing,
+            # so that values are in the global unit system when the
+            # parser converts between representations (e.g., FWHM -> sigma^2).
+            from ..utils.units import resolve_units
+            parms_dict = resolve_units(parms_dict)
             result = parameter_parser(parms_dict)
         return result
     except FileNotFoundError:
@@ -95,16 +100,18 @@ def check_for_unique_key(parameters_dictionary: Dict[str, Any], keys: List[str])
             canonical_to_keys[canonical] = []
         canonical_to_keys[canonical].append(key)
 
-    # Find which distinct parameters are present
-    found_params = {}  # canonical -> actual key found in dict
-    for canonical, key_variants in canonical_to_keys.items():
-        for key in key_variants:
-            if key in parameters_dictionary:
-                found_params[canonical] = key
-                break
-        # Also check if canonical form itself is present
-        if canonical not in found_params and canonical in parameters_dictionary:
-            found_params[canonical] = canonical
+    # Build canonical->actual key mapping for the dictionary
+    dict_canonical = {}
+    for dk in parameters_dictionary:
+        canonical_dk = normalize_parameter_key(dk)
+        if canonical_dk not in dict_canonical:
+            dict_canonical[canonical_dk] = dk
+
+    # Check which requested canonical keys exist in the dictionary
+    found_params = {}
+    for canonical in canonical_to_keys:
+        if canonical in dict_canonical:
+            found_params[canonical] = dict_canonical[canonical]
 
     if len(found_params) > 1:
         raise ValueError(f"More than one parameter provided for {list(found_params.values())}. Please provide only one.")

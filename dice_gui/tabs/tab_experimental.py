@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QPushButton, QSpinBox, QTextEdit, QFileDialog
 )
 
-from dice_gui.tabs.base import create_option_card, create_error_label
+from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
 from dice_gui.validators import calculate_pixel_size
 
 if TYPE_CHECKING:
@@ -57,6 +57,8 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
 
     # Fixed noise input
     fixed_container, fixed_layout = create_option_card()
+
+    # Noise sigma input
     main_window.noise_value_input = QLineEdit()
     main_window.noise_value_input.setPlaceholderText("e.g., 0.01")
     main_window.noise_value_input.setToolTip(
@@ -67,9 +69,35 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Higher noise makes diffusion coefficient estimation more difficult.\n\n"
         "Must be non-negative. Zero means no noise (perfect measurements)."
     )
-    fixed_layout.addRow("Noise σ:", main_window.noise_value_input)
+    fixed_layout.addRow("Noise \u03c3:", main_window.noise_value_input)
     main_window._error_labels["noise_value"] = create_error_label()
     fixed_layout.addRow("", main_window._error_labels["noise_value"])
+
+    # CNR input (linked to sigma via amplitude)
+    main_window.noise_cnr_input = QLineEdit()
+    main_window.noise_cnr_input.setPlaceholderText("e.g., 100")
+    main_window.noise_cnr_input.setToolTip(
+        "Contrast-to-noise ratio: the ratio of signal amplitude to noise "
+        "standard deviation.\n\n"
+        "Higher CNR means less noise.\n"
+        "For amplitude=1.0, CNR=100 corresponds to noise \u03c3=0.01.\n\n"
+        "CNR = amplitude / noise \u03c3\n\n"
+        "Must be positive."
+    )
+    fixed_layout.addRow("CNR:", main_window.noise_cnr_input)
+
+    # Noise linking state
+    main_window._updating_noise = False
+    main_window._noise_last_edited = 'sigma'
+
+    # Connect value changes for two-way linking
+    main_window.noise_value_input.textChanged.connect(
+        lambda: update_noise_cnr_display(main_window, 'sigma')
+    )
+    main_window.noise_cnr_input.textChanged.connect(
+        lambda: update_noise_cnr_display(main_window, 'cnr')
+    )
+
     noise_layout.addWidget(fixed_container)
 
     noise_layout.addWidget(main_window.noise_estimate_radio)
@@ -123,9 +151,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For diffusion length L and max time t_max: width ≈ 5*sqrt(sigma_0² + 2*D*t_max)\n\n"
         "Typical values: 5-50 μm for microscopy experiments"
     )
-    main_window.spatial_width_label = QLabel("μm")
+    main_window.spatial_width_unit_combo = create_unit_combo('length')
     spatial_width_layout.addWidget(main_window.spatial_width_input)
-    spatial_width_layout.addWidget(main_window.spatial_width_label)
+    spatial_width_layout.addWidget(main_window.spatial_width_unit_combo)
     spatial_layout.addRow("Spatial Width:", spatial_width_widget)
     main_window._error_labels["spatial_width"] = create_error_label()
     spatial_layout.addRow("", main_window._error_labels["spatial_width"])
@@ -153,6 +181,7 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     # Connect for calculation
     main_window.spatial_width_input.textChanged.connect(lambda: update_pixel_size(main_window))
     main_window.pixel_width_input.valueChanged.connect(lambda: update_pixel_size(main_window))
+    main_window.spatial_width_unit_combo.currentTextChanged.connect(lambda: update_pixel_size(main_window))
 
     # Temporal domain group
     temporal_group = QGroupBox("Temporal Domain")
@@ -194,9 +223,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For non-zero start, initial profile still has width specified in Physical Parameters.\n\n"
         "Must be less than stop time."
     )
-    main_window.time_start_label = QLabel("ns")
+    main_window.time_start_unit_combo = create_unit_combo('time')
     start_widget_layout.addWidget(main_window.time_start_input)
-    start_widget_layout.addWidget(main_window.time_start_label)
+    start_widget_layout.addWidget(main_window.time_start_unit_combo)
 
     stop_widget = QWidget()
     stop_widget_layout = QHBoxLayout(stop_widget)
@@ -210,9 +239,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "For diffusion, need enough time for measurable width increase (delta_sigma² > noise sensitivity)\n\n"
         "Must be greater than start time."
     )
-    main_window.time_stop_label = QLabel("ns")
+    main_window.time_stop_unit_combo = create_unit_combo('time')
     stop_widget_layout.addWidget(main_window.time_stop_input)
-    stop_widget_layout.addWidget(main_window.time_stop_label)
+    stop_widget_layout.addWidget(main_window.time_stop_unit_combo)
 
     main_window.time_steps_input = QSpinBox()
     main_window.time_steps_input.setMinimum(2)
@@ -282,18 +311,76 @@ def toggle_noise_inputs(main_window: "DiceGUI", checked: bool) -> None:
     use_fixed = main_window.noise_fixed_radio.isChecked()
 
     main_window.noise_value_input.setEnabled(use_fixed)
+    main_window.noise_cnr_input.setEnabled(use_fixed)
     main_window.noise_file_input.setEnabled(not use_fixed)
     main_window.noise_browse_button.setEnabled(not use_fixed)
 
-    # Clear values when disabled
+    from dice_gui.validation_manager import clear_validation_style
     if use_fixed:
         main_window.noise_file_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
         clear_validation_style(main_window.noise_file_input)
     else:
         main_window.noise_value_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
+        main_window.noise_cnr_input.clear()
         clear_validation_style(main_window.noise_value_input)
+
+
+def update_noise_cnr_display(main_window: "DiceGUI", source: str = 'sigma') -> None:
+    """Update linked noise sigma/CNR fields.
+
+    Maintains the relationship CNR = amplitude / sigma. When one field
+    is edited, the other is computed. When amplitude changes, the
+    non-last-edited field is recomputed.
+
+    Args:
+        source: Which field triggered the update ('sigma', 'cnr', or 'amplitude').
+    """
+    if main_window._updating_noise:
+        return
+    if getattr(main_window, '_populating', False):
+        return
+
+    main_window._updating_noise = True
+    try:
+        if source in ('sigma', 'cnr'):
+            main_window._noise_last_edited = source
+
+        try:
+            amplitude = float(main_window.amplitude_input.text().strip())
+        except (ValueError, AttributeError):
+            return
+
+        if amplitude <= 0:
+            return
+
+        compute_cnr = (
+            source == 'sigma'
+            or (source == 'amplitude'
+                and main_window._noise_last_edited == 'sigma')
+        )
+
+        if compute_cnr:
+            try:
+                sigma = float(main_window.noise_value_input.text().strip())
+                if sigma > 0:
+                    cnr = amplitude / sigma
+                    main_window.noise_cnr_input.setText(f"{cnr:.4g}")
+                else:
+                    main_window.noise_cnr_input.clear()
+            except (ValueError, AttributeError):
+                main_window.noise_cnr_input.clear()
+        else:
+            try:
+                cnr = float(main_window.noise_cnr_input.text().strip())
+                if cnr > 0:
+                    sigma = amplitude / cnr
+                    main_window.noise_value_input.setText(f"{sigma:.4g}")
+                else:
+                    main_window.noise_value_input.clear()
+            except (ValueError, AttributeError):
+                main_window.noise_value_input.clear()
+    finally:
+        main_window._updating_noise = False
 
 
 def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:
@@ -320,13 +407,16 @@ def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:
 
 def update_pixel_size(main_window: "DiceGUI") -> None:
     """Update the calculated pixel size display."""
+    from dice.utils.units import length_abbreviation
+
     spatial_text = main_window.spatial_width_input.text().strip()
     pixel_count = main_window.pixel_width_input.value()
 
     result = calculate_pixel_size(spatial_text, pixel_count)
     if result.is_valid:
-        length_unit = main_window.length_unit_combo.currentText()
-        main_window.pixel_size_label.setText(f"Pixel Size: {result.value:.4g} {length_unit}/pixel")
+        width_unit = main_window.spatial_width_unit_combo.currentText()
+        unit_abbrev = length_abbreviation(width_unit)
+        main_window.pixel_size_label.setText(f"Pixel Size: {result.value:.4g} {unit_abbrev}/pixel")
     else:
         main_window.pixel_size_label.setText("Pixel Size: ---")
 

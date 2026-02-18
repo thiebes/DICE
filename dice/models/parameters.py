@@ -11,6 +11,31 @@ import numpy as np
 
 
 @dataclass
+class OutputUnitPreferences:
+    """
+    Units for output display.
+
+    When a field is None, the output uses the global simulation unit or
+    the default output convention (cm^2/s for diffusion coefficients).
+
+    Attributes
+    ----------
+    length : str, optional
+        Length unit for output display.
+    time : str, optional
+        Time unit for output display.
+    diffusion_length : str, optional
+        Length unit for diffusion coefficient output (defaults to 'centimeter').
+    diffusion_time : str, optional
+        Time unit for diffusion coefficient output (defaults to 'second').
+    """
+    length: Optional[str] = None
+    time: Optional[str] = None
+    diffusion_length: Optional[str] = None
+    diffusion_time: Optional[str] = None
+
+
+@dataclass
 class GaussianParameters:
     """
     Parameters defining the initial Gaussian profile.
@@ -194,10 +219,20 @@ class NoiseParameters:
             return cls(mode='estimate', data_file=normalized['estimate_noise_from_data'])
         elif 'noise_range_reciprocal' in normalized:
             range_val = normalized['noise_range_reciprocal']
+            if not isinstance(range_val, (list, tuple)) or len(range_val) < 2:
+                raise ValueError(
+                    f"noise_range_reciprocal must be a list or tuple with at least "
+                    f"2 elements, got: {range_val!r}"
+                )
             return cls(mode='range', range=tuple(range_val[:2]),
                        num_values=int(range_val[2]) if len(range_val) > 2 else 1)
         elif 'noise_range_reciprocal_log' in normalized:
             range_val = normalized['noise_range_reciprocal_log']
+            if not isinstance(range_val, (list, tuple)) or len(range_val) < 2:
+                raise ValueError(
+                    f"noise_range_reciprocal_log must be a list or tuple with at "
+                    f"least 2 elements, got: {range_val!r}"
+                )
             return cls(mode='range', range=tuple(range_val[:2]),
                        num_values=int(range_val[2]) if len(range_val) > 2 else 1,
                        logarithmic=True)
@@ -470,7 +505,8 @@ class SimulationParameters:
     length_unit: str = "micrometer"
     time_unit: str = "nanosecond"
     multiprocessing: bool = True
-    
+    output_units: OutputUnitPreferences = field(default_factory=OutputUnitPreferences)
+
     def __post_init__(self):
         if self.num_runs <= 0:
             raise ValueError("Number of runs must be positive")

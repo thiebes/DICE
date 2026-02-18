@@ -42,12 +42,14 @@ from dice_gui.tabs import (
     create_tab_experimental_conditions,
     create_tab_analysis_settings,
     create_tab_output_settings,
-    toggle_diffusion_inputs,
     toggle_noise_inputs,
     toggle_time_inputs,
-    update_calculated_length,
+    update_diffusion_fields,
+    update_noise_cnr_display,
     update_width_conversion,
     update_pixel_size,
+    combo_value,
+    set_combo_value,
 )
 
 # Legacy code moved to separate modules - see dice_gui/tabs/, dice_gui/example_parameters.py, dice_gui/simulation_thread.py
@@ -68,6 +70,7 @@ class DiceGUI(QMainWindow):
         self.settings = QSettings("DICE", "DICE_GUI")
         self.loaded_data_file = None  # Track loaded CSV file for status bar
         self._populating = False      # Prevent modification marking during load
+        self._syncing_units = False   # Prevent _user_modified marking during sync
         self.validation_manager = None  # Will be initialized in init_ui
         self._error_labels = {}  # field_id -> inline error QLabel
 
@@ -112,9 +115,9 @@ class DiceGUI(QMainWindow):
         header = self.create_header()
         scroll_layout.addWidget(header)
 
-        # Add unit selection panel
-        unit_panel = self.create_unit_panel()
-        scroll_layout.addWidget(unit_panel)
+        # Initialize hidden global unit combos (not in visible layout, but
+        # other code reads/writes them for per-parameter unit syncing).
+        self._init_global_unit_combos()
 
         # Create tab widget (using modular tab functions from dice_gui.tabs)
         self.tabs = QTabWidget()
@@ -248,6 +251,14 @@ class DiceGUI(QMainWindow):
         batch_action.setStatusTip("Generate all plot types (coming soon)")
         plots_menu.addAction(batch_action)
 
+        # Settings Menu
+        settings_menu = menubar.addMenu("&Settings")
+
+        global_units_action = QAction("&Global Units...", self)
+        global_units_action.setStatusTip("Change global length and time units")
+        global_units_action.triggered.connect(self._open_global_units_dialog)
+        settings_menu.addAction(global_units_action)
+
         # Help Menu
         help_menu = menubar.addMenu("&Help")
 
@@ -290,38 +301,32 @@ class DiceGUI(QMainWindow):
 
         return header
 
-    def create_unit_panel(self) -> QWidget:
-        """Create the unit selection panel."""
-        panel = QGroupBox("Units")
-        layout = QHBoxLayout(panel)
+    def _init_global_unit_combos(self):
+        """Create hidden global unit combos used for per-parameter syncing."""
+        from dice_gui.tabs.base import LENGTH_UNITS_DISPLAY, TIME_UNITS_DISPLAY
 
-        # Length unit
-        length_label = QLabel("Length Unit:")
         self.length_unit_combo = QComboBox()
-        self.length_unit_combo.addItems([
-            "angstrom", "picometer", "nanometer", "micrometer",
-            "millimeter", "centimeter", "meter"
-        ])
+        self.length_unit_combo.addItems(LENGTH_UNITS_DISPLAY)
         self.length_unit_combo.setCurrentText("micrometer")
-        self.length_unit_combo.currentTextChanged.connect(self.update_unit_labels)
+        self.length_unit_combo.currentTextChanged.connect(self.sync_unit_combos)
 
-        # Time unit
-        time_label = QLabel("Time Unit:")
         self.time_unit_combo = QComboBox()
-        self.time_unit_combo.addItems([
-            "attosecond", "femtosecond", "picosecond", "nanosecond",
-            "microsecond", "millisecond", "second"
-        ])
+        self.time_unit_combo.addItems(TIME_UNITS_DISPLAY)
         self.time_unit_combo.setCurrentText("nanosecond")
-        self.time_unit_combo.currentTextChanged.connect(self.update_unit_labels)
+        self.time_unit_combo.currentTextChanged.connect(self.sync_unit_combos)
 
-        layout.addWidget(length_label)
-        layout.addWidget(self.length_unit_combo)
-        layout.addStretch()
-        layout.addWidget(time_label)
-        layout.addWidget(self.time_unit_combo)
+    def _open_global_units_dialog(self):
+        """Open the global units dialog."""
+        from dice_gui.global_units_dialog import GlobalUnitsDialog
 
-        return panel
+        dialog = GlobalUnitsDialog(
+            parent=self,
+            current_length=self.length_unit_combo.currentText(),
+            current_time=self.time_unit_combo.currentText(),
+        )
+        if dialog.exec() == GlobalUnitsDialog.DialogCode.Accepted:
+            self.length_unit_combo.setCurrentText(dialog.selected_length_unit())
+            self.time_unit_combo.setCurrentText(dialog.selected_time_unit())
 
     # NOTE: create_tab1_simulation_setup through create_tab5_output_settings methods
     # have been moved to dice_gui/tabs/ modules
@@ -409,43 +414,113 @@ class DiceGUI(QMainWindow):
 
     def set_default_values(self):
         """Set default values for all inputs."""
-        # Already set in create methods, but can add more here if needed
-        toggle_diffusion_inputs(self, self.diffusion_length_radio.isChecked())
+        from dice_gui.tabs.tab_output import _reset_all_plot_settings
+
+        default_params = {
+            'number of runs': 1000,
+            'filename slug': 'DICE_results',
+            'length unit': 'micrometer',
+            'time unit': 'nanosecond',
+            'amplitude_0': 1.0,
+            'mean_0': 0.0,
+            'FWHM_0': 1.0,
+            'nominal diffusion coefficient': 0.01,
+            'nominal lifetime (tau)': 2.0,
+            'noise value': 0.05,
+            'spatial width': 10.0,
+            'pixel width': 101,
+            'time range': [0, 2, 10],
+            'proximity level': 0.1,
+            'multiprocessing': True,
+            'retain profile data': False,
+        }
+
+        self._populating = True
+        try:
+            self.populate_gui_from_parameters(default_params)
+        finally:
+            self._populating = False
+
+        # Reset per-parameter units to follow global
+        self.reset_per_param_units()
+
+        # Reset output/image settings to defaults
+        _reset_all_plot_settings(self)
+
+        # Apply toggle states based on current radio button selections
         toggle_noise_inputs(self, self.noise_fixed_radio.isChecked())
         toggle_time_inputs(self, self.time_range_radio.isChecked())
 
-    def update_unit_labels(self):
-        """Update all unit labels based on selected units."""
-        length_unit = self.length_unit_combo.currentText()
-        time_unit = self.time_unit_combo.currentText()
+    def sync_unit_combos(self):
+        """Sync per-parameter unit combos with the global unit selection.
 
-        # Map full names to abbreviations
-        length_abbrev = {
-            "meter": "m", "centimeter": "cm", "millimeter": "mm",
-            "micrometer": "μm", "nanometer": "nm", "angstrom": "Å",
-            "picometer": "pm"
-        }.get(length_unit, length_unit)
+        For each per-parameter combo that the user has not explicitly changed,
+        update it to match the current global unit. Then refresh all calculated
+        value displays.
+        """
+        global_length = self.length_unit_combo.currentText()
+        global_time = self.time_unit_combo.currentText()
 
-        time_abbrev = {
-            "second": "s", "millisecond": "ms", "microsecond": "μs",
-            "nanosecond": "ns", "picosecond": "ps", "femtosecond": "fs",
-            "attosecond": "as"
-        }.get(time_unit, time_unit)
+        self._syncing_units = True
+        try:
+            # Length-dimension combos (regular text-based)
+            for combo in [
+                self.diffusion_length_unit_combo,
+                self.mean_unit_combo,
+                self.width_unit_combo,
+                self.spatial_width_unit_combo,
+            ]:
+                if not combo.property("_user_modified"):
+                    combo.setCurrentText(global_length)
 
-        # Update all labels
-        self.diffusion_length_label.setText(length_abbrev)
-        self.diffusion_coeff_label.setText(f"{length_abbrev}²/{time_abbrev}")
-        self.lifetime_label.setText(time_abbrev)
-        self.mean_label.setText(length_abbrev)
-        self.width_unit_label.setText(length_abbrev)
-        self.spatial_width_label.setText(length_abbrev)
-        self.time_start_label.setText(time_abbrev)
-        self.time_stop_label.setText(time_abbrev)
+            # Length-dimension squared combo (uses data-based lookup)
+            if not self.diffusion_coeff_length_unit_combo.property("_user_modified"):
+                set_combo_value(self.diffusion_coeff_length_unit_combo, global_length)
 
-        # Update calculated values
-        update_calculated_length(self)
+            # Time-dimension combos
+            for combo in [
+                self.lifetime_unit_combo,
+                self.time_start_unit_combo,
+                self.time_stop_unit_combo,
+                self.diffusion_coeff_time_unit_combo,
+            ]:
+                if not combo.property("_user_modified"):
+                    combo.setCurrentText(global_time)
+        finally:
+            self._syncing_units = False
+
+        # Update calculated values (signals from combo changes handle
+        # diffusion field linking, but width/pixel need explicit refresh)
         update_width_conversion(self)
         update_pixel_size(self)
+
+    def _on_per_param_unit_changed(self, combo: QComboBox):
+        """Mark a per-parameter unit combo as user-modified.
+
+        Skipped during programmatic updates (sync_unit_combos, populate).
+        """
+        if not self._syncing_units and not self._populating:
+            combo.setProperty("_user_modified", True)
+
+    def reset_per_param_units(self):
+        """Reset all per-parameter unit combos to follow the global units."""
+        for combo in self._get_all_per_param_unit_combos():
+            combo.setProperty("_user_modified", False)
+        self.sync_unit_combos()
+
+    def _get_all_per_param_unit_combos(self):
+        """Return a list of all per-parameter unit combo boxes."""
+        return [
+            self.diffusion_length_unit_combo,
+            self.diffusion_coeff_length_unit_combo,
+            self.diffusion_coeff_time_unit_combo,
+            self.lifetime_unit_combo,
+            self.mean_unit_combo,
+            self.width_unit_combo,
+            self.spatial_width_unit_combo,
+            self.time_start_unit_combo,
+            self.time_stop_unit_combo,
+        ]
 
     def _update_output_path_preview(self):
         """Update the output path preview based on current slug."""
@@ -703,18 +778,16 @@ class DiceGUI(QMainWindow):
         if not result:
             return False, result.error_message
 
-        # Diffusion
-        if self.diffusion_length_radio.isChecked():
-            result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length")
-            if not result:
-                return False, result.error_message
-        else:
-            result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient", allow_zero=True)
-            if not result:
-                return False, result.error_message
-            result = validate_positive_float(self.lifetime_input.text(), "Lifetime", allow_zero=True)
-            if not result:
-                return False, result.error_message
+        # Diffusion (all three fields linked; any two compute the third)
+        result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length")
+        if not result:
+            return False, result.error_message
+        result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient", allow_zero=True)
+        if not result:
+            return False, result.error_message
+        result = validate_positive_float(self.lifetime_input.text(), "Lifetime", allow_zero=True)
+        if not result:
+            return False, result.error_message
 
         # Noise
         if self.noise_fixed_radio.isChecked():
@@ -819,14 +892,9 @@ class DiceGUI(QMainWindow):
             'image_numbins': self.image_numbins_spin.value(),
         }
 
-        # Diffusion
-        if self.diffusion_length_radio.isChecked():
-            params['diffusion_type'] = 'length'
-            params['diffusion_length'] = float(self.diffusion_length_input.text())
-        else:
-            params['diffusion_type'] = 'coefficient'
-            params['diffusion_coefficient'] = float(self.diffusion_coeff_input.text())
-            params['lifetime'] = float(self.lifetime_input.text())
+        # Diffusion (always send D and tau; L is derived)
+        params['diffusion_coefficient'] = float(self.diffusion_coeff_input.text())
+        params['lifetime'] = float(self.lifetime_input.text())
 
         # Noise
         if self.noise_fixed_radio.isChecked():
@@ -845,6 +913,49 @@ class DiceGUI(QMainWindow):
         else:
             params['time_type'] = 'series'
             params['time_series'] = self.time_series_input.toPlainText()
+
+        # Per-parameter unit overrides (only when different from global)
+        global_length = self.length_unit_combo.currentText()
+        global_time = self.time_unit_combo.currentText()
+
+        # FWHM / sigma width unit
+        w_unit = combo_value(self.width_unit_combo)
+        if w_unit != global_length:
+            if self.fwhm_radio.isChecked():
+                params['fwhm_0_unit'] = w_unit
+            else:
+                params['sigma_0_unit'] = w_unit
+
+        # Mean position unit
+        mu_unit = combo_value(self.mean_unit_combo)
+        if mu_unit != global_length:
+            params['mu_0_unit'] = mu_unit
+
+        # Diffusion coefficient units (compound: length^2/time)
+        dcl_unit = combo_value(self.diffusion_coeff_length_unit_combo)
+        dct_unit = combo_value(self.diffusion_coeff_time_unit_combo)
+        if dcl_unit != global_length:
+            params['diffusion_coefficient_length_unit'] = dcl_unit
+        if dct_unit != global_time:
+            params['diffusion_coefficient_time_unit'] = dct_unit
+
+        # Lifetime unit
+        lt_unit = combo_value(self.lifetime_unit_combo)
+        if lt_unit != global_time:
+            params['lifetime_unit'] = lt_unit
+
+        # Spatial width unit
+        sw_unit = combo_value(self.spatial_width_unit_combo)
+        if sw_unit != global_length:
+            params['spatial_width_unit'] = sw_unit
+
+        # Time start/stop units
+        ts_unit = combo_value(self.time_start_unit_combo)
+        if ts_unit != global_time:
+            params['time_start_unit'] = ts_unit
+        tp_unit = combo_value(self.time_stop_unit_combo)
+        if tp_unit != global_time:
+            params['time_stop_unit'] = tp_unit
 
         return params
 
@@ -903,6 +1014,11 @@ class DiceGUI(QMainWindow):
         self.elapsed_timer.start()
         self.elapsed_display_timer.start(1000)
 
+        # Clean up previous thread if it exists
+        if self.simulation_thread is not None:
+            self.simulation_thread.deleteLater()
+            self.simulation_thread = None
+
         # Create and start simulation thread
         self.simulation_thread = SimulationThread(self.interface, dice_params)
         self.simulation_thread.progress.connect(self.update_progress)
@@ -914,8 +1030,11 @@ class DiceGUI(QMainWindow):
     def stop_simulation(self):
         """Stop the running simulation."""
         if self.simulation_thread and self.simulation_thread.isRunning():
-            self.simulation_thread.terminate()
-            self.simulation_thread.wait()
+            self.simulation_thread.request_stop()
+            self.simulation_thread.wait(5000)
+            if self.simulation_thread.isRunning():
+                self.simulation_thread.terminate()
+                self.simulation_thread.wait()
             self.reset_ui_after_simulation()
             self.status_label.setText("Simulation stopped by user")
 
@@ -946,6 +1065,14 @@ class DiceGUI(QMainWindow):
 
     def simulation_finished(self, result):
         """Handle simulation completion."""
+        # Unpack result and processed parameters from the interface
+        if isinstance(result, tuple):
+            mc_result, processed_params = result
+            self.interface.last_result = mc_result
+            self.interface.last_parameters = processed_params
+        else:
+            self.interface.last_result = result
+
         self.reset_ui_after_simulation()
         self.status_label.setText("Simulation completed successfully!")
 
@@ -1179,21 +1306,30 @@ class DiceGUI(QMainWindow):
 
         # Diffusion parameters
         lines.append("    ### Nominal diffusion and lifetime parameters ###")
-        if gui_params['diffusion_type'] == 'length':
-            lines.append(f"    'nominal diffusion length': {gui_params['diffusion_length']},")
-        else:
-            lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
-            lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
+        lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
+        if 'diffusion_coefficient_length_unit' in gui_params:
+            lines.append(f"    'diffusion_coefficient_length_unit': '{gui_params['diffusion_coefficient_length_unit']}',")
+        if 'diffusion_coefficient_time_unit' in gui_params:
+            lines.append(f"    'diffusion_coefficient_time_unit': '{gui_params['diffusion_coefficient_time_unit']}',")
+        lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
+        if 'lifetime_unit' in gui_params:
+            lines.append(f"    'lifetime_unit': '{gui_params['lifetime_unit']}',")
         lines.append("")
 
         # Initial profile
         lines.append("    ### Initial profile parameters ###")
         if gui_params['profile_width_type'] == 'fwhm':
             lines.append(f"    'FWHM_0': {gui_params['profile_width_value']},")
+            if 'fwhm_0_unit' in gui_params:
+                lines.append(f"    'FWHM_0_unit': '{gui_params['fwhm_0_unit']}',")
         else:
             lines.append(f"    'sigma_0': {gui_params['profile_width_value']},")
+            if 'sigma_0_unit' in gui_params:
+                lines.append(f"    'sigma_0_unit': '{gui_params['sigma_0_unit']}',")
         lines.append(f"    'amplitude_0': {gui_params['amplitude_0']},")
         lines.append(f"    'mean_0': {gui_params['mean_0']},")
+        if 'mu_0_unit' in gui_params:
+            lines.append(f"    'mu_0_unit': '{gui_params['mu_0_unit']}',")
         lines.append("")
 
         # Noise
@@ -1207,6 +1343,8 @@ class DiceGUI(QMainWindow):
         # Spatial axis
         lines.append("    ### Spatial axis parameters ###")
         lines.append(f"    'spatial width': {gui_params['spatial_width']},")
+        if 'spatial_width_unit' in gui_params:
+            lines.append(f"    'spatial_width_unit': '{gui_params['spatial_width_unit']}',")
         lines.append(f"    'pixel width': {gui_params['pixel_width']},")
         lines.append("")
 
@@ -1214,8 +1352,16 @@ class DiceGUI(QMainWindow):
         lines.append("    ### Time axis parameters ###")
         if gui_params['time_type'] == 'range':
             lines.append(f"    'time range': [{gui_params['time_start']}, {gui_params['time_stop']}, {gui_params['time_steps']}],")
+            if 'time_start_unit' in gui_params:
+                lines.append(f"    'time_start_unit': '{gui_params['time_start_unit']}',")
+            if 'time_stop_unit' in gui_params:
+                lines.append(f"    'time_stop_unit': '{gui_params['time_stop_unit']}',")
         else:
-            lines.append(f"    'time series': [{gui_params['time_series']}],")
+            try:
+                ts_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+                lines.append(f"    'time series': {ts_values},")
+            except ValueError:
+                lines.append(f"    'time series': [{gui_params['time_series']}],")
         lines.append("")
 
         # Proximity
@@ -1276,14 +1422,16 @@ class DiceGUI(QMainWindow):
                 self.sigma_radio.setChecked(True)
                 self.width_input.setText(str(params['sigma_0']))
 
-            # Diffusion (mutually exclusive)
-            if 'nominal diffusion length' in params:
-                self.diffusion_length_radio.setChecked(True)
-                self.diffusion_length_input.setText(str(params['nominal diffusion length']))
-            elif 'nominal diffusion coefficient' in params and 'nominal lifetime (tau)' in params:
-                self.diffusion_coeff_radio.setChecked(True)
+            # Diffusion parameters (clear all first, then set provided values)
+            self.diffusion_length_input.clear()
+            self.diffusion_coeff_input.clear()
+            self.lifetime_input.clear()
+            if 'nominal diffusion coefficient' in params:
                 self.diffusion_coeff_input.setText(str(params['nominal diffusion coefficient']))
+            if 'nominal lifetime (tau)' in params:
                 self.lifetime_input.setText(str(params['nominal lifetime (tau)']))
+            if 'nominal diffusion length' in params:
+                self.diffusion_length_input.setText(str(params['nominal diffusion length']))
 
             # Noise (mutually exclusive)
             if 'noise value' in params:
@@ -1322,6 +1470,9 @@ class DiceGUI(QMainWindow):
             if 'retain profile data' in params:
                 self.retain_profile_check.setChecked(params['retain profile data'])
 
+            # Per-parameter unit overrides
+            self._load_per_param_units(params)
+
             # Image settings (with defaults if not present)
             if 'image type' in params:
                 self.image_type_combo.setCurrentText(params['image type'])
@@ -1341,6 +1492,48 @@ class DiceGUI(QMainWindow):
                 self.image_numbins_spin.setValue(params['image numbins'])
         finally:
             self._populating = False  # Re-enable modification marking
+
+        # Set up diffusion field tracking based on populated values and
+        # trigger computation of the third field.
+        self._diffusion_last_edited = []
+        if self.diffusion_coeff_input.text().strip():
+            self._diffusion_last_edited.append('D')
+        if self.lifetime_input.text().strip():
+            self._diffusion_last_edited.append('tau')
+        if self.diffusion_length_input.text().strip():
+            self._diffusion_last_edited.append('L')
+        self._diffusion_last_edited = self._diffusion_last_edited[-2:]
+        if len(self._diffusion_last_edited) >= 2:
+            update_diffusion_fields(self, self._diffusion_last_edited[-1])
+
+        # Trigger noise sigma/CNR linking
+        self._noise_last_edited = 'sigma'
+        if self.noise_value_input.text().strip():
+            update_noise_cnr_display(self, 'sigma')
+
+    def _load_per_param_units(self, params: dict):
+        """Set per-parameter unit combos from parameter dict _unit keys.
+
+        If a _unit key is present, the corresponding combo is set and marked
+        as user-modified so that subsequent global unit changes do not
+        override it.
+        """
+        def _set_combo(combo, *keys):
+            for key in keys:
+                if key in params:
+                    set_combo_value(combo, params[key])
+                    combo.setProperty("_user_modified", True)
+                    return
+
+        _set_combo(self.width_unit_combo, 'FWHM_0_unit', 'fwhm_0_unit', 'sigma_0_unit')
+        _set_combo(self.mean_unit_combo, 'mu_0_unit')
+        _set_combo(self.diffusion_length_unit_combo, 'diffusion_length_unit')
+        _set_combo(self.diffusion_coeff_length_unit_combo, 'diffusion_coefficient_length_unit')
+        _set_combo(self.diffusion_coeff_time_unit_combo, 'diffusion_coefficient_time_unit')
+        _set_combo(self.lifetime_unit_combo, 'lifetime_unit')
+        _set_combo(self.spatial_width_unit_combo, 'spatial_width_unit', 'spatial width unit')
+        _set_combo(self.time_start_unit_combo, 'time_start_unit')
+        _set_combo(self.time_stop_unit_combo, 'time_stop_unit')
 
     def add_to_recent_files(self, file_path: str):
         """Add a file to the recent files list."""
@@ -1432,16 +1625,24 @@ class DiceGUI(QMainWindow):
         self.length_unit_combo.currentTextChanged.connect(self.mark_modified)
         self.time_unit_combo.currentTextChanged.connect(self.mark_modified)
 
-        # Initial profile parameters
+        # Per-parameter unit combos: mark modified and track user changes
+        for combo in self._get_all_per_param_unit_combos():
+            combo.currentTextChanged.connect(self.mark_modified)
+            combo.currentTextChanged.connect(
+                lambda _text, c=combo: self._on_per_param_unit_changed(c)
+            )
+
+        # Initial profile parameters (amplitude also drives CNR display on noise tab)
         self.amplitude_input.textChanged.connect(self.mark_modified)
+        self.amplitude_input.textChanged.connect(
+            lambda: update_noise_cnr_display(self, 'amplitude')
+        )
         self.mean_input.textChanged.connect(self.mark_modified)
         self.width_input.textChanged.connect(self.mark_modified)
         self.fwhm_radio.toggled.connect(self.mark_modified)
         self.sigma_radio.toggled.connect(self.mark_modified)
 
         # Diffusion parameters
-        self.diffusion_length_radio.toggled.connect(self.mark_modified)
-        self.diffusion_coeff_radio.toggled.connect(self.mark_modified)
         self.diffusion_length_input.textChanged.connect(self.mark_modified)
         self.diffusion_coeff_input.textChanged.connect(self.mark_modified)
         self.lifetime_input.textChanged.connect(self.mark_modified)
@@ -1450,6 +1651,7 @@ class DiceGUI(QMainWindow):
         self.noise_fixed_radio.toggled.connect(self.mark_modified)
         self.noise_estimate_radio.toggled.connect(self.mark_modified)
         self.noise_value_input.textChanged.connect(self.mark_modified)
+        self.noise_cnr_input.textChanged.connect(self.mark_modified)
         self.noise_file_input.textChanged.connect(self.mark_modified)
 
         # Spatial axis
@@ -1516,24 +1718,21 @@ class DiceGUI(QMainWindow):
             lambda v: validate_positive_float(v, "Spatial width")
         )
 
-        # Register conditional diffusion fields
+        # Register diffusion fields (all three always required; any two compute the third)
         self.validation_manager.register_field(
             "diffusion_length", self.diffusion_length_input,
             lambda v: validate_positive_float(v, "Diffusion length"),
-            condition_group="diffusion_length", condition_category="diffusion"
         )
         self.validation_manager.register_field(
             "diffusion_coeff", self.diffusion_coeff_input,
             lambda v: validate_positive_float(v, "Diffusion coefficient", allow_zero=True),
-            condition_group="diffusion_coeff", condition_category="diffusion"
         )
         self.validation_manager.register_field(
             "lifetime", self.lifetime_input,
             lambda v: validate_positive_float(v, "Lifetime", allow_zero=True),
-            condition_group="diffusion_coeff", condition_category="diffusion"
         )
 
-        # Register conditional noise fields
+        # Register conditional noise fields (fixed sigma or estimate from data)
         self.validation_manager.register_field(
             "noise_value", self.noise_value_input,
             lambda v: validate_positive_float(v, "Noise value", allow_zero=True),
@@ -1563,15 +1762,8 @@ class DiceGUI(QMainWindow):
         )
 
         # Connect radio buttons to condition manager
-        self.diffusion_length_radio.toggled.connect(
-            lambda checked: self.validation_manager.set_condition_active(
-                "diffusion", "diffusion_length" if checked else "diffusion_coeff"
-            )
-        )
         self.noise_fixed_radio.toggled.connect(
-            lambda checked: self.validation_manager.set_condition_active(
-                "noise", "noise_fixed" if checked else "noise_estimate"
-            )
+            lambda checked: self._update_noise_validation_state()
         )
         self.time_range_radio.toggled.connect(
             lambda checked: self.validation_manager.set_condition_active(
@@ -1580,9 +1772,15 @@ class DiceGUI(QMainWindow):
         )
 
         # Set initial condition states
-        self.validation_manager.set_condition_active("diffusion", "diffusion_length")
         self.validation_manager.set_condition_active("noise", "noise_fixed")
         self.validation_manager.set_condition_active("time", "time_range")
+
+    def _update_noise_validation_state(self):
+        """Update the noise validation condition based on fixed vs estimate."""
+        if self.noise_fixed_radio.isChecked():
+            self.validation_manager.set_condition_active("noise", "noise_fixed")
+        else:
+            self.validation_manager.set_condition_active("noise", "noise_estimate")
 
     def _on_validity_changed(self, is_valid: bool) -> None:
         """Handle overall form validity change."""

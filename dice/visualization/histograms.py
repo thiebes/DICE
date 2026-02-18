@@ -45,7 +45,7 @@ def plot_accuracy_histogram(
     Parameters
     ----------
     simulation_result : dict
-        Results dictionary containing 'collated results' with 'd_wls_over_d_nom' key.
+        Results dictionary containing 'collated results' with 'd_est_over_d_nom' key.
     proximity : float
         Proximity threshold for accuracy assessment (e.g., 0.1 for ±10%).
     filename : str
@@ -81,7 +81,7 @@ def plot_accuracy_histogram(
     
     Examples
     --------
-    >>> result = {'collated results': {'d_wls_over_d_nom': [0.98, 1.02, 0.99, 1.01]}}
+    >>> result = {'collated results': {'d_est_over_d_nom': [0.98, 1.02, 0.99, 1.01]}}
     >>> fig = plot_accuracy_histogram(result, 0.1, 'accuracy.png')
     """
     # Verify required data is present
@@ -89,8 +89,8 @@ def plot_accuracy_histogram(
         raise ValueError("'collated results' not found in simulation_result")
     
     collated = simulation_result['collated results']
-    if 'd_wls_over_d_nom' not in collated:
-        raise ValueError("'d_wls_over_d_nom' not found in collated results")
+    if 'd_est_over_d_nom' not in collated:
+        raise ValueError("'d_est_over_d_nom' not found in collated results")
 
     # Convert width and height from cm to inches
     inch = 1/2.54
@@ -102,7 +102,7 @@ def plot_accuracy_histogram(
     dice_gold = colors['dice_gold']
     
     # Convert list of values to NumPy array
-    dest_over_d0 = np.array(collated['d_wls_over_d_nom'])
+    dest_over_d0 = np.array(collated['d_est_over_d_nom'])
     
     # Initialize array to flag accuracy ratio values in proximity
     dest_d0_proximity_flag = np.abs(dest_over_d0 - 1) <= proximity

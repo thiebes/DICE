@@ -146,15 +146,15 @@ class DiceTheme:
             }}
 
             QPushButton#run-button:hover:enabled {{
-                background-color: {to_css(QColor(colors['success'].red() + 20,
-                                                 colors['success'].green() + 20,
-                                                 colors['success'].blue() + 20))};
+                background-color: {to_css(QColor(min(255, colors['success'].red() + 20),
+                                                 min(255, colors['success'].green() + 20),
+                                                 min(255, colors['success'].blue() + 20)))};
             }}
 
             QPushButton#run-button:pressed:enabled {{
-                background-color: {to_css(QColor(colors['success'].red() - 20,
-                                                 colors['success'].green() - 20,
-                                                 colors['success'].blue() - 20))};
+                background-color: {to_css(QColor(max(0, colors['success'].red() - 20),
+                                                 max(0, colors['success'].green() - 20),
+                                                 max(0, colors['success'].blue() - 20)))};
             }}
 
             QPushButton#run-button:disabled {{

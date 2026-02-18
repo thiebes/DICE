@@ -22,6 +22,12 @@ app_name = 'DICE'
 block_cipher = None
 root_path = Path(SPECPATH)
 
+# Read version from package
+import re
+with open(root_path / 'dice' / '__init__.py') as _f:
+    _version_match = re.search(r"__version__\s*=\s*['\"](.+?)['\"]", _f.read())
+    app_version = _version_match.group(1) if _version_match else '0.0.0'
+
 # Platform-specific settings
 if sys.platform == 'win32':
     icon_file = str(root_path / 'webapp' / 'static' / 'favicon.ico')
@@ -209,8 +215,8 @@ if sys.platform == 'darwin':
         info_plist={
             'CFBundleName': app_name,
             'CFBundleDisplayName': 'DICE - Diffusion Insight Computation Engine',
-            'CFBundleVersion': '1.3.0',
-            'CFBundleShortVersionString': '1.3.0',
+            'CFBundleVersion': app_version,
+            'CFBundleShortVersionString': app_version,
             'NSHighResolutionCapable': True,
             'NSRequiresAquaSystemAppearance': False,
         },

@@ -26,7 +26,7 @@ class TestPlotAccuracyHistogram:
         # Create mock simulation result
         result = {
             'collated results': {
-                'd_wls_over_d_nom': [0.95, 1.02, 0.98, 1.05, 0.92, 1.08, 0.97, 1.01]
+                'd_est_over_d_nom': [0.95, 1.02, 0.98, 1.05, 0.92, 1.08, 0.97, 1.01]
             }
         }
         
@@ -68,74 +68,56 @@ class TestPlotAccuracyHistogram:
         with pytest.raises(ValueError, match="'collated results' not found"):
             plot_accuracy_histogram(result1, 0.1, "test.png")
         
-        # Missing 'd_wls_over_d_nom'
+        # Missing 'd_est_over_d_nom'
         result2 = {'collated results': {}}
         
-        with pytest.raises(ValueError, match="'d_wls_over_d_nom' not found"):
+        with pytest.raises(ValueError, match="'d_est_over_d_nom' not found"):
             plot_accuracy_histogram(result2, 0.1, "test.png")
     
-    def test_custom_parameters(self):
+    def test_custom_parameters(self, tmp_path):
         """Test with custom plotting parameters."""
         result = {
             'collated results': {
-                'd_wls_over_d_nom': np.random.normal(1.0, 0.1, 100).tolist()
+                'd_est_over_d_nom': np.random.normal(1.0, 0.1, 100).tolist()
             }
         }
-        
-        # Create output directory for tests
-        output_dir = Path.cwd() / 'output' / 'tests'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        test_file = output_dir / "test_custom_parameters.png"
-        
-        try:
-            fig = plot_accuracy_histogram(
-                simulation_result=result,
-                proximity=0.05,
-                filename=str(test_file),
-                image_type='svg',
-                width=12.0,
-                height=8.0,
-                dpi=150,
-                font_size=14,
-                num_bins=25,
-                x_lim=[0.7, 1.3]
-            )
-            
-            assert isinstance(fig, plt.Figure)
-            ax = fig.axes[0]
-            assert ax.get_xlim() == (0.7, 1.3)
-            
-            plt.close(fig)
-            
-        finally:
-            # Clean up test file
-            if test_file.exists():
-                test_file.unlink()
-    
-    def test_perfect_data(self):
+
+        test_file = tmp_path / "test_custom_parameters.png"
+
+        fig = plot_accuracy_histogram(
+            simulation_result=result,
+            proximity=0.05,
+            filename=str(test_file),
+            image_type='svg',
+            width=12.0,
+            height=8.0,
+            dpi=150,
+            font_size=14,
+            num_bins=25,
+            x_lim=[0.7, 1.3]
+        )
+
+        assert isinstance(fig, plt.Figure)
+        ax = fig.axes[0]
+        assert ax.get_xlim() == (0.7, 1.3)
+
+        plt.close(fig)
+
+    def test_perfect_data(self, tmp_path):
         """Test with perfect data (all values = 1.0)."""
         result = {
             'collated results': {
-                'd_wls_over_d_nom': [1.0] * 50
+                'd_est_over_d_nom': [1.0] * 50
             }
         }
-        
-        # Create output directory for tests
-        output_dir = Path.cwd() / 'output' / 'tests'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        test_file = output_dir / "test_perfect_data.png"
-        
-        try:
-            fig = plot_accuracy_histogram(result, 0.1, str(test_file))
-            
-            assert isinstance(fig, plt.Figure)
-            assert test_file.exists()
-            plt.close(fig)
-            
-        finally:
-            # Clean up test file
-            if test_file.exists():
-                test_file.unlink()
+
+        test_file = tmp_path / "test_perfect_data.png"
+
+        fig = plot_accuracy_histogram(result, 0.1, str(test_file))
+
+        assert isinstance(fig, plt.Figure)
+        assert test_file.exists()
+        plt.close(fig)
 
 
 class TestPlotDiffusionCoefficientHistogram:

@@ -8,18 +8,20 @@ from dice_gui.tabs.base import (
     create_option_card,
     create_field_with_unit,
     create_error_label,
+    combo_value,
+    set_combo_value,
 )
 from dice_gui.tabs.tab_simulation import create_tab_simulation_setup
 from dice_gui.tabs.tab_physical import (
     create_tab_physical_parameters,
-    toggle_diffusion_inputs,
-    update_calculated_length,
+    update_diffusion_fields,
     update_width_conversion,
 )
 from dice_gui.tabs.tab_experimental import (
     create_tab_experimental_conditions,
     toggle_noise_inputs,
     toggle_time_inputs,
+    update_noise_cnr_display,
     update_pixel_size,
     browse_noise_file,
 )
@@ -34,6 +36,8 @@ __all__ = [
     "create_option_card",
     "create_field_with_unit",
     "create_error_label",
+    "combo_value",
+    "set_combo_value",
     # Tab creation functions
     "create_tab_simulation_setup",
     "create_tab_physical_parameters",
@@ -41,11 +45,11 @@ __all__ = [
     "create_tab_analysis_settings",
     "create_tab_output_settings",
     # Tab helper functions
-    "toggle_diffusion_inputs",
-    "update_calculated_length",
+    "update_diffusion_fields",
     "update_width_conversion",
     "toggle_noise_inputs",
     "toggle_time_inputs",
+    "update_noise_cnr_display",
     "update_pixel_size",
     "browse_noise_file",
     "update_proximity_target",

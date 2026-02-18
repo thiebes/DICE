@@ -85,18 +85,6 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     columns.addWidget(performance_group)
     layout.addLayout(columns)
 
-    # Info label
-    info_label = QLabel(
-        "Number of Runs: Number of Monte Carlo simulation iterations.\n\n"
-        "Filename Slug: Prefix for output files.\n\n"
-        "Multiprocessing: Enable to use multiple CPU cores for faster execution.\n\n"
-        "Retain Profile Data: Keep raw profile data in memory. Only enable if you "
-        "need the data for analysis, as it can be memory intensive for large simulations."
-    )
-    info_label.setWordWrap(True)
-    info_label.setProperty("class", "info-text")
-    layout.addWidget(info_label)
-
     layout.addStretch()
 
     return tab
