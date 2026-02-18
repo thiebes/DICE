@@ -4,6 +4,7 @@ DICE GUI - Main Application
 Graphical user interface for the Diffusion Insight Computation Engine.
 """
 
+import math
 import sys
 import webbrowser
 from pathlib import Path
@@ -959,6 +960,91 @@ class DiceGUI(QMainWindow):
 
         return params
 
+    def _check_parameter_consistency(self, gui_params: dict) -> list[str]:
+        """Check parameter combinations for conditions that may produce unreliable results.
+
+        Returns a list of warning/informational strings. Empty list means no issues.
+        """
+        from dice.utils.units import convert_time, convert_length, time_abbreviation, length_abbreviation
+        from dice.utils.converters import fwhm_to_sigma
+
+        messages = []
+        global_length = gui_params['length_unit']
+        global_time = gui_params['time_unit']
+
+        # Resolve lifetime to global time unit
+        lifetime_unit = gui_params.get('lifetime_unit', global_time)
+        lifetime = convert_time(gui_params['lifetime'], lifetime_unit, global_time)
+
+        # Resolve t_stop and num_time_points
+        t_stop = None
+        num_time_points = 0
+
+        if gui_params['time_type'] == 'range':
+            t_stop_unit = gui_params.get('time_stop_unit', global_time)
+            t_stop = convert_time(gui_params['time_stop'], t_stop_unit, global_time)
+            num_time_points = gui_params['time_steps']
+        else:
+            try:
+                time_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+            except ValueError:
+                time_values = []
+            if time_values:
+                t_stop = max(time_values)
+                num_time_points = len(time_values)
+
+        # Check 1: Final CNR after exponential decay
+        if gui_params['noise_type'] == 'fixed' and t_stop is not None:
+            amplitude = gui_params['amplitude_0']
+            noise_sigma = gui_params['noise_value']
+
+            if lifetime > 0:
+                final_amplitude = amplitude * math.exp(-t_stop / lifetime)
+            else:
+                final_amplitude = amplitude
+
+            if noise_sigma > 0:
+                final_cnr = final_amplitude / noise_sigma
+                if final_cnr < 5:
+                    t_abbr = time_abbreviation(global_time)
+                    messages.append(
+                        f"\u26a0 Low final CNR: At t = {t_stop:.4g} {t_abbr}, "
+                        f"the signal decays to amplitude {final_amplitude:.4g}, "
+                        f"giving CNR = {final_cnr:.2f}. "
+                        f"Below ~5, Gaussian fitting becomes unreliable."
+                    )
+
+        # Check 2: Profile width undersampled relative to pixel grid
+        if gui_params['profile_width_type'] == 'fwhm':
+            width_unit = gui_params.get('fwhm_0_unit', global_length)
+            fwhm_global = convert_length(gui_params['profile_width_value'], width_unit, global_length)
+            sigma_0 = fwhm_to_sigma(fwhm_global)
+        else:
+            width_unit = gui_params.get('sigma_0_unit', global_length)
+            sigma_0 = convert_length(gui_params['profile_width_value'], width_unit, global_length)
+
+        spatial_unit = gui_params.get('spatial_width_unit', global_length)
+        spatial_width = convert_length(gui_params['spatial_width'], spatial_unit, global_length)
+        pixel_size = spatial_width / gui_params['pixel_width']
+
+        if sigma_0 < 2 * pixel_size:
+            l_abbr = length_abbreviation(global_length)
+            messages.append(
+                f"\u26a0 Undersampled profile: \u03c3\u2080 = {sigma_0:.4g} {l_abbr} "
+                f"is narrower than 2\u00d7 the pixel size ({pixel_size:.4g} {l_abbr}). "
+                f"The initial Gaussian may be too narrow for the pixel grid "
+                f"to resolve, which prevents reliable fitting."
+            )
+
+        # Check 3: Few time points (informational)
+        if 0 < num_time_points < 5:
+            messages.append(
+                f"\u2139 Few time points: Only {num_time_points} time point(s) will be used "
+                f"for the MSD linear fit. Fewer points increase sensitivity to noise."
+            )
+
+        return messages
+
     def run_simulation(self):
         """Run the DICE simulation."""
         # Validate all active fields (this triggers visual updates)
@@ -993,6 +1079,19 @@ class DiceGUI(QMainWindow):
         if not is_valid:
             QMessageBox.critical(self, "Parameter Validation Error", error_message)
             return
+
+        # Check parameter consistency (non-blocking warnings)
+        warnings = self._check_parameter_consistency(gui_params)
+        if warnings:
+            warning_text = "\n\n".join(warnings)
+            reply = QMessageBox.question(
+                self, "Parameter Warnings",
+                warning_text + "\n\nProceed with simulation?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
 
         # Update UI for running state
         self.run_button.setEnabled(False)
