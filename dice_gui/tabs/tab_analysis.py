@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
     QGroupBox, QLabel, QDoubleSpinBox, QRadioButton
 )
 
+from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
+
 from dice_gui.proximity_widget import ProximityTargetWidget
 
 if TYPE_CHECKING:
@@ -27,7 +29,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     proximity_group = QGroupBox("Accuracy Threshold")
     proximity_layout = QVBoxLayout(proximity_group)
 
-    proximity_label = QLabel("Proximity Level:")
+    proximity_label = QLabel("&Proximity Level:")
     main_window.proximity_spin = QDoubleSpinBox()
     main_window.proximity_spin.setMinimum(0.001)
     main_window.proximity_spin.setMaximum(1.0)
@@ -45,6 +47,8 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
         "Typical values: 0.10-0.20 for most applications\n"
         "Stricter: 0.05 for high-precision requirements"
     )
+
+    add_keyboard_shortcut_to_label(proximity_label, main_window.proximity_spin)
 
     proximity_input_layout = QHBoxLayout()
     proximity_input_layout.addWidget(proximity_label)
@@ -71,8 +75,8 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     fit_method_group = QGroupBox("Fit Method")
     fit_method_layout = QVBoxLayout(fit_method_group)
 
-    main_window.plot_method_wls_radio = QRadioButton("Weighted Least Squares (WLS)")
-    main_window.plot_method_ols_radio = QRadioButton("Ordinary Least Squares (OLS)")
+    main_window.plot_method_wls_radio = QRadioButton("&Weighted Least Squares (WLS)")
+    main_window.plot_method_ols_radio = QRadioButton("&Ordinary Least Squares (OLS)")
     main_window.plot_method_wls_radio.setChecked(True)
     main_window.plot_method_wls_radio.setToolTip(
         "Weighted Least Squares regression.\n\n"
@@ -95,6 +99,12 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     columns.addWidget(fit_method_group)
     layout.addLayout(columns)
     layout.addStretch()
+
+    set_tab_order([
+        main_window.proximity_spin,
+        main_window.plot_method_wls_radio,
+        main_window.plot_method_ols_radio,
+    ])
 
     return tab
 

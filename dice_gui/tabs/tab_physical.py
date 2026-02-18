@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from dice_gui.tabs.base import (
     create_option_card, create_error_label, create_unit_combo, combo_value,
 )
+from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import (
     validate_positive_float, validate_float,
     convert_fwhm_to_sigma, convert_sigma_to_fwhm,
@@ -67,7 +68,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.diffusion_length_unit_combo = create_unit_combo('length')
     l_widget_layout.addWidget(main_window.diffusion_length_input)
     l_widget_layout.addWidget(main_window.diffusion_length_unit_combo)
-    diffusion_layout.addRow("Diffusion Length (L):", l_widget)
+    diffusion_length_label = QLabel("Diffusion &Length (L):")
+    add_keyboard_shortcut_to_label(diffusion_length_label, main_window.diffusion_length_input)
+    diffusion_layout.addRow(diffusion_length_label, l_widget)
     main_window._error_labels["diffusion_length"] = create_error_label()
     diffusion_layout.addRow("", main_window._error_labels["diffusion_length"])
 
@@ -95,7 +98,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     d_widget_layout.addWidget(main_window.diffusion_coeff_length_unit_combo)
     d_widget_layout.addWidget(dc_unit_separator)
     d_widget_layout.addWidget(main_window.diffusion_coeff_time_unit_combo)
-    diffusion_layout.addRow("Diffusion Coefficient (D):", d_widget)
+    diffusion_coeff_label = QLabel("Diffusion &Coefficient (D):")
+    add_keyboard_shortcut_to_label(diffusion_coeff_label, main_window.diffusion_coeff_input)
+    diffusion_layout.addRow(diffusion_coeff_label, d_widget)
     main_window._error_labels["diffusion_coeff"] = create_error_label()
     diffusion_layout.addRow("", main_window._error_labels["diffusion_coeff"])
 
@@ -117,7 +122,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.lifetime_unit_combo = create_unit_combo('time')
     tau_widget_layout.addWidget(main_window.lifetime_input)
     tau_widget_layout.addWidget(main_window.lifetime_unit_combo)
-    diffusion_layout.addRow("Lifetime (\u03c4):", tau_widget)
+    lifetime_label = QLabel("Life&time (\u03c4):")
+    add_keyboard_shortcut_to_label(lifetime_label, main_window.lifetime_input)
+    diffusion_layout.addRow(lifetime_label, tau_widget)
     main_window._error_labels["lifetime"] = create_error_label()
     diffusion_layout.addRow("", main_window._error_labels["lifetime"])
 
@@ -161,7 +168,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "The noise level is specified relative to this amplitude.\n\n"
         "Can be zero or positive. Zero amplitude means no signal (only noise)."
     )
-    profile_layout.addRow("Amplitude\u2080:", main_window.amplitude_input)
+    amplitude_label = QLabel("&Amplitude\u2080:")
+    add_keyboard_shortcut_to_label(amplitude_label, main_window.amplitude_input)
+    profile_layout.addRow(amplitude_label, main_window.amplitude_input)
     main_window._error_labels["amplitude"] = create_error_label()
     profile_layout.addRow("", main_window._error_labels["amplitude"])
 
@@ -180,7 +189,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.mean_unit_combo = create_unit_combo('length')
     mean_layout.addWidget(main_window.mean_input)
     mean_layout.addWidget(main_window.mean_unit_combo)
-    profile_layout.addRow("Mean Position (\u03bc\u2080):", mean_widget)
+    mean_label = QLabel("&Mean Position (\u03bc\u2080):")
+    add_keyboard_shortcut_to_label(mean_label, main_window.mean_input)
+    profile_layout.addRow(mean_label, mean_widget)
     main_window._error_labels["mean"] = create_error_label()
     profile_layout.addRow("", main_window._error_labels["mean"])
 
@@ -211,7 +222,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     width_radio_layout.addWidget(main_window.fwhm_radio)
     width_radio_layout.addWidget(main_window.sigma_radio)
     width_radio_layout.addStretch()
-    profile_layout.addRow("Width Type:", width_radio_widget)
+    width_type_label = QLabel("Width T&ype:")
+    add_keyboard_shortcut_to_label(width_type_label, main_window.fwhm_radio)
+    profile_layout.addRow(width_type_label, width_radio_widget)
 
     # Width input
     width_widget = QWidget()
@@ -232,7 +245,9 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     main_window.width_unit_combo = create_unit_combo('length')
     width_layout_widget.addWidget(main_window.width_input)
     width_layout_widget.addWidget(main_window.width_unit_combo)
-    profile_layout.addRow("Width Value:", width_widget)
+    width_value_label = QLabel("&Width Value:")
+    add_keyboard_shortcut_to_label(width_value_label, main_window.width_input)
+    profile_layout.addRow(width_value_label, width_widget)
     main_window._error_labels["width"] = create_error_label()
     profile_layout.addRow("", main_window._error_labels["width"])
 
@@ -253,6 +268,23 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     columns.addWidget(profile_group)
     layout.addLayout(columns)
     layout.addStretch()
+
+    set_tab_order([
+        main_window.diffusion_length_input,
+        main_window.diffusion_length_unit_combo,
+        main_window.diffusion_coeff_input,
+        main_window.diffusion_coeff_length_unit_combo,
+        main_window.diffusion_coeff_time_unit_combo,
+        main_window.lifetime_input,
+        main_window.lifetime_unit_combo,
+        main_window.amplitude_input,
+        main_window.mean_input,
+        main_window.mean_unit_combo,
+        main_window.fwhm_radio,
+        main_window.sigma_radio,
+        main_window.width_input,
+        main_window.width_unit_combo,
+    ])
 
     scroll.setWidget(scroll_content)
     tab_layout = QVBoxLayout(tab)

@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from dice_gui.tabs.base import create_error_label
+from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
 if TYPE_CHECKING:
     from dice_gui.dice_gui import DiceGUI
@@ -39,7 +40,9 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
         "Typical values: 100-1000 for testing, 1000-10000 for publication-quality results.\n\n"
         "Each run generates a noisy profile, fits it, and estimates the diffusion coefficient."
     )
-    basic_layout.addRow("Number of Runs:", main_window.num_runs_spin)
+    num_runs_label = QLabel("&Number of Runs:")
+    add_keyboard_shortcut_to_label(num_runs_label, main_window.num_runs_spin)
+    basic_layout.addRow(num_runs_label, main_window.num_runs_spin)
 
     # Filename slug
     main_window.filename_slug_input = QLineEdit()
@@ -49,7 +52,9 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
         "Output files will be saved as: output/<slug>/<slug>_results.csv, <slug>_accuracy_histogram.png, etc.\n\n"
         "Use descriptive names to organize multiple simulations (e.g., 'high_SNR_test' or 'sample_A_analysis')."
     )
-    basic_layout.addRow("Filename Slug:", main_window.filename_slug_input)
+    filename_slug_label = QLabel("Filename &Slug:")
+    add_keyboard_shortcut_to_label(filename_slug_label, main_window.filename_slug_input)
+    basic_layout.addRow(filename_slug_label, main_window.filename_slug_input)
 
     # Filename slug validation error label
     main_window._error_labels["filename_slug"] = create_error_label()
@@ -71,13 +76,17 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     main_window.multiprocessing_check = QCheckBox("Enable parallel processing")
     main_window.multiprocessing_check.setChecked(True)
     main_window.multiprocessing_check.setToolTip("Use multiple CPU cores to speed up simulation")
-    performance_layout.addRow("Multiprocessing:", main_window.multiprocessing_check)
+    multiprocessing_label = QLabel("&Multiprocessing:")
+    add_keyboard_shortcut_to_label(multiprocessing_label, main_window.multiprocessing_check)
+    performance_layout.addRow(multiprocessing_label, main_window.multiprocessing_check)
 
     # Retain profile data checkbox
     main_window.retain_profile_check = QCheckBox("Retain profile data")
     main_window.retain_profile_check.setChecked(False)
     main_window.retain_profile_check.setToolTip("Keep raw profile data (memory intensive)")
-    performance_layout.addRow("Data Retention:", main_window.retain_profile_check)
+    data_retention_label = QLabel("Data &Retention:")
+    add_keyboard_shortcut_to_label(data_retention_label, main_window.retain_profile_check)
+    performance_layout.addRow(data_retention_label, main_window.retain_profile_check)
 
     # Two-column layout for groups
     columns = QHBoxLayout()
@@ -86,5 +95,12 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     layout.addLayout(columns)
 
     layout.addStretch()
+
+    set_tab_order([
+        main_window.num_runs_spin,
+        main_window.filename_slug_input,
+        main_window.multiprocessing_check,
+        main_window.retain_profile_check,
+    ])
 
     return tab

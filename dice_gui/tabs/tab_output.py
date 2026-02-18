@@ -13,6 +13,8 @@ from PyQt6.QtWidgets import (
     QPushButton
 )
 
+from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
+
 if TYPE_CHECKING:
     from dice_gui.dice_gui import DiceGUI
 
@@ -26,7 +28,7 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
 
     # === Preset Section ===
     preset_layout = QHBoxLayout()
-    preset_label = QLabel("Quick Setup:")
+    preset_label = QLabel("&Quick Setup:")
     main_window.preset_combo = QComboBox()
     main_window.preset_combo.setProperty("class", "preset-selector")
     main_window.preset_combo.addItem("Custom", None)
@@ -35,6 +37,7 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.preset_combo.addItem("Draft (quick preview)", "draft")
     main_window.preset_combo.currentIndexChanged.connect(lambda idx: _apply_output_preset(main_window, idx))
 
+    add_keyboard_shortcut_to_label(preset_label, main_window.preset_combo)
     preset_layout.addWidget(preset_label)
     preset_layout.addWidget(main_window.preset_combo)
     preset_layout.addStretch()
@@ -55,7 +58,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
         "- SVG: Vector format, scalable, ideal for publications\n"
         "- TIF: Uncompressed, maximum quality"
     )
-    format_layout.addRow("File Type:", main_window.image_type_combo)
+    file_type_label = QLabel("File &Type:")
+    add_keyboard_shortcut_to_label(file_type_label, main_window.image_type_combo)
+    format_layout.addRow(file_type_label, main_window.image_type_combo)
     main_window.image_type_combo.currentTextChanged.connect(main_window._update_output_path_preview)
 
     # Image width
@@ -71,7 +76,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_width_unit_combo.addItems(["cm", "in", "mm"])
     width_layout.addWidget(main_window.image_width_spin)
     width_layout.addWidget(main_window.image_width_unit_combo)
-    format_layout.addRow("Width:", width_widget)
+    width_label = QLabel("&Width:")
+    add_keyboard_shortcut_to_label(width_label, main_window.image_width_spin)
+    format_layout.addRow(width_label, width_widget)
 
     # Image height
     height_widget = QWidget()
@@ -86,7 +93,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_height_unit_combo.addItems(["cm", "in", "mm"])
     height_layout.addWidget(main_window.image_height_spin)
     height_layout.addWidget(main_window.image_height_unit_combo)
-    format_layout.addRow("Height:", height_widget)
+    height_label = QLabel("H&eight:")
+    add_keyboard_shortcut_to_label(height_label, main_window.image_height_spin)
+    format_layout.addRow(height_label, height_widget)
 
     # === Column 2: Resolution & Histogram ===
     resolution_group = QGroupBox("Resolution & Histogram")
@@ -98,7 +107,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_dpi_spin.setMaximum(1200)
     main_window.image_dpi_spin.setValue(300)
     main_window.image_dpi_spin.setToolTip("Resolution: 300 DPI for publications, 96 for screen")
-    resolution_layout.addRow("DPI:", main_window.image_dpi_spin)
+    dpi_label = QLabel("&DPI:")
+    add_keyboard_shortcut_to_label(dpi_label, main_window.image_dpi_spin)
+    resolution_layout.addRow(dpi_label, main_window.image_dpi_spin)
 
     # Number of bins
     main_window.image_numbins_spin = QSpinBox()
@@ -106,7 +117,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_numbins_spin.setMaximum(200)
     main_window.image_numbins_spin.setValue(35)
     main_window.image_numbins_spin.setToolTip("Number of bins for accuracy histogram")
-    resolution_layout.addRow("Histogram Bins:", main_window.image_numbins_spin)
+    bins_label = QLabel("Histogram &Bins:")
+    add_keyboard_shortcut_to_label(bins_label, main_window.image_numbins_spin)
+    resolution_layout.addRow(bins_label, main_window.image_numbins_spin)
 
     # === Column 3: Typography ===
     typography_group = QGroupBox("Typography")
@@ -124,7 +137,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_font_unit_combo.addItems(["pt", "px"])
     font_layout.addWidget(main_window.image_font_size_spin)
     font_layout.addWidget(main_window.image_font_unit_combo)
-    typography_layout.addRow("Font Size:", font_widget)
+    font_size_label = QLabel("Fo&nt Size:")
+    add_keyboard_shortcut_to_label(font_size_label, main_window.image_font_size_spin)
+    typography_layout.addRow(font_size_label, font_widget)
 
     # Tick length
     tick_length_widget = QWidget()
@@ -138,7 +153,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_tick_length_unit_combo.addItems(["pt", "px"])
     tick_length_layout.addWidget(main_window.image_tick_length_spin)
     tick_length_layout.addWidget(main_window.image_tick_length_unit_combo)
-    typography_layout.addRow("Tick Length:", tick_length_widget)
+    tick_length_label = QLabel("Tic&k Length:")
+    add_keyboard_shortcut_to_label(tick_length_label, main_window.image_tick_length_spin)
+    typography_layout.addRow(tick_length_label, tick_length_widget)
 
     # Tick width
     tick_width_widget = QWidget()
@@ -152,7 +169,9 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     main_window.image_tick_width_unit_combo.addItems(["pt", "px"])
     tick_width_layout.addWidget(main_window.image_tick_width_spin)
     tick_width_layout.addWidget(main_window.image_tick_width_unit_combo)
-    typography_layout.addRow("Tick Width:", tick_width_widget)
+    tick_width_label = QLabel("Tick W&idth:")
+    add_keyboard_shortcut_to_label(tick_width_label, main_window.image_tick_width_spin)
+    typography_layout.addRow(tick_width_label, tick_width_widget)
 
     # Three-column layout
     columns = QHBoxLayout()
@@ -183,6 +202,25 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
 
     layout.addLayout(actions_layout)
     layout.addStretch()
+
+    set_tab_order([
+        main_window.preset_combo,
+        main_window.image_type_combo,
+        main_window.image_width_spin,
+        main_window.image_width_unit_combo,
+        main_window.image_height_spin,
+        main_window.image_height_unit_combo,
+        main_window.image_dpi_spin,
+        main_window.image_numbins_spin,
+        main_window.image_font_size_spin,
+        main_window.image_font_unit_combo,
+        main_window.image_tick_length_spin,
+        main_window.image_tick_length_unit_combo,
+        main_window.image_tick_width_spin,
+        main_window.image_tick_width_unit_combo,
+        main_window.regenerate_plot_button,
+        main_window.load_results_button,
+    ])
 
     return tab
 

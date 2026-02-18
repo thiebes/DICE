@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
+from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import calculate_pixel_size
 
 if TYPE_CHECKING:
@@ -69,7 +70,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Higher noise makes diffusion coefficient estimation more difficult.\n\n"
         "Must be non-negative. Zero means no noise (perfect measurements)."
     )
-    fixed_layout.addRow("Noise \u03c3:", main_window.noise_value_input)
+    noise_sigma_label = QLabel("&Noise \u03c3:")
+    add_keyboard_shortcut_to_label(noise_sigma_label, main_window.noise_value_input)
+    fixed_layout.addRow(noise_sigma_label, main_window.noise_value_input)
     main_window._error_labels["noise_value"] = create_error_label()
     fixed_layout.addRow("", main_window._error_labels["noise_value"])
 
@@ -84,7 +87,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "CNR = amplitude / noise \u03c3\n\n"
         "Must be positive."
     )
-    fixed_layout.addRow("CNR:", main_window.noise_cnr_input)
+    cnr_label = QLabel("&CNR:")
+    add_keyboard_shortcut_to_label(cnr_label, main_window.noise_cnr_input)
+    fixed_layout.addRow(cnr_label, main_window.noise_cnr_input)
 
     # Noise linking state
     main_window._updating_noise = False
@@ -121,7 +126,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     main_window.noise_browse_button.clicked.connect(lambda: browse_noise_file(main_window))
     file_widget_layout.addWidget(main_window.noise_file_input)
     file_widget_layout.addWidget(main_window.noise_browse_button)
-    estimate_layout.addRow("File:", file_widget)
+    file_label = QLabel("Fi&le:")
+    add_keyboard_shortcut_to_label(file_label, main_window.noise_file_input)
+    estimate_layout.addRow(file_label, file_widget)
     main_window._error_labels["noise_file"] = create_error_label()
     estimate_layout.addRow("", main_window._error_labels["noise_file"])
 
@@ -154,7 +161,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     main_window.spatial_width_unit_combo = create_unit_combo('length')
     spatial_width_layout.addWidget(main_window.spatial_width_input)
     spatial_width_layout.addWidget(main_window.spatial_width_unit_combo)
-    spatial_layout.addRow("Spatial Width:", spatial_width_widget)
+    spatial_width_label = QLabel("Spatial &Width:")
+    add_keyboard_shortcut_to_label(spatial_width_label, main_window.spatial_width_input)
+    spatial_layout.addRow(spatial_width_label, spatial_width_widget)
     main_window._error_labels["spatial_width"] = create_error_label()
     spatial_layout.addRow("", main_window._error_labels["spatial_width"])
 
@@ -171,7 +180,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Typical values: 50-500 pixels\n"
         "Minimum practical: ~20-30 pixels"
     )
-    spatial_layout.addRow("Number of Pixels:", main_window.pixel_width_input)
+    pixel_count_label = QLabel("Number of &Pixels:")
+    add_keyboard_shortcut_to_label(pixel_count_label, main_window.pixel_width_input)
+    spatial_layout.addRow(pixel_count_label, main_window.pixel_width_input)
 
     # Calculated pixel size
     main_window.pixel_size_label = QLabel("Pixel Size: ---")
@@ -255,15 +266,21 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Minimum: 2 (though 3+ strongly recommended for meaningful statistics)"
     )
 
-    range_layout.addRow("Start:", start_widget)
+    start_label = QLabel("&Start:")
+    add_keyboard_shortcut_to_label(start_label, main_window.time_start_input)
+    range_layout.addRow(start_label, start_widget)
     main_window._error_labels["time_start"] = create_error_label()
     range_layout.addRow("", main_window._error_labels["time_start"])
 
-    range_layout.addRow("Stop:", stop_widget)
+    stop_label = QLabel("St&op:")
+    add_keyboard_shortcut_to_label(stop_label, main_window.time_stop_input)
+    range_layout.addRow(stop_label, stop_widget)
     main_window._error_labels["time_stop"] = create_error_label()
     range_layout.addRow("", main_window._error_labels["time_stop"])
 
-    range_layout.addRow("Steps:", main_window.time_steps_input)
+    steps_label = QLabel("St&eps:")
+    add_keyboard_shortcut_to_label(steps_label, main_window.time_steps_input)
+    range_layout.addRow(steps_label, main_window.time_steps_input)
     temporal_layout.addWidget(range_container)
 
     temporal_layout.addWidget(main_window.time_series_radio)
@@ -298,6 +315,26 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     columns.addWidget(temporal_group)
     layout.addLayout(columns)
     layout.addStretch()
+
+    set_tab_order([
+        main_window.noise_fixed_radio,
+        main_window.noise_value_input,
+        main_window.noise_cnr_input,
+        main_window.noise_estimate_radio,
+        main_window.noise_file_input,
+        main_window.noise_browse_button,
+        main_window.spatial_width_input,
+        main_window.spatial_width_unit_combo,
+        main_window.pixel_width_input,
+        main_window.time_range_radio,
+        main_window.time_start_input,
+        main_window.time_start_unit_combo,
+        main_window.time_stop_input,
+        main_window.time_stop_unit_combo,
+        main_window.time_steps_input,
+        main_window.time_series_radio,
+        main_window.time_series_input,
+    ])
 
     scroll.setWidget(scroll_content)
     tab_layout = QVBoxLayout(tab)
