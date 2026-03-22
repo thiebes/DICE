@@ -112,10 +112,6 @@ class DiceGUI(QMainWindow):
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Add header
-        header = self.create_header()
-        scroll_layout.addWidget(header)
-
         # Initialize hidden global unit combos (not in visible layout, but
         # other code reads/writes them for per-parameter unit syncing).
         self._init_global_unit_combos()
@@ -268,6 +264,14 @@ class DiceGUI(QMainWindow):
         doc_action.setStatusTip("Open DICE documentation on GitHub")
         doc_action.triggered.connect(self.open_documentation)
         help_menu.addAction(doc_action)
+
+        # Keyboard Shortcuts
+        shortcuts_action = QAction("&Keyboard Shortcuts", self)
+        shortcuts_action.setStatusTip("View keyboard shortcuts for all tabs")
+        shortcuts_action.triggered.connect(self.show_keyboard_shortcuts)
+        help_menu.addAction(shortcuts_action)
+
+        help_menu.addSeparator()
 
         # About
         about_action = QAction("&About DICE", self)
@@ -1589,6 +1593,19 @@ class DiceGUI(QMainWindow):
                 self.image_tick_width_spin.setValue(int(params['image tick width']))
             if 'image numbins' in params:
                 self.image_numbins_spin.setValue(params['image numbins'])
+            # Auto-derive lifetime when only diffusion length is provided:
+            # assume tau = t_final, then let the linked-field logic compute D.
+            if ('nominal diffusion length' in params
+                    and 'nominal diffusion coefficient' not in params
+                    and 'nominal lifetime (tau)' not in params):
+                t_final = None
+                if 'time range' in params:
+                    t_final = params['time range'][1]
+                elif 'time series' in params and params['time series']:
+                    t_final = max(params['time series'])
+                if t_final is not None and t_final > 0:
+                    self.lifetime_input.setText(str(t_final))
+
         finally:
             self._populating = False  # Re-enable modification marking
 
@@ -1978,6 +1995,66 @@ class DiceGUI(QMainWindow):
             self.validation_status_label.setText("")
         self.validation_status_label.style().unpolish(self.validation_status_label)
         self.validation_status_label.style().polish(self.validation_status_label)
+
+    def show_keyboard_shortcuts(self):
+        """Show keyboard shortcuts reference dialog."""
+        shortcuts_text = """
+<h2>Keyboard Shortcuts</h2>
+<p>Press <b>Alt</b> + the underlined letter to jump to a field.
+Shortcuts are scoped to the active tab.</p>
+
+<h3>Tab 1: Simulation Setup</h3>
+<table>
+<tr><td><b>Alt+N</b></td><td>Number of Runs</td></tr>
+<tr><td><b>Alt+S</b></td><td>Filename Slug</td></tr>
+<tr><td><b>Alt+M</b></td><td>Multiprocessing</td></tr>
+<tr><td><b>Alt+R</b></td><td>Data Retention</td></tr>
+</table>
+
+<h3>Tab 2: Physical Parameters</h3>
+<table>
+<tr><td><b>Alt+L</b></td><td>Diffusion Length</td></tr>
+<tr><td><b>Alt+C</b></td><td>Diffusion Coefficient</td></tr>
+<tr><td><b>Alt+T</b></td><td>Lifetime</td></tr>
+<tr><td><b>Alt+A</b></td><td>Amplitude</td></tr>
+<tr><td><b>Alt+M</b></td><td>Mean Position</td></tr>
+<tr><td><b>Alt+Y</b></td><td>Width Type</td></tr>
+<tr><td><b>Alt+W</b></td><td>Width Value</td></tr>
+</table>
+
+<h3>Tab 3: Experimental Conditions</h3>
+<table>
+<tr><td><b>Alt+N</b></td><td>Noise \u03c3</td></tr>
+<tr><td><b>Alt+C</b></td><td>CNR</td></tr>
+<tr><td><b>Alt+L</b></td><td>Noise File</td></tr>
+<tr><td><b>Alt+W</b></td><td>Spatial Width</td></tr>
+<tr><td><b>Alt+P</b></td><td>Number of Pixels</td></tr>
+<tr><td><b>Alt+S</b></td><td>Start</td></tr>
+<tr><td><b>Alt+O</b></td><td>Stop</td></tr>
+<tr><td><b>Alt+E</b></td><td>Steps</td></tr>
+</table>
+
+<h3>Tab 4: Analysis Settings</h3>
+<table>
+<tr><td><b>Alt+P</b></td><td>Proximity Level</td></tr>
+<tr><td><b>Alt+W</b></td><td>Weighted Least Squares</td></tr>
+<tr><td><b>Alt+O</b></td><td>Ordinary Least Squares</td></tr>
+</table>
+
+<h3>Tab 5: Output Settings</h3>
+<table>
+<tr><td><b>Alt+Q</b></td><td>Quick Setup</td></tr>
+<tr><td><b>Alt+T</b></td><td>File Type</td></tr>
+<tr><td><b>Alt+W</b></td><td>Width</td></tr>
+<tr><td><b>Alt+E</b></td><td>Height</td></tr>
+<tr><td><b>Alt+D</b></td><td>DPI</td></tr>
+<tr><td><b>Alt+B</b></td><td>Histogram Bins</td></tr>
+<tr><td><b>Alt+N</b></td><td>Font Size</td></tr>
+<tr><td><b>Alt+K</b></td><td>Tick Length</td></tr>
+<tr><td><b>Alt+I</b></td><td>Tick Width</td></tr>
+</table>
+"""
+        QMessageBox.information(self, "Keyboard Shortcuts", shortcuts_text)
 
     def show_about_dialog(self):
         """Show the About DICE dialog."""
