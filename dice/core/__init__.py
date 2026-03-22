@@ -24,10 +24,10 @@ _LAZY_IMPORTS = {
     "estimate_diffusion_from_msd": ".diffusion",
     "calculate_peclet_number": ".diffusion",
     "einstein_relation": ".diffusion",
-    # noise (scipy.signal)
+    # noise
     "add_noise": ".noise",
     "make_noise_distribution": ".noise",
-    "fft_cnr": ".noise",
+    "fft_cnr": "fft_cnr",  # re-exported from fft-cnr package
     "estimate_noise_from_profile": ".noise",
     # fitting (scipy.optimize, statsmodels)
     "gauss_fitting": ".fitting",

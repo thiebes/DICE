@@ -14,7 +14,8 @@ from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
-from ..core.noise import fft_cnr, make_noise_distribution
+from fft_cnr import fft_cnr
+from ..core.noise import make_noise_distribution
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
@@ -196,8 +197,7 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
                 raise ValueError("Error reading CSV for noise estimation.") from e
-            cnr_est = fft_cnr(t0_profile_y)
-            sigma_n = 1.0 / cnr_est
+            sigma_n = fft_cnr(t0_profile_y).noise_rms
             parameters_dictionary['noise series'] = [sigma_n]
 
         elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):
