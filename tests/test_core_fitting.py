@@ -169,6 +169,7 @@ class TestFitGaussianProfile:
         with pytest.raises(ValueError, match="same length"):
             fit_gaussian_profile(x, y)
     
+    @pytest.mark.filterwarnings("ignore::scipy.optimize.OptimizeWarning")
     def test_failed_fit(self):
         """Test handling of fit failure."""
         x = np.linspace(-5, 5, 10)
@@ -185,6 +186,8 @@ class TestFitGaussianProfile:
 
 class TestDiffusionOLSFit:
     """Test OLS fitting for diffusion coefficient estimation."""
+
+
     
     def test_perfect_linear_msd(self):
         """Test with perfect linear MSD data."""
@@ -220,18 +223,19 @@ class TestDiffusionOLSFit:
         # Should be close to true value
         assert np.isclose(result['MSD_t slope estimate'], 2 * D_true, rtol=0.1)
         assert result['r_squared'] > 0.9  # Good fit despite noise
-    
+
+    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     def test_minimum_points(self):
         """Test with minimum number of points."""
         time_axis = np.array([0, 1])
         sigma2_t = np.array([1.0, 2.0])
-        
+
         result = diffusion_ols_fit(time_axis, sigma2_t)
-        
+
         # With 2 points, should fit perfectly
         assert np.isclose(result['MSD_t slope estimate'], 1.0)  # MSD slope
         assert np.isclose(result['r_squared'], 1.0)
-    
+
     def test_insufficient_points_error(self):
         """Test error with insufficient points."""
         with pytest.raises(ValueError, match="at least 2 points"):
@@ -322,14 +326,15 @@ class TestDiffusionWLSFit:
         
         with pytest.raises(ValueError, match="same length"):
             diffusion_wls_fit(time_axis, sigma2_t, weights=weights)
-    
+
+    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     def test_minimum_points(self):
         """Test with minimum number of points."""
         time_axis = np.array([0, 1])
         sigma2_t = np.array([1.0, 2.0])
-        
+
         result = diffusion_wls_fit(time_axis, sigma2_t)
-        
+
         assert result['MSD_t slope estimate'] == 1.0
         assert result['r_squared'] == 1.0
 

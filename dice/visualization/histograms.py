@@ -124,11 +124,9 @@ def plot_accuracy_histogram(
         alpha=0.7
     )
 
-    # Calculate normal distribution overlay
-    binspace_dd0 = np.linspace(bins_dd0[0], bins_dd0[-1], 100)
+    # Calculate statistics
     mu_dd0 = np.mean(dest_over_d0)
     sigma_dd0 = np.std(dest_over_d0)
-    y_dd0 = norm.pdf(binspace_dd0, mu_dd0, sigma_dd0)
 
     # Set labels
     ax.set_xlabel('$D_{est}/D_{nom}$', fontsize=font_size)
@@ -136,28 +134,37 @@ def plot_accuracy_histogram(
 
     # Set x-axis limits (default: 99.97% confidence interval)
     if x_lim is None:
-        x_lim = [mu_dd0 - 3 * sigma_dd0, mu_dd0 + 3 * sigma_dd0]
+        if sigma_dd0 > 0:
+            x_lim = [mu_dd0 - 3 * sigma_dd0, mu_dd0 + 3 * sigma_dd0]
+        else:
+            x_lim = [mu_dd0 - 0.1, mu_dd0 + 0.1]
     ax.set_xlim(x_lim)
-    
+
     # Configure tick parameters
     ax.tick_params(
-        axis='both', 
-        which='both', 
+        axis='both',
+        which='both',
         labelsize=font_size,
-        direction='in', 
-        length=tick_length, 
+        direction='in',
+        length=tick_length,
         width=tick_width
     )
 
-    # Plot normal distribution overlay with statistics
-    ax.plot(
-        binspace_dd0, y_dd0, 
-        color=dice_blue, 
-        linewidth=2,
-        label=(f'mean {np.round(mu_dd0, 3)}\n'
-               f'median {np.round(np.median(dest_over_d0), 3)}\n'
-               f'stdev {np.round(sigma_dd0, 3)}')
-    )
+    # Plot normal distribution overlay when variance is nonzero
+    stats_label = (f'mean {np.round(mu_dd0, 3)}\n'
+                   f'median {np.round(np.median(dest_over_d0), 3)}\n'
+                   f'stdev {np.round(sigma_dd0, 3)}')
+    if sigma_dd0 > 0:
+        binspace_dd0 = np.linspace(bins_dd0[0], bins_dd0[-1], 100)
+        y_dd0 = norm.pdf(binspace_dd0, mu_dd0, sigma_dd0)
+        ax.plot(
+            binspace_dd0, y_dd0,
+            color=dice_blue,
+            linewidth=2,
+            label=stats_label
+        )
+    else:
+        ax.plot([], [], ' ', label=stats_label)
 
     # Add legend
     ax.legend(
@@ -230,11 +237,20 @@ def plot_diffusion_coefficient_histogram(
     # Create figure
     fig, ax = plt.subplots(layout='constrained', figsize=(width_in, height_in))
     
+    # Guard against empty input
+    if len(diffusion_estimates) == 0:
+        ax.set_xlabel('Diffusion Coefficient', fontsize=font_size)
+        ax.set_ylabel('Probability Density', fontsize=font_size)
+        ax.set_title(title, fontsize=font_size)
+        fig.patch.set_facecolor('w')
+        fig.patch.set_alpha(1)
+        return fig
+
     # Calculate statistics
     mean_val = np.mean(diffusion_estimates)
     std_val = np.std(diffusion_estimates)
     median_val = np.median(diffusion_estimates)
-    
+
     # Calculate precision
     within_proximity = np.abs(diffusion_estimates - nominal_value) <= proximity * nominal_value
     precision_pct = 100 * np.sum(within_proximity) / len(diffusion_estimates)
@@ -250,11 +266,12 @@ def plot_diffusion_coefficient_histogram(
         label=f'Data (n={len(diffusion_estimates)})'
     )
     
-    # Normal distribution overlay
-    x_norm = np.linspace(bins[0], bins[-1], 100)
-    y_norm = norm.pdf(x_norm, mean_val, std_val)
-    ax.plot(x_norm, y_norm, color=colors['dice_blue'], linewidth=2,
-            label=f'Normal fit')
+    # Normal distribution overlay (skip when variance is zero)
+    if std_val > 0:
+        x_norm = np.linspace(bins[0], bins[-1], 100)
+        y_norm = norm.pdf(x_norm, mean_val, std_val)
+        ax.plot(x_norm, y_norm, color=colors['dice_blue'], linewidth=2,
+                label='Normal fit')
     
     # Vertical line at nominal value
     ax.axvline(nominal_value, color=colors['dice_green'], linestyle='--', 
@@ -335,7 +352,16 @@ def plot_cnr_histogram(
     
     # Create figure
     fig, ax = plt.subplots(layout='constrained', figsize=(width_in, height_in))
-    
+
+    # Guard against empty input
+    if len(cnr_estimates) == 0:
+        ax.set_xlabel('Contrast-to-Noise Ratio', fontsize=font_size)
+        ax.set_ylabel('Probability Density', fontsize=font_size)
+        ax.set_title(title, fontsize=font_size)
+        fig.patch.set_facecolor('w')
+        fig.patch.set_alpha(1)
+        return fig
+
     # Calculate statistics
     mean_val = np.mean(cnr_estimates)
     median_val = np.median(cnr_estimates)
