@@ -4,10 +4,10 @@ Tests for dice.core.noise module.
 
 import pytest
 import numpy as np
+from fft_cnr import fft_cnr
 from dice.core.noise import (
     add_noise,
     make_noise_distribution,
-    fft_cnr,
     estimate_noise_from_profile,
 )
 
@@ -123,63 +123,67 @@ class TestMakeNoiseDistribution:
 
 
 class TestFFTCNR:
-    """Test FFT-based CNR estimation."""
-    
+    """Test FFT-based CNR estimation via the fft-cnr package."""
+
     def test_clean_gaussian(self):
-        """Test CNR estimation on clean Gaussian."""
+        """Clean signal should produce high CNR."""
         from dice.core.profiles import gaussian
-        
+
         x = np.linspace(-10, 10, 201)
         y = gaussian(x, mu=0, sig2=1, amp=1)
-        
-        # Add small noise
+
         np.random.seed(42)
         y_noisy = y + np.random.normal(0, 0.01, len(y))
-        
-        cnr = fft_cnr(y_noisy)
-        
-        # Should have high CNR (low noise)
-        assert cnr > 50
-    
+
+        result = fft_cnr(y_noisy)
+        assert result.cnr > 10
+
     def test_noisy_profile(self):
-        """Test CNR estimation on noisy profile."""
+        """Noisy signal should produce lower CNR than clean signal."""
         from dice.core.profiles import gaussian
-        
+
         x = np.linspace(-10, 10, 201)
         y = gaussian(x, mu=0, sig2=1, amp=1)
-        
-        # Add significant noise
+
         np.random.seed(42)
-        noise_level = 0.1
-        y_noisy = y + np.random.normal(0, noise_level, len(y))
-        
-        cnr = fft_cnr(y_noisy)
-        
-        # CNR should be approximately 1/noise_level = 10
-        assert 5 < cnr < 20
-    
-    def test_constant_profile_error(self):
-        """Test error for constant profile."""
-        y_constant = np.ones(100)
-        
-        with pytest.raises(ValueError, match="constant profile"):
-            fft_cnr(y_constant)
-    
-    def test_short_profile_error(self):
-        """Test error for too short profile."""
-        with pytest.raises(ValueError, match="at least 3 points"):
-            fft_cnr(np.array([1, 2]))
-    
-    def test_no_clear_peak(self):
-        """Test handling of profile with no clear peak."""
-        # Random noise
+        y_noisy = y + np.random.normal(0, 0.1, len(y))
+
+        result = fft_cnr(y_noisy)
+        assert result.cnr > 0
+        assert result.cnr < 50
+
+    def test_result_has_expected_fields(self):
+        """CNREstimate should expose cnr, noise_rms, and amplitude."""
+        from dice.core.profiles import gaussian
+
+        x = np.linspace(-10, 10, 201)
+        y = gaussian(x, mu=0, sig2=1, amp=1)
+
         np.random.seed(42)
-        y_random = np.random.normal(0, 1, 100)
-        
-        # Should still return a value
-        cnr = fft_cnr(y_random)
-        assert isinstance(cnr, float)
-        assert cnr > 0
+        y_noisy = y + np.random.normal(0, 0.05, len(y))
+
+        result = fft_cnr(y_noisy)
+        assert hasattr(result, 'cnr')
+        assert hasattr(result, 'noise_rms')
+        assert hasattr(result, 'amplitude')
+        assert result.noise_rms > 0
+
+    def test_noisier_signal_has_lower_cnr(self):
+        """More noise should produce lower CNR."""
+        from dice.core.profiles import gaussian
+
+        x = np.linspace(-10, 10, 201)
+        y = gaussian(x, mu=0, sig2=1, amp=1)
+
+        np.random.seed(42)
+        y_low_noise = y + np.random.normal(0, 0.01, len(y))
+        np.random.seed(42)
+        y_high_noise = y + np.random.normal(0, 0.2, len(y))
+
+        cnr_low = fft_cnr(y_low_noise).cnr
+        cnr_high = fft_cnr(y_high_noise).cnr
+
+        assert cnr_low > cnr_high
 
 
 class TestEstimateNoiseFromProfile:

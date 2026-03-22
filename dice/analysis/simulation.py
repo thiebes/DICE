@@ -11,7 +11,8 @@ from joblib import Parallel, delayed
 import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
-from ..core.noise import add_noise, fft_cnr
+from fft_cnr import fft_cnr
+from ..core.noise import add_noise
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
@@ -77,7 +78,7 @@ def run_single_simulation(
     noisy_profiles = noisy_result['y_values_t']
     
     # Estimate CNR at t=0
-    cnr_0_estimate = fft_cnr(noisy_profiles[0])
+    cnr_0_estimate = fft_cnr(noisy_profiles[0]).cnr
     
     # Fit Gaussians to noisy profiles
     fit_results = gauss_fitting(x_axis, noisy_profiles)

@@ -7,7 +7,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-from dice.core.noise import fft_cnr
+from fft_cnr import fft_cnr
 
 app = Flask(__name__)
 
@@ -35,8 +35,8 @@ def home():
                     return render_template('error.html', error_message='Please enter a valid list of comma-separated or space-separated numbers.')
 
             try:
-                result = fft_cnr(values_list)  # Use the imported function
-                return render_template('result.html', result=result)
+                result = fft_cnr(values_list)
+                return render_template('result.html', result=result.cnr)
             except Exception as e:
                 return render_template('error.html', error_message=f'Error processing data: {str(e)}')
         else:
