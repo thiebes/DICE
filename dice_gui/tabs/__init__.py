@@ -27,7 +27,8 @@ from dice_gui.tabs.tab_experimental import (
 )
 from dice_gui.tabs.tab_analysis import (
     create_tab_analysis_settings,
-    update_proximity_target,
+    populate_precision_summary,
+    reset_precision_summary,
 )
 from dice_gui.tabs.tab_output import create_tab_output_settings
 
@@ -52,5 +53,6 @@ __all__ = [
     "update_noise_cnr_display",
     "update_pixel_size",
     "browse_noise_file",
-    "update_proximity_target",
+    "populate_precision_summary",
+    "reset_precision_summary",
 ]

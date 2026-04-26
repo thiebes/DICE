@@ -8,6 +8,7 @@ orchestrating argument parsing, parameter loading, simulation execution, and out
 import sys
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
@@ -194,14 +195,8 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     if not args.quiet:
         print("Saving results...")
     
-    # Analyze results (use either configured proximity level OR standard levels)
-    if 'proximity level' in parameters:
-        # Use only the configured proximity level
-        proximity_levels = [parameters['proximity level']]
-    else:
-        # Use standard levels when no proximity level is configured
-        proximity_levels = [0.05, 0.1, 0.2]
-    analysis = analyze_simulation_results(result, proximity_levels)
+    # Analyze results with standard proximity levels
+    analysis = analyze_simulation_results(result)
     
     # Prepare collated results for export
     collated_data = {
@@ -271,33 +266,33 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
     if not args.quiet:
         print("Creating plots...")
     
+    fig = None
     try:
         # Prepare simulation result in legacy format for plotting
         # Extract diffusion coefficients (WLS estimates)
         d_estimates = []
         d_nominal = parameters['nominal diffusion coefficient']
-        
+
         for run_result in result.run_results:
             if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
                 d_est = run_result.wls_slope / 2  # Convert slope to diffusion coefficient
                 d_estimates.append(d_est)
-        
+
         if d_estimates:
             d_ratios = np.array(d_estimates) / d_nominal
-            
+
             # Create legacy-format result for plotting
             legacy_result = {
                 'collated results': {
                     'd_est_over_d_nom': d_ratios.tolist()
                 }
             }
-            
+
             # Create accuracy histogram
             plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
-            
+
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
-                proximity=parameters.get('proximity level', 0.1),
                 filename=str(plot_file),
                 image_type=parameters.get('image type', 'png'),
                 width=parameters.get('image width', 10),
@@ -305,19 +300,19 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
                 dpi=parameters.get('image dpi', 100),
                 font_size=12
             )
-            
-            # Close figure to free memory
-            import matplotlib.pyplot as plt
-            plt.close(fig)
-            
+
             if not args.quiet:
                 print(f"Accuracy histogram saved to: {plot_file}")
         else:
             if not args.quiet:
                 print("Warning: No valid diffusion estimates found for plotting")
-    
+
     except Exception as e:
-        print(f"Warning: Error creating plots: {e}")
+        warnings.warn(f"Error creating plots: {e}", stacklevel=2)
+    finally:
+        if fig is not None:
+            import matplotlib.pyplot as plt
+            plt.close(fig)
 
 
 def main(argv: Optional[list] = None) -> int:

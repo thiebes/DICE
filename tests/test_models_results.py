@@ -34,22 +34,22 @@ def _make_run_result(run_id, cnr, ols_slope=1.0, wls_slope=1.0, noise_sigma=0.05
     )
 
 
-def _make_processed_result(run_results, proximity_level=0.1):
+def _make_processed_result(run_results):
     """Create a ProcessedSimulationResult from a list of RunResults."""
     wls_d = np.array([r.wls_slope / 2 for r in run_results if r.wls_slope is not None])
     nominal_d = run_results[0].nominal_diffusion_coefficient
 
-    ratios = wls_d / nominal_d
-    within = np.logical_and(ratios >= 1 - proximity_level, ratios <= 1 + proximity_level)
-    fraction = np.mean(within) if len(within) > 0 else 0.0
+    mean_d = float(np.mean(wls_d)) if len(wls_d) > 0 else np.nan
+    std_d = float(np.std(wls_d)) if len(wls_d) > 0 else np.nan
 
     analysis = StatisticalAnalysis(
-        proximity_level=proximity_level,
-        fraction_within_proximity=float(fraction),
-        mean_estimate=float(np.mean(wls_d)) if len(wls_d) > 0 else np.nan,
+        mean_estimate=mean_d,
         median_estimate=float(np.median(wls_d)) if len(wls_d) > 0 else np.nan,
-        std_estimate=float(np.std(wls_d)) if len(wls_d) > 0 else np.nan,
-        mean_relative_error=float(np.mean(wls_d) / nominal_d) if len(wls_d) > 0 else np.nan,
+        std_estimate=std_d,
+        relative_std_error=std_d / nominal_d if nominal_d != 0 else np.nan,
+        mean_relative_error=mean_d / nominal_d if len(wls_d) > 0 else np.nan,
+        bias=mean_d - nominal_d if len(wls_d) > 0 else np.nan,
+        rmse=float(np.sqrt(np.mean((wls_d - nominal_d)**2))) if len(wls_d) > 0 else np.nan,
     )
 
     data = []
@@ -138,17 +138,17 @@ class TestFilterByCnr:
             wls_slope = 2.0 if cnr < 25.0 else 1.0
             runs.append(_make_run_result(i, cnr=cnr, wls_slope=wls_slope))
 
-        result = _make_processed_result(runs, proximity_level=0.1)
+        result = _make_processed_result(runs)
 
         # Filter to only high-CNR runs (slope=1.0 => D=0.5 => perfect match)
         filtered = result.filter_by_cnr(min_cnr=25.0)
 
-        # All filtered runs have D_est = 0.5 = nominal, so fraction within 10% = 1.0
-        assert filtered.analysis.fraction_within_proximity == 1.0
+        # All filtered runs have D_est = 0.5 = nominal, so bias should be ~0
+        assert np.isclose(filtered.analysis.bias, 0.0, atol=1e-10)
         assert np.isclose(filtered.analysis.mean_estimate, 0.5)
 
-        # The original result should have a lower precision (mixed good + bad runs)
-        assert result.analysis.fraction_within_proximity < 1.0
+        # The original result should have larger std (mixed good + bad runs)
+        assert result.analysis.std_estimate > filtered.analysis.std_estimate
 
     def test_filter_empty_result(self):
         """Filtering that excludes all runs returns empty result with nan analysis."""

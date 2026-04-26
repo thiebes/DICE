@@ -209,32 +209,34 @@ def write_summary_file(
         if analysis:
             f.write("Analysis Results:\n")
             f.write("-" * 30 + "\n")
-            
-            if 'precision' in analysis:
-                f.write("Precision of Diffusion Coefficient Estimates:\n")
-                for level, values in analysis['precision'].items():
-                    f.write(f" Fraction of estimates within +/-{level} of nominal:\n")
-                    f.write(f"    Ordinary (unweighted) Least Squares:\n")
-                    f.write(f"        {values['ols']:.2%}\n")
-                    f.write(f"    Weighted Least Squares:\n")
-                    f.write(f"        {values['wls']:.2%}\n")
-            
+
             if 'accuracy' in analysis:
-                f.write("\nStatistical Accuracy of Diffusion Coefficient Estimates:\n")
-                for method in ['ols', 'wls']:
+                f.write("Diffusion Coefficient Estimate Statistics:\n")
+                for method in ['wls', 'ols']:
                     if method in analysis['accuracy']:
                         metrics = analysis['accuracy'][method]
-                        method_name = "Ordinary (unweighted) Least Squares" if method == 'ols' else "Weighted Least Squares"
+                        method_name = "Weighted Least Squares" if method == 'wls' else "Ordinary (unweighted) Least Squares"
                         f.write(f"  {method_name}:\n")
-                        f.write(f"    Mean diffusion coefficient estimate:\n")
-                        f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
                         f.write(f"    Standard deviation:\n")
                         f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
-                        f.write(f"    Mean error:\n")
+                        nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
+                        if nominal_d and nominal_d != 0:
+                            rse = metrics.get('std', 0) / nominal_d
+                            f.write(f"    Relative standard error:\n")
+                            f.write(f"        {rse:.3f}\n")
+                        f.write(f"    Mean estimate:\n")
+                        f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
+                        f.write(f"    Bias (mean - nominal):\n")
                         f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
                         f.write(f"    Root Mean Square Error:\n")
                         f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
-            
+
+            if 'precision' in analysis:
+                f.write("\nPrecision at standard thresholds:\n")
+                for level, values in analysis['precision'].items():
+                    f.write(f"  Fraction within ±{level} of nominal:\n")
+                    f.write(f"    WLS: {values['wls']:.2%}    OLS: {values['ols']:.2%}\n")
+
             f.write("\n")
         
         # Write completion message
@@ -406,10 +408,11 @@ def export_legacy_format(
         if 'analysis' in result_dictionary:
             analysis = result_dictionary['analysis']
             if '% fits within proximity' in analysis:
-                proximity = params.get('proximity level', 0.1)
-                f.write(f"Portion of fits where D_estimate / D_nominal = 1 ± {proximity}:\n")
-                f.write(f"-- Unweighted fit: {analysis['% fits within proximity']['unweighted fit']:.2f}\n")
-                f.write(f"-- Weighted fit: {analysis['% fits within proximity']['weighted fit']:.2f}\n")
+                for level_pct, values in analysis['% fits within proximity'].items():
+                    if isinstance(values, dict):
+                        f.write(f"Portion of fits where D_estimate / D_nominal = 1 ± {level_pct}:\n")
+                        f.write(f"-- Unweighted fit: {values.get('unweighted fit', 0):.2f}\n")
+                        f.write(f"-- Weighted fit: {values.get('weighted fit', 0):.2f}\n")
                 f.write("\n")
         
         f.write("Simulation completed. Collating results.\n")

@@ -75,12 +75,14 @@ class DiceInterface:
         else:  # series
             # Convert comma-separated string to list of floats
             try:
-                params['time series'] = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
+                time_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
             except ValueError:
                 raise ValueError("Time series must be comma-separated numbers (e.g., '0, 1, 2, 3')")
-
-        # Analysis
-        params['proximity level'] = gui_params['proximity_level']
+            if len(time_values) == 0:
+                raise ValueError("Time series must contain at least one value")
+            if len(time_values) != len(set(time_values)):
+                raise ValueError("Time series contains duplicate values")
+            params['time series'] = sorted(time_values)
 
         # Optional advanced parameters
         if 'image_type' in gui_params and gui_params['image_type']:
@@ -176,9 +178,8 @@ class DiceInterface:
                 progress_callback=progress_callback
             )
 
-            # Analyze results
-            proximity_levels = [processed_params['proximity level']]
-            analysis = analyze_simulation_results(result, proximity_levels)
+            # Analyze results with standard proximity levels
+            analysis = analyze_simulation_results(result)
 
             # Setup output directory
             slug = processed_params.get('filename slug', 'dice_output')
@@ -217,7 +218,6 @@ class DiceInterface:
 
                 plot_accuracy_histogram(
                     simulation_result=legacy_result,
-                    proximity=processed_params.get('proximity level', 0.1),
                     filename=str(plot_file),
                     image_type=processed_params.get('image type', 'png'),
                     width=processed_params.get('image width', 10),
@@ -350,13 +350,9 @@ class DiceInterface:
                 }
             }
 
-            # Get proximity from stored parameters
-            proximity = self.last_parameters.get('proximity level', 0.1)
-
             # Create plot with specified settings
             plot_accuracy_histogram(
                 simulation_result=legacy_result,
-                proximity=proximity,
                 filename=filename,
                 image_type=image_settings.get('image_type', 'png'),
                 width=image_settings.get('image_width', 16.0),
@@ -377,7 +373,6 @@ class DiceInterface:
         self,
         csv_file: str,
         filename: str,
-        proximity: float,
         image_settings: Dict[str, Any],
         use_wls: bool = True
     ) -> None:
@@ -387,7 +382,6 @@ class DiceInterface:
         Args:
             csv_file: Path to CSV file with simulation results
             filename: Path where plot should be saved
-            proximity: Proximity level for plot
             image_settings: Dictionary with image settings (type, width, height, dpi, etc.)
             use_wls: If True, use WLS slopes; if False, use OLS slopes
 
@@ -411,6 +405,9 @@ class DiceInterface:
             df = pd.read_csv(csv_file)
 
             def _find_csv_column(prefix):
+                # Prefer exact match to avoid 'slope' matching 'slope stderr'
+                if prefix in df.columns:
+                    return prefix
                 matches = [c for c in df.columns if c.startswith(prefix)]
                 return matches[0] if matches else None
 
@@ -461,7 +458,6 @@ class DiceInterface:
             # Create plot with specified settings
             plot_accuracy_histogram(
                 simulation_result=legacy_result,
-                proximity=proximity,
                 filename=filename,
                 image_type=image_settings.get('image_type', 'png'),
                 width=image_settings.get('image_width', 16.0),
@@ -507,7 +503,6 @@ class DiceInterface:
             # Store parameters for regeneration
             self.last_parameters = {
                 'nominal diffusion coefficient': d_nominal,
-                'proximity level': proximity,
                 'filename slug': csv_path.stem
             }
 
@@ -519,3 +514,42 @@ class DiceInterface:
             raise
         except Exception as e:
             raise RuntimeError(f"Failed to load and plot from CSV: {e}")
+
+    def calculate_proximity_on_demand(
+        self,
+        proximity_level: float,
+        use_wls: bool = True
+    ) -> Optional[float]:
+        """
+        Calculate fraction of estimates within proximity of nominal, on demand.
+
+        Args:
+            proximity_level: Fractional tolerance (e.g., 0.1 for ±10%)
+            use_wls: If True, use WLS estimates; if False, use OLS
+
+        Returns:
+            Fraction within proximity (0-1), or None if no data available.
+        """
+        if self.last_result is None:
+            return None
+
+        import numpy as np
+        from dice.analysis.statistics import calculate_precision
+
+        d_estimates = []
+        for run in self.last_result.run_results:
+            if use_wls:
+                if run.wls_slope is not None:
+                    d_estimates.append(run.wls_slope / 2)
+            else:
+                if run.ols_slope is not None:
+                    d_estimates.append(run.ols_slope / 2)
+
+        if not d_estimates:
+            return None
+
+        nominal_d = self.last_result.run_results[0].nominal_diffusion_coefficient
+        if nominal_d == 0:
+            return None
+
+        return calculate_precision(np.array(d_estimates), nominal_d, proximity_level)

@@ -5,12 +5,15 @@ This module provides functions for creating plots and visualizations
 of simulation results, profiles, and statistical analyses.
 """
 
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import norm
 from typing import Dict, List, Tuple, Optional, Union, Any
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_color_definitions() -> Dict[str, Union[str, Any]]:
@@ -117,7 +120,7 @@ def plot_gaussian_profile(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 
@@ -204,6 +207,8 @@ def plot_profile_evolution(
     # Legend (only if not too many profiles)
     if n_profiles <= 10:
         ax.legend(fontsize=font_size-2, frameon=False)
+    else:
+        logger.info("Legend omitted: %d profiles exceeds display limit of 10", n_profiles)
     
     # Make background white and opaque
     fig.patch.set_facecolor('w')
@@ -214,7 +219,7 @@ def plot_profile_evolution(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 
@@ -293,8 +298,13 @@ def plot_diffusion_msd(
     
     # Plot data points
     if sigma2_errors is not None:
-        ax.errorbar(time_axis, msd, yerr=sigma2_errors, 
-                   fmt='o', color=colors['dice_blue'], 
+        if len(sigma2_errors) != len(time_axis):
+            raise ValueError(
+                f"sigma2_errors length ({len(sigma2_errors)}) must match "
+                f"time_axis length ({len(time_axis)})"
+            )
+        ax.errorbar(time_axis, msd, yerr=sigma2_errors,
+                   fmt='o', color=colors['dice_blue'],
                    capsize=3, label='Data')
     else:
         ax.plot(time_axis, msd, 'o', color=colors['dice_blue'], 
@@ -327,7 +337,7 @@ def plot_diffusion_msd(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 
@@ -404,7 +414,7 @@ def plot_cnr_dependence(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 

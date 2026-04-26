@@ -20,14 +20,14 @@ class LegacyProfileParameters:
 
     .. deprecated::
         Use :class:`dice.models.parameters.GaussianParameters` instead.
-        Migration: ``GaussianParameters(amplitude=amplitude_0, sigma2=sigma2_0, mu=mu_0)``
+        Migration: ``GaussianParameters(amplitude_0=..., sigma2_0=..., mu_0=...)``
     """
 
     def __init__(self, sigma2_0: float, amplitude_0: float, mu_0: float):
         warnings.warn(
             "LegacyProfileParameters is deprecated. "
             "Use dice.models.parameters.GaussianParameters instead. "
-            "Migration: GaussianParameters(amplitude=amplitude_0, sigma2=sigma2_0, mu=mu_0)",
+            "Migration: GaussianParameters(amplitude_0=..., sigma2_0=..., mu_0=...)",
             DeprecationWarning,
             stacklevel=2
         )

@@ -36,7 +36,6 @@ class TestPlotAccuracyHistogram:
         try:
             fig = plot_accuracy_histogram(
                 simulation_result=result,
-                proximity=0.1,
                 filename=temp_filename,
                 width=8.0,
                 height=6.0
@@ -47,7 +46,7 @@ class TestPlotAccuracyHistogram:
             
             # Check basic plot elements
             assert ax.get_xlabel() == '$D_{est}/D_{nom}$'
-            assert ax.get_ylabel() == 'Probability density'
+            assert ax.get_ylabel() == 'Probability'
             assert len(ax.patches) > 0  # Histogram bars
             assert len(ax.lines) > 0   # Normal distribution overlay
             
@@ -86,7 +85,6 @@ class TestPlotAccuracyHistogram:
 
         fig = plot_accuracy_histogram(
             simulation_result=result,
-            proximity=0.05,
             filename=str(test_file),
             image_type='svg',
             width=12.0,
@@ -113,7 +111,7 @@ class TestPlotAccuracyHistogram:
 
         test_file = tmp_path / "test_perfect_data.png"
 
-        fig = plot_accuracy_histogram(result, 0.1, str(test_file))
+        fig = plot_accuracy_histogram(result, filename=str(test_file))
 
         assert isinstance(fig, plt.Figure)
         assert test_file.exists()
@@ -137,7 +135,7 @@ class TestPlotDiffusionCoefficientHistogram:
         assert len(ax.patches) > 0  # Histogram bars
         assert len(ax.lines) >= 2  # Normal fit + nominal line
         assert ax.get_xlabel() == 'Diffusion Coefficient'
-        assert ax.get_ylabel() == 'Probability Density'
+        assert ax.get_ylabel() == 'Probability'
         
         plt.close(fig)
     
@@ -210,7 +208,7 @@ class TestPlotCNRHistogram:
         assert len(ax.patches) > 0  # Histogram bars
         assert len(ax.lines) >= 2   # Mean and median lines
         assert ax.get_xlabel() == 'Contrast-to-Noise Ratio'
-        assert ax.get_ylabel() == 'Probability Density'
+        assert ax.get_ylabel() == 'Probability'
         
         plt.close(fig)
     
@@ -343,15 +341,42 @@ class TestEdgeCases:
     def test_single_value(self):
         """Test with single value."""
         single_value = np.array([1.0])
-        
+
         fig1 = plot_diffusion_coefficient_histogram(single_value, 1.0)
         assert isinstance(fig1, plt.Figure)
         plt.close(fig1)
-        
+
         fig2 = plot_cnr_histogram(single_value)
         assert isinstance(fig2, plt.Figure)
         plt.close(fig2)
-    
+
+    def test_accuracy_histogram_single_value(self, tmp_path):
+        """Test accuracy histogram with a single D estimate."""
+        result = {
+            'collated results': {
+                'd_est_over_d_nom': [1.05]
+            }
+        }
+        fig = plot_accuracy_histogram(
+            simulation_result=result,
+            filename=str(tmp_path / "test.png")
+        )
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_accuracy_histogram_empty(self, tmp_path):
+        """Test accuracy histogram with empty D estimates raises error."""
+        result = {
+            'collated results': {
+                'd_est_over_d_nom': []
+            }
+        }
+        with pytest.raises((ValueError, IndexError)):
+            plot_accuracy_histogram(
+                simulation_result=result,
+                filename=str(tmp_path / "test.png")
+            )
+
     def test_identical_values(self):
         """Test with identical values."""
         identical_values = np.ones(10)

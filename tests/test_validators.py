@@ -12,6 +12,7 @@ from dice.utils.validators import (
     validate_integer,
     validate_string_choice,
     validate_file_path,
+    validate_filename_slug,
 )
 
 
@@ -218,6 +219,63 @@ class TestValidateFilePath:
         """Test with invalid path type."""
         with pytest.raises(TypeError, match="must be a string"):
             validate_file_path(123)
+
+
+class TestValidateFilenameSlug:
+    """Test filename slug validation."""
+
+    def test_valid_slugs(self):
+        """Test with valid filename slugs."""
+        assert validate_filename_slug("my-file") == "my-file"
+        assert validate_filename_slug("test_123") == "test_123"
+        assert validate_filename_slug("data.v2") == "data.v2"
+        assert validate_filename_slug("DICE_results") == "DICE_results"
+
+    @pytest.mark.parametrize("char", ['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+    def test_forbidden_characters(self, char):
+        """Test that each forbidden character is rejected."""
+        with pytest.raises(ValueError, match="cannot contain"):
+            validate_filename_slug(f"file{char}name")
+
+    def test_empty_string(self):
+        """Test that empty string is rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_filename_slug("")
+
+    def test_whitespace_only(self):
+        """Test that whitespace-only string is rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_filename_slug("   ")
+
+    def test_non_string_input(self):
+        """Test that non-string input raises TypeError."""
+        with pytest.raises(TypeError, match="must be a string"):
+            validate_filename_slug(123)
+
+    def test_null_byte(self):
+        """Test that null bytes pass through (not currently forbidden)."""
+        # Documents current behavior: null bytes are not in the forbidden list
+        result = validate_filename_slug("file\x00name")
+        assert result == "file\x00name"
+
+    def test_control_characters(self):
+        """Test that control characters pass through (not currently forbidden)."""
+        # Documents current behavior: control chars are not in the forbidden list
+        assert validate_filename_slug("file\tname") == "file\tname"
+        assert validate_filename_slug("file\nname") == "file\nname"
+
+    def test_unicode(self):
+        """Test that Unicode characters are accepted."""
+        assert validate_filename_slug("données") == "données"
+        assert validate_filename_slug("测试") == "测试"
+
+    def test_numpy_float32_in_validate_integer(self):
+        """Test that np.float32 with integer value is accepted."""
+        assert validate_integer(np.float32(5.0)) == 5
+        assert validate_integer(np.float64(10.0)) == 10
+
+        with pytest.raises(TypeError, match="must be an integer"):
+            validate_integer(np.float32(5.5))
 
 
 if __name__ == "__main__":

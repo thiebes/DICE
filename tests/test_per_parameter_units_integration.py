@@ -39,7 +39,6 @@ def _base_params():
         'nominal lifetime (tau)': 2.0,
         'length unit': 'micrometer',
         'time unit': 'nanosecond',
-        'proximity level': 0.1,
         'filename slug': 'test',
     }
 
@@ -514,7 +513,6 @@ class TestGUIPipeline:
             'time_start': 0.0,
             'time_stop': 2.0,
             'time_steps': 10,
-            'proximity_level': 0.1,
             'multiprocessing': False,
             'retain_profile_data': False,
             'image_type': 'png',
@@ -584,7 +582,6 @@ class TestGUIPipeline:
             'time_steps': 10,
             'time_start_unit': 'picosecond',
             'time_stop_unit': 'picosecond',
-            'proximity_level': 0.1,
             'multiprocessing': False,
             'retain_profile_data': False,
         }
@@ -633,7 +630,6 @@ class TestParameterFileRoundTrip:
             'pixel width': 101,
             'time range': [0, 2000, 10],
             'time_range_unit': 'picosecond',
-            'proximity level': 0.1,
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -60,7 +60,7 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
     except SyntaxError as e:
         raise ValueError(f"Error evaluating the file's contents as a dictionary: {e}")
     except Exception as e:
-        raise Exception(f"An error occurred while parsing parameters: {e}")
+        raise ValueError(f"An error occurred while parsing parameters: {e}") from e
 
 
 def check_for_unique_key(parameters_dictionary: Dict[str, Any], keys: List[str]) -> str:

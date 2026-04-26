@@ -26,6 +26,14 @@ def _run_import_checks():
         "dice.models.parameters",
         "dice.models.results",
         "dice.models.profiles",
+
+        # GUI package (import checks only — no display)
+        "dice_gui",
+        "dice_gui.tabs",
+        "dice_gui.dice_interface",
+        "dice_gui.validators",
+        "dice_gui.proximity_widget",
+        "dice_gui.example_parameters",
     ]
 
     print("Testing package imports...")
@@ -78,7 +86,7 @@ def _run_import_checks():
 
     try:
         from dice.models.parameters import GaussianParameters
-        params = GaussianParameters(amplitude=1.0, sigma2=2.0, mu=0.0)
+        params = GaussianParameters(amplitude_0=1.0, sigma2_0=2.0, mu_0=0.0)
         print(f"[OK] GaussianParameters created with FWHM={params.fwhm:.6f}")
     except Exception as e:
         print(f"[FAIL] Dataclass creation failed: {e}")

@@ -5,6 +5,7 @@ This module provides functions for creating histograms and statistical
 distribution plots from simulation results.
 """
 
+import logging
 import os
 import matplotlib
 
@@ -18,13 +19,15 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 from typing import Dict, List, Optional, Union, Any
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from .plots import get_color_definitions
 
 
 def plot_accuracy_histogram(
     simulation_result: Dict[str, Any],
-    proximity: float,
     filename: str,
+    proximity: Optional[float] = None,
     image_type: str = 'png',
     width: float = 10.0,
     height: float = 6.0,
@@ -46,10 +49,10 @@ def plot_accuracy_histogram(
     ----------
     simulation_result : dict
         Results dictionary containing 'collated results' with 'd_est_over_d_nom' key.
-    proximity : float
-        Proximity threshold for accuracy assessment (e.g., 0.1 for ±10%).
     filename : str
         Output filename for the histogram image.
+    proximity : float, optional
+        Proximity threshold for accuracy assessment (e.g., 0.1 for ±10%).
     image_type : str
         Image format ('png', 'jpg', 'svg', etc.).
     width : float
@@ -82,7 +85,7 @@ def plot_accuracy_histogram(
     Examples
     --------
     >>> result = {'collated results': {'d_est_over_d_nom': [0.98, 1.02, 0.99, 1.01]}}
-    >>> fig = plot_accuracy_histogram(result, 0.1, 'accuracy.png')
+    >>> fig = plot_accuracy_histogram(result, 'accuracy.png')
     """
     # Verify required data is present
     if 'collated results' not in simulation_result:
@@ -104,22 +107,21 @@ def plot_accuracy_histogram(
     # Convert list of values to NumPy array
     dest_over_d0 = np.array(collated['d_est_over_d_nom'])
     
-    # Initialize array to flag accuracy ratio values in proximity
-    dest_d0_proximity_flag = np.abs(dest_over_d0 - 1) <= proximity
-    
-    # Calculate and report percentage of values within proximity threshold
-    proxpct = 100 * np.sum(dest_d0_proximity_flag) / len(dest_d0_proximity_flag)
-    print(f'Percent of D estimates within {proximity * 100:.2f}% of nominal: {proxpct:.1f}')
+    # Optionally flag and report accuracy ratio values within proximity
+    if proximity is not None:
+        dest_d0_proximity_flag = np.abs(dest_over_d0 - 1) <= proximity
+        proxpct = 100 * np.sum(dest_d0_proximity_flag) / len(dest_d0_proximity_flag)
+        logger.info(f'Percent of D estimates within {proximity * 100:.2f}% of nominal: {proxpct:.1f}')
 
     # Create figure
     fig, ax = plt.subplots(layout='constrained', figsize=(width_in, height_in))
 
-    # Create histogram
+    # Create histogram with probability on y-axis
     n_dd0, bins_dd0, patches_dd0 = ax.hist(
         dest_over_d0,
-        bins=num_bins, 
-        density=True,
-        color=dice_gold, 
+        bins=num_bins,
+        weights=np.ones(len(dest_over_d0)) / len(dest_over_d0),
+        color=dice_gold,
         edgecolor='w',
         alpha=0.7
     )
@@ -130,7 +132,7 @@ def plot_accuracy_histogram(
 
     # Set labels
     ax.set_xlabel('$D_{est}/D_{nom}$', fontsize=font_size)
-    ax.set_ylabel('Probability density', fontsize=font_size)
+    ax.set_ylabel('Probability', fontsize=font_size)
 
     # Set x-axis limits (default: 99.97% confidence interval)
     if x_lim is None:
@@ -156,7 +158,8 @@ def plot_accuracy_histogram(
                    f'stdev {np.round(sigma_dd0, 3)}')
     if sigma_dd0 > 0:
         binspace_dd0 = np.linspace(bins_dd0[0], bins_dd0[-1], 100)
-        y_dd0 = norm.pdf(binspace_dd0, mu_dd0, sigma_dd0)
+        bin_width = bins_dd0[1] - bins_dd0[0]
+        y_dd0 = norm.pdf(binspace_dd0, mu_dd0, sigma_dd0) * bin_width
         ax.plot(
             binspace_dd0, y_dd0,
             color=dice_blue,
@@ -181,9 +184,9 @@ def plot_accuracy_histogram(
     # Save the figure
     try:
         plt.savefig(filename, dpi=dpi, format=image_type)
-        print(f"Accuracy histogram saved as: {filename}")
+        logger.info("Accuracy histogram saved as: %s", filename)
     except Exception as e:
-        print(f"Error saving file: {e}")
+        logger.warning("Error saving file: %s", e)
 
     return fig
 
@@ -191,7 +194,7 @@ def plot_accuracy_histogram(
 def plot_diffusion_coefficient_histogram(
     diffusion_estimates: np.ndarray,
     nominal_value: float,
-    proximity: float = 0.1,
+    proximity: Optional[float] = None,
     filename: Optional[str] = None,
     title: str = "Diffusion Coefficient Distribution",
     **plot_kwargs
@@ -240,7 +243,7 @@ def plot_diffusion_coefficient_histogram(
     # Guard against empty input
     if len(diffusion_estimates) == 0:
         ax.set_xlabel('Diffusion Coefficient', fontsize=font_size)
-        ax.set_ylabel('Probability Density', fontsize=font_size)
+        ax.set_ylabel('Probability', fontsize=font_size)
         ax.set_title(title, fontsize=font_size)
         fig.patch.set_facecolor('w')
         fig.patch.set_alpha(1)
@@ -251,43 +254,48 @@ def plot_diffusion_coefficient_histogram(
     std_val = np.std(diffusion_estimates)
     median_val = np.median(diffusion_estimates)
 
-    # Calculate precision
-    within_proximity = np.abs(diffusion_estimates - nominal_value) <= proximity * nominal_value
-    precision_pct = 100 * np.sum(within_proximity) / len(diffusion_estimates)
-    
-    # Create histogram
+    # Calculate precision if proximity threshold provided
+    if proximity is not None:
+        within_proximity = np.abs(diffusion_estimates - nominal_value) <= proximity * nominal_value
+        precision_pct = 100 * np.sum(within_proximity) / len(diffusion_estimates)
+    else:
+        precision_pct = None
+
+    # Create histogram with probability on y-axis
     n, bins, patches = ax.hist(
         diffusion_estimates,
         bins=num_bins,
-        density=True,
+        weights=np.ones(len(diffusion_estimates)) / len(diffusion_estimates),
         color=colors['dice_gold'],
         edgecolor='white',
         alpha=0.7,
         label=f'Data (n={len(diffusion_estimates)})'
     )
-    
-    # Normal distribution overlay (skip when variance is zero)
+
+    # Normal distribution overlay scaled to probability (skip when variance is zero)
     if std_val > 0:
         x_norm = np.linspace(bins[0], bins[-1], 100)
-        y_norm = norm.pdf(x_norm, mean_val, std_val)
+        bin_width = bins[1] - bins[0]
+        y_norm = norm.pdf(x_norm, mean_val, std_val) * bin_width
         ax.plot(x_norm, y_norm, color=colors['dice_blue'], linewidth=2,
                 label='Normal fit')
-    
+
     # Vertical line at nominal value
-    ax.axvline(nominal_value, color=colors['dice_green'], linestyle='--', 
+    ax.axvline(nominal_value, color=colors['dice_green'], linestyle='--',
                linewidth=2, label=f'Nominal: {nominal_value:.3f}')
-    
+
     # Formatting
     ax.set_xlabel('Diffusion Coefficient', fontsize=font_size)
-    ax.set_ylabel('Probability Density', fontsize=font_size)
+    ax.set_ylabel('Probability', fontsize=font_size)
     ax.set_title(title, fontsize=font_size)
     ax.tick_params(axis='both', labelsize=font_size, direction='in')
     
     # Add statistics text box
     stats_text = (f'Mean: {mean_val:.4f}\n'
                   f'Median: {median_val:.4f}\n'
-                  f'Std: {std_val:.4f}\n'
-                  f'Precision: {precision_pct:.1f}%')
+                  f'Std: {std_val:.4f}')
+    if precision_pct is not None:
+        stats_text += f'\nPrecision: {precision_pct:.1f}%'
     
     ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
             verticalalignment='top', fontsize=font_size-1,
@@ -303,9 +311,9 @@ def plot_diffusion_coefficient_histogram(
     if filename:
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
-            print(f"Diffusion coefficient histogram saved as: {filename}")
+            logger.info("Diffusion coefficient histogram saved as: %s", filename)
         except Exception as e:
-            print(f"Error saving file: {e}")
+            logger.warning("Error saving file: %s", e)
     
     return fig
 
@@ -356,7 +364,7 @@ def plot_cnr_histogram(
     # Guard against empty input
     if len(cnr_estimates) == 0:
         ax.set_xlabel('Contrast-to-Noise Ratio', fontsize=font_size)
-        ax.set_ylabel('Probability Density', fontsize=font_size)
+        ax.set_ylabel('Probability', fontsize=font_size)
         ax.set_title(title, fontsize=font_size)
         fig.patch.set_facecolor('w')
         fig.patch.set_alpha(1)
@@ -366,26 +374,26 @@ def plot_cnr_histogram(
     mean_val = np.mean(cnr_estimates)
     median_val = np.median(cnr_estimates)
     std_val = np.std(cnr_estimates)
-    
-    # Create histogram
+
+    # Create histogram with probability on y-axis
     n, bins, patches = ax.hist(
         cnr_estimates,
         bins=num_bins,
-        density=True,
+        weights=np.ones(len(cnr_estimates)) / len(cnr_estimates),
         color=colors['dice_blue'],
         edgecolor='white',
         alpha=0.7
     )
-    
+
     # Vertical lines for statistics
-    ax.axvline(mean_val, color=colors['dice_gold'], linestyle='-', 
+    ax.axvline(mean_val, color=colors['dice_gold'], linestyle='-',
                linewidth=2, label=f'Mean: {mean_val:.1f}')
-    ax.axvline(median_val, color=colors['dice_green'], linestyle='--', 
+    ax.axvline(median_val, color=colors['dice_green'], linestyle='--',
                linewidth=2, label=f'Median: {median_val:.1f}')
-    
+
     # Formatting
     ax.set_xlabel('Contrast-to-Noise Ratio', fontsize=font_size)
-    ax.set_ylabel('Probability Density', fontsize=font_size)
+    ax.set_ylabel('Probability', fontsize=font_size)
     ax.set_title(title, fontsize=font_size)
     ax.tick_params(axis='both', labelsize=font_size, direction='in')
     ax.legend(fontsize=font_size, frameon=False)
@@ -405,9 +413,9 @@ def plot_cnr_histogram(
     if filename:
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
-            print(f"CNR histogram saved as: {filename}")
+            logger.info("CNR histogram saved as: %s", filename)
         except Exception as e:
-            print(f"Error saving file: {e}")
+            logger.warning("Error saving file: %s", e)
     
     return fig
 
@@ -483,8 +491,8 @@ def plot_precision_vs_parameter(
     if filename:
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
-            print(f"Precision plot saved as: {filename}")
+            logger.info("Precision plot saved as: %s", filename)
         except Exception as e:
-            print(f"Error saving file: {e}")
+            logger.warning("Error saving file: %s", e)
     
     return fig

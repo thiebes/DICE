@@ -524,3 +524,47 @@ class TestResolveUnits:
         result = resolve_units(params)
         assert np.isclose(result['time_start'], 1.0, rtol=1e-12)
         assert 'time_start_unit' not in result
+
+    def test_time_range_unit_and_time_series_unit_both_present(self):
+        """time_range_unit should convert both; time_series_unit is skipped."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time range': [0.0, 1000.0, 5],
+            'time series': [0.0, 500.0, 1000.0],
+            'time_range_unit': 'picosecond',
+            'time_series_unit': 'femtosecond',  # should be ignored
+        }
+        result = resolve_units(params)
+        # time_range_unit converts both time range and time series to nanosecond
+        assert np.isclose(result['time range'][0], 0.0, atol=1e-12)
+        assert np.isclose(result['time range'][1], 1.0, rtol=1e-12)
+        # time series also converted by time_range_unit (ps -> ns), NOT by time_series_unit
+        assert np.isclose(result['time series'][1], 0.5, rtol=1e-12)
+
+    def test_time_range_unit_and_time_start_stop_units(self):
+        """time_range_unit should win; time_start/stop_unit are skipped."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'time range': [0.0, 1000.0, 5],
+            'time_range_unit': 'picosecond',
+            'time_start_unit': 'femtosecond',
+            'time_stop_unit': 'femtosecond',
+        }
+        result = resolve_units(params)
+        # time_range_unit converts first; start/stop guards prevent double conversion
+        assert np.isclose(result['time range'][0], 0.0, atol=1e-12)
+        assert np.isclose(result['time range'][1], 1.0, rtol=1e-12)
+
+    def test_missing_value_key_for_unit_override(self):
+        """Unit override key present but no corresponding value key should not crash."""
+        params = {
+            'length_unit': 'micrometer',
+            'time_unit': 'nanosecond',
+            'FWHM_0_unit': 'nanometer',
+            # No 'FWHM_0' key present
+        }
+        result = resolve_units(params)
+        assert 'FWHM_0_unit' not in result
+        assert 'FWHM_0' not in result

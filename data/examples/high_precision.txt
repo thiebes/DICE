@@ -9,7 +9,6 @@
     'spatial width': 10,
     'pixel width': 200,
     'time range': [0, 2, 20],
-    'proximity level': 0.1,
     'multiprocessing': True,
     'retain profile data': False,
     'length unit': 'micrometer',

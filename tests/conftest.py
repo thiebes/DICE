@@ -23,7 +23,6 @@ def sample_parameters_dict():
         'sigma_0': 1.0,
         'time series': np.array([0.0, 1.0, 2.0, 3.0, 4.0]),
         'noise value': 0.01,
-        'proximity level': 0.1,
         'nominal diffusion length': 1.0,
         'image type': 'png',
         'image width': 8.5,
@@ -102,7 +101,6 @@ def mock_parameters_file(tmp_path):
         'sigma_0': 1.0,
         'time range': (0.0, 5.0, 6),
         'noise value': 0.01,
-        'proximity level': 0.1,
         'nominal diffusion length': 1.0,
     }
     param_path.write_text(str(params))
@@ -115,7 +113,7 @@ def mock_parameters_file(tmp_path):
 def default_gaussian_params():
     """Default GaussianParameters for testing."""
     from dice.models.parameters import GaussianParameters
-    return GaussianParameters(amplitude=1.0, sigma2=1.0, mu=0.0)
+    return GaussianParameters(amplitude_0=1.0, sigma2_0=1.0, mu_0=0.0)
 
 
 @pytest.fixture

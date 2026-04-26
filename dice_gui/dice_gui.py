@@ -10,18 +10,16 @@ import webbrowser
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTabWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox,
-    QComboBox, QRadioButton, QButtonGroup, QGroupBox, QFileDialog,
-    QProgressBar, QMessageBox, QTextEdit, QSlider, QFormLayout, QScrollArea,
-    QCheckBox, QStatusBar, QMenu, QFrame
+    QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
+    QProgressBar, QMessageBox, QScrollArea, QStatusBar, QMenu
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSettings
-from PyQt6.QtGui import QFont, QDoubleValidator, QIntValidator, QAction, QKeySequence
+from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtGui import QAction, QKeySequence
 
 from dice import __version__
 from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
-    validate_proximity_level, validate_time_range, validate_time_series,
+    validate_time_range, validate_time_series,
     validate_file_path, validate_filename_slug,
     convert_fwhm_to_sigma, convert_sigma_to_fwhm,
     calculate_diffusion_length, calculate_pixel_size
@@ -33,7 +31,6 @@ from dice_gui.accessibility import (
     add_tooltip_with_accessible_description,
     set_tab_order
 )
-from dice_gui.proximity_widget import ProximityTargetWidget
 from dice_gui.validation_manager import ValidationManager, apply_validation_style, clear_validation_style
 from dice_gui.simulation_thread import SimulationThread
 from dice_gui.example_parameters import EXAMPLE_PARAMETERS
@@ -435,7 +432,6 @@ class DiceGUI(QMainWindow):
             'spatial width': 10.0,
             'pixel width': 101,
             'time range': [0, 2, 10],
-            'proximity level': 0.1,
             'multiprocessing': True,
             'retain profile data': False,
         }
@@ -711,9 +707,6 @@ class DiceGUI(QMainWindow):
             # Collect current image settings
             image_settings = self.collect_image_settings()
 
-            # Get proximity from Analysis Settings tab
-            proximity = self.proximity_spin.value()
-
             # Get plot method
             use_wls = self.plot_method_wls_radio.isChecked()
 
@@ -729,7 +722,6 @@ class DiceGUI(QMainWindow):
             self.interface.load_and_plot_from_csv(
                 csv_file=csv_file,
                 filename=filename,
-                proximity=proximity,
                 image_settings=image_settings,
                 use_wls=use_wls
             )
@@ -737,6 +729,9 @@ class DiceGUI(QMainWindow):
             # Update status bar
             self.loaded_data_file = csv_file
             self.update_status_bar()
+
+            # Populate precision summary from loaded data
+            self._populate_precision_from_results()
 
             # Show success message with info
             QMessageBox.information(
@@ -884,7 +879,6 @@ class DiceGUI(QMainWindow):
             'profile_width_value': float(self.width_input.text()),
             'spatial_width': float(self.spatial_width_input.text()),
             'pixel_width': self.pixel_width_input.value(),
-            'proximity_level': self.proximity_spin.value(),
             'multiprocessing': self.multiprocessing_check.isChecked(),
             'retain_profile_data': self.retain_profile_check.isChecked(),
             'image_type': self.image_type_combo.currentText(),
@@ -1119,6 +1113,12 @@ class DiceGUI(QMainWindow):
 
         # Clean up previous thread if it exists
         if self.simulation_thread is not None:
+            if self.simulation_thread.isRunning():
+                self.simulation_thread.request_stop()
+                self.simulation_thread.wait(5000)
+                if self.simulation_thread.isRunning():
+                    self.simulation_thread.terminate()
+                    self.simulation_thread.wait()
             self.simulation_thread.deleteLater()
             self.simulation_thread = None
 
@@ -1179,9 +1179,17 @@ class DiceGUI(QMainWindow):
         self.reset_ui_after_simulation()
         self.status_label.setText("Simulation completed successfully!")
 
+        # Clean up finished thread
+        if self.simulation_thread is not None:
+            self.simulation_thread.deleteLater()
+            self.simulation_thread = None
+
         # Clear loaded data file (new simulation overwrites)
         self.loaded_data_file = None
         self.update_status_bar()
+
+        # Populate precision summary from results
+        self._populate_precision_from_results()
 
         QMessageBox.information(
             self,
@@ -1190,9 +1198,52 @@ class DiceGUI(QMainWindow):
             "Results have been saved to output files."
         )
 
+    def _populate_precision_from_results(self):
+        """Extract precision metrics from last results and populate the analysis tab."""
+        from dice_gui.tabs.tab_analysis import populate_precision_summary
+        import numpy as np
+
+        result = self.interface.last_result
+        if result is None:
+            return
+
+        use_wls = self.plot_method_wls_radio.isChecked()
+
+        # Extract D estimates
+        d_estimates = []
+        for run in result.run_results:
+            if use_wls:
+                if run.wls_slope is not None:
+                    d_estimates.append(run.wls_slope / 2)
+            else:
+                if run.ols_slope is not None:
+                    d_estimates.append(run.ols_slope / 2)
+
+        if not d_estimates:
+            return
+
+        d_arr = np.array(d_estimates)
+        nominal_d = result.run_results[0].nominal_diffusion_coefficient
+
+        if nominal_d == 0:
+            return
+
+        metrics = {
+            'std': np.std(d_arr),
+            'relative_std_error': np.std(d_arr) / nominal_d,
+            'bias': np.mean(d_arr) - nominal_d,
+            'mean_relative_error': np.mean(d_arr) / nominal_d,
+        }
+
+        populate_precision_summary(self, metrics)
+
     def simulation_error(self, error_message: str):
         """Handle simulation error."""
         self.reset_ui_after_simulation()
+        # Clean up finished thread
+        if self.simulation_thread is not None:
+            self.simulation_thread.deleteLater()
+            self.simulation_thread = None
         self.status_label.setText("Simulation failed")
         QMessageBox.critical(self, "Simulation Error", f"Simulation failed:\n\n{error_message}")
 
@@ -1467,11 +1518,6 @@ class DiceGUI(QMainWindow):
                 lines.append(f"    'time series': [{gui_params['time_series']}],")
         lines.append("")
 
-        # Proximity
-        lines.append("    ### Diffusion coefficient proximity threshold ###")
-        lines.append(f"    'proximity level': {gui_params['proximity_level']},")
-        lines.append("")
-
         # Plot parameters
         lines.append("    ### Plot image parameters ###")
         lines.append(f"    'image type': '{gui_params['image_type']}',")
@@ -1562,10 +1608,6 @@ class DiceGUI(QMainWindow):
                 # Convert list to comma-separated string
                 time_series_str = ", ".join(str(t) for t in params['time series'])
                 self.time_series_input.setPlainText(time_series_str)
-
-            # Proximity
-            if 'proximity level' in params:
-                self.proximity_spin.setValue(params['proximity level'])
 
             # Performance
             if 'multiprocessing' in params:
@@ -1781,9 +1823,6 @@ class DiceGUI(QMainWindow):
         self.time_stop_input.textChanged.connect(self.mark_modified)
         self.time_steps_input.valueChanged.connect(self.mark_modified)
         self.time_series_input.textChanged.connect(self.mark_modified)
-
-        # Analysis
-        self.proximity_spin.valueChanged.connect(self.mark_modified)
 
         # Advanced parameters (Output Settings tab)
         self.image_type_combo.currentTextChanged.connect(self.mark_modified)
@@ -2101,6 +2140,14 @@ Thiebes, J. J. (2023). <i>Diffusion Insight Computation Engine (DICE)</i> <br>
             elif reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
+
+        # Stop any running simulation before closing
+        if self.simulation_thread is not None and self.simulation_thread.isRunning():
+            self.simulation_thread.request_stop()
+            self.simulation_thread.wait(5000)
+            if self.simulation_thread.isRunning():
+                self.simulation_thread.terminate()
+                self.simulation_thread.wait()
 
         event.accept()
 

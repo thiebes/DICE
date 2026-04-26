@@ -5,6 +5,8 @@ This module provides functions for loading experimental data files
 for CNR estimation and analysis.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -212,6 +214,6 @@ def batch_load_profiles(
             data = load_experimental_data(file, **load_kwargs)
             results.append(data)
         except Exception as e:
-            print(f"Warning: Failed to load {file}: {e}")
+            warnings.warn(f"Failed to load {file}: {e}", stacklevel=2)
     
     return results

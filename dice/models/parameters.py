@@ -6,7 +6,6 @@ This module defines dataclasses that organize and validate simulation parameters
 
 from dataclasses import dataclass, field
 from typing import Optional, Union, List, Literal, Dict, Any
-import warnings
 import numpy as np
 
 
@@ -39,47 +38,47 @@ class OutputUnitPreferences:
 class GaussianParameters:
     """
     Parameters defining the initial Gaussian profile.
-    
+
     Attributes
     ----------
-    amplitude : float
+    amplitude_0 : float
         Initial amplitude of the Gaussian (typically 1.0).
-    sigma2 : float
-        Initial variance (sigma^2) of the Gaussian.
-    mu : float
+    sigma2_0 : float
+        Initial variance (sigma^2) of the Gaussian at t=0.
+    mu_0 : float
         Mean position of the Gaussian (typically 0.0).
     """
-    amplitude: float = 1.0
-    sigma2: float = 1.0
-    mu: float = 0.0
-    
+    amplitude_0: float = 1.0
+    sigma2_0: float = 1.0
+    mu_0: float = 0.0
+
     def __post_init__(self):
-        if self.amplitude < 0:
+        if self.amplitude_0 < 0:
             raise ValueError("Amplitude must be non-negative")
-        if self.sigma2 <= 0:
-            raise ValueError("Variance (sigma2) must be positive")
-    
+        if self.sigma2_0 <= 0:
+            raise ValueError("Variance (sigma2_0) must be positive")
+
     @classmethod
-    def from_fwhm(cls, fwhm: float, amplitude: float = 1.0, mu: float = 0.0):
+    def from_fwhm(cls, fwhm: float, amplitude_0: float = 1.0, mu_0: float = 0.0):
         """Create from FWHM instead of sigma^2."""
         from ..utils.converters import fwhm_to_sigma2
-        return cls(amplitude=amplitude, sigma2=fwhm_to_sigma2(fwhm), mu=mu)
-    
+        return cls(amplitude_0=amplitude_0, sigma2_0=fwhm_to_sigma2(fwhm), mu_0=mu_0)
+
     @classmethod
-    def from_sigma(cls, sigma: float, amplitude: float = 1.0, mu: float = 0.0):
+    def from_sigma(cls, sigma: float, amplitude_0: float = 1.0, mu_0: float = 0.0):
         """Create from sigma instead of sigma^2."""
-        return cls(amplitude=amplitude, sigma2=sigma**2, mu=mu)
-    
+        return cls(amplitude_0=amplitude_0, sigma2_0=sigma**2, mu_0=mu_0)
+
     @property
     def fwhm(self) -> float:
         """Get FWHM from sigma^2."""
         from ..utils.converters import sigma2_to_fwhm
-        return sigma2_to_fwhm(self.sigma2)
-    
+        return sigma2_to_fwhm(self.sigma2_0)
+
     @property
     def sigma(self) -> float:
         """Get sigma from sigma^2."""
-        return np.sqrt(self.sigma2)
+        return np.sqrt(self.sigma2_0)
 
     @classmethod
     def from_legacy(cls, params: Dict[str, Any]) -> 'GaussianParameters':
@@ -112,41 +111,10 @@ class GaussianParameters:
             sigma2 = 1.0
 
         return cls(
-            amplitude=normalized.get('amplitude_0', 1.0),
-            sigma2=sigma2,
-            mu=normalized.get('mu_0', 0.0)
+            amplitude_0=normalized.get('amplitude_0', 1.0),
+            sigma2_0=sigma2,
+            mu_0=normalized.get('mu_0', 0.0)
         )
-
-    # Deprecated property aliases for legacy compatibility
-    @property
-    def sigma2_0(self) -> float:
-        """Legacy alias for sigma2. Deprecated."""
-        warnings.warn(
-            "sigma2_0 is deprecated, use sigma2 instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.sigma2
-
-    @property
-    def amplitude_0(self) -> float:
-        """Legacy alias for amplitude. Deprecated."""
-        warnings.warn(
-            "amplitude_0 is deprecated, use amplitude instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.amplitude
-
-    @property
-    def mu_0(self) -> float:
-        """Legacy alias for mu. Deprecated."""
-        warnings.warn(
-            "mu_0 is deprecated, use mu instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.mu
 
 
 @dataclass
@@ -484,8 +452,6 @@ class SimulationParameters:
         Temporal axis parameters.
     output : OutputParameters
         Output and visualization parameters.
-    proximity_level : float
-        Proximity level for accuracy assessment (e.g., 0.1 for ±10%).
     length_unit : str
         Unit of length (e.g., 'micrometer').
     time_unit : str
@@ -501,7 +467,6 @@ class SimulationParameters:
     spatial: SpatialParameters
     temporal: TemporalParameters
     output: OutputParameters = field(default_factory=OutputParameters)
-    proximity_level: float = 0.1
     length_unit: str = "micrometer"
     time_unit: str = "nanosecond"
     multiprocessing: bool = True
@@ -514,8 +479,6 @@ class SimulationParameters:
             raise ValueError("Diffusion coefficient must be non-negative")
         if self.lifetime < 0:
             raise ValueError("Lifetime must be non-negative")
-        if not 0 < self.proximity_level < 1:
-            raise ValueError("Proximity level must be between 0 and 1")
     
     @property
     def diffusion_length(self) -> float:
@@ -586,7 +549,6 @@ class SimulationParameters:
 
         # Extract common parameters
         num_runs = normalized['number_of_runs']
-        proximity_level = normalized.get('proximity_level', 0.1)
         length_unit = normalized.get('length_unit', 'micrometer')
         time_unit = normalized.get('time_unit', 'nanosecond')
         multiprocessing = normalized.get('multiprocessing', True)
@@ -605,7 +567,6 @@ class SimulationParameters:
                 spatial=spatial,
                 temporal=temporal,
                 output=output,
-                proximity_level=proximity_level,
                 length_unit=length_unit,
                 time_unit=time_unit,
                 multiprocessing=multiprocessing
@@ -620,7 +581,6 @@ class SimulationParameters:
                 spatial=spatial,
                 temporal=temporal,
                 output=output,
-                proximity_level=proximity_level,
                 length_unit=length_unit,
                 time_unit=time_unit,
                 multiprocessing=multiprocessing

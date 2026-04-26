@@ -30,7 +30,6 @@ class TestEndToEndSimulation:
             'sigma_0': 0.5,
             'time range': [0, 1, 5],
             'noise value': 0.02,
-            'proximity level': 0.1,
             'nominal diffusion length': 0.1,
         }))
 
@@ -123,7 +122,6 @@ class TestGUIInterface:
             'time_start': 0,
             'time_stop': 1,
             'time_steps': 5,
-            'proximity_level': 0.1,
         }
 
         params_dict = interface.build_parameters_dict(gui_params)
@@ -133,6 +131,7 @@ class TestGUIInterface:
         assert params_dict['nominal diffusion coefficient'] == 0.01
         assert params_dict['nominal lifetime (tau)'] == 1.0
         assert params_dict['noise value'] == 0.02
+        assert 'proximity level' not in params_dict
 
     def test_gui_interface_handles_fwhm(self):
         """Verify GUI interface handles FWHM profile width."""
@@ -154,7 +153,6 @@ class TestGUIInterface:
             'pixel_width': 50,
             'time_type': 'series',
             'time_series': '0.0, 0.5, 1.0, 2.0',
-            'proximity_level': 0.1,
         }
 
         params_dict = interface.build_parameters_dict(gui_params)

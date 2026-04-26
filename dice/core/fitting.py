@@ -5,6 +5,8 @@ This module provides functions for fitting Gaussian profiles to noisy data
 and performing linear regression on MSD data to extract diffusion coefficients.
 """
 
+import warnings
+
 import numpy as np
 from scipy.optimize import curve_fit
 import statsmodels.api as sm
@@ -56,6 +58,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
     fit_dictionary = {
         'sigma^2_t estimates': [],
         'sigma^2_t standard errors': [],
+        'fit_failures': 0,
     }
     
     # Get x-axis properties
@@ -138,9 +141,10 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             
         except (RuntimeError, ValueError) as e:
             # Fitting failed - use fallback values
-            print(f"Warning: Gaussian fitting failed: {e}")
+            warnings.warn(f"Gaussian fitting failed: {e}", stacklevel=2)
             sigma2_estimate = sigma2_0
             sigma2_stderr = np.nan
+            fit_dictionary['fit_failures'] += 1
         
         fit_dictionary['sigma^2_t estimates'].append(sigma2_estimate)
         fit_dictionary['sigma^2_t standard errors'].append(sigma2_stderr)

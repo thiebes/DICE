@@ -16,7 +16,6 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 5,
         'pixel width': 50,
         'time range': [0, 1, 5],
-        'proximity level': 0.1,
     },
     "high_precision": {
         'filename slug': 'high_precision',
@@ -29,7 +28,6 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 10,
         'pixel width': 200,
         'time range': [0, 2, 20],
-        'proximity level': 0.1,
     },
     "publication": {
         'filename slug': 'publication_example',
@@ -42,6 +40,5 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 5,
         'pixel width': 100,
         'time range': [0, 1, 10],
-        'proximity level': 0.5,
     }
 }

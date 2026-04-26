@@ -136,7 +136,7 @@ def validate_integer(value: Any, name: str = "value",
     """
     if isinstance(value, (np.integer, np.int_)):
         value = int(value)
-    elif isinstance(value, float):
+    elif isinstance(value, (float, np.floating)):
         if not value.is_integer():
             raise TypeError(f"{name} must be an integer, got float {value}")
         value = int(value)

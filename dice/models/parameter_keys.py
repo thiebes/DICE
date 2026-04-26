@@ -28,7 +28,6 @@ class ParameterKey:
     NUMBER_OF_RUNS = "number_of_runs"
     MULTIPROCESSING = "multiprocessing"
     RETAIN_PROFILE_DATA = "retain_profile_data"
-    PROXIMITY_LEVEL = "proximity_level"
 
     # Spatial axis
     SPATIAL_WIDTH = "spatial_width"
@@ -87,7 +86,6 @@ PARAMETER_ALIASES: Dict[str, str] = {
     # Simulation control
     "number of runs": ParameterKey.NUMBER_OF_RUNS,
     "retain profile data": ParameterKey.RETAIN_PROFILE_DATA,
-    "proximity level": ParameterKey.PROXIMITY_LEVEL,
 
     # Profile parameters
     "sigma^2_0": ParameterKey.SIGMA2_0,
@@ -155,7 +153,6 @@ PARAMETER_ALIASES: Dict[str, str] = {
 LEGACY_OUTPUT_KEYS: Dict[str, str] = {
     ParameterKey.NUMBER_OF_RUNS: "number of runs",
     ParameterKey.RETAIN_PROFILE_DATA: "retain profile data",
-    ParameterKey.PROXIMITY_LEVEL: "proximity level",
     ParameterKey.SIGMA2_0: "sigma^2_0",
     ParameterKey.DIFFUSION_COEFFICIENT: "nominal diffusion coefficient",
     ParameterKey.LIFETIME: "nominal lifetime (tau)",

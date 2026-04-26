@@ -187,31 +187,11 @@ Provide **either** time range **or** time series. Do not provide both.
 
 **Note:** Values will be automatically sorted and must be unique.
 
-## Analysis Parameters
+## Analysis output
 
-### Proximity level
+DICE reports the standard deviation, relative standard error, bias, and RMSE of diffusion coefficient estimates as primary precision metrics. Proximity analysis (fraction of estimates within ±X% of nominal) is available as a post-hoc tool in the GUI and is computed at standard thresholds (5%, 10%, 20%) in CLI output.
 
-This parameter determines the accuracy threshold for analysis.
-
-**proximity level**: Fraction defining the accuracy window
-
-**Range:** 0 < value < 1
-
-**Example:** 0.1 means estimates within ±10% of the nominal value are considered accurate
-
-### How it works
-
-- The simulations produce diffusion coefficient estimates, $D_{est}$
-- The accuracy of each estimate is quantified by the relative proximity to the nominal value, $D_{nom}$
-- The relative proximity is $D_{est} / D_{nom}$
-- If the estimate is perfectly accurate, the relative proximity will be 1.0
-- The fraction of estimates within the proximity level is reported
-
-**For example,** if you enter 0.1 for your proximity level, the program will report what fraction of all estimates were within ±10% of the nominal value.
-
-**Note:** This metric provides a single evaluation of the combined impact of precision and accuracy on the results, which may be more intuitive and practical than separate statistical measures.
-
-## Plotting Parameters
+## Plotting parameters
 
 Optional parameters for customizing output plots.
 
@@ -308,7 +288,6 @@ Parameters are specified as a Python dictionary literal in `parameters.txt`:
     'spatial width': 10.0,
     'pixel width': 100,
     'time range': [0.0, 10.0, 11],
-    'proximity level': 0.1,
 }
 ```
 

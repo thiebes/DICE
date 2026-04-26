@@ -1,7 +1,7 @@
 """
 Tab 4: Analysis Settings
 
-Configuration for accuracy threshold and fit method.
+Fit method selection and post-hoc precision analysis.
 """
 
 from __future__ import annotations
@@ -25,52 +25,6 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     tab = QWidget()
     layout = QVBoxLayout(tab)
 
-    # Proximity level group
-    proximity_group = QGroupBox("Accuracy Threshold")
-    proximity_layout = QVBoxLayout(proximity_group)
-
-    proximity_label = QLabel("&Proximity Level:")
-    main_window.proximity_spin = QDoubleSpinBox()
-    main_window.proximity_spin.setMinimum(0.001)
-    main_window.proximity_spin.setMaximum(1.0)
-    main_window.proximity_spin.setValue(0.10)
-    main_window.proximity_spin.setDecimals(3)
-    main_window.proximity_spin.setSingleStep(0.01)
-    main_window.proximity_spin.setToolTip(
-        "Threshold for accuracy analysis as fractional tolerance.\n\n"
-        "Defines the acceptable range for diffusion coefficient estimates:\n"
-        "- 0.10 means ±10% (estimates between 0.9*D_nominal and 1.1*D_nominal are 'accurate')\n"
-        "- 0.20 means ±20%\n"
-        "- 0.05 means ±5%\n\n"
-        "The simulation reports what fraction of Monte Carlo runs fall within this range.\n"
-        "This helps assess whether your experimental conditions provide reliable measurements.\n\n"
-        "Typical values: 0.10-0.20 for most applications\n"
-        "Stricter: 0.05 for high-precision requirements"
-    )
-
-    add_keyboard_shortcut_to_label(proximity_label, main_window.proximity_spin)
-
-    proximity_input_layout = QHBoxLayout()
-    proximity_input_layout.addWidget(proximity_label)
-    proximity_input_layout.addWidget(main_window.proximity_spin)
-    proximity_input_layout.addStretch()
-
-    proximity_layout.addLayout(proximity_input_layout)
-
-    description = QLabel(
-        "The proximity level determines the threshold for accuracy analysis.\n"
-        "For example, 0.10 means estimates within ±10% of the nominal value\n"
-        "are considered accurate."
-    )
-    description.setWordWrap(True)
-    description.setProperty("class", "info-text")
-    proximity_layout.addWidget(description)
-
-    # Target visualization below description (left-aligned)
-    main_window.proximity_target = ProximityTargetWidget(proximity=0.10)
-    main_window.proximity_spin.valueChanged.connect(lambda: update_proximity_target(main_window))
-    proximity_layout.addWidget(main_window.proximity_target)
-
     # Fit method group
     fit_method_group = QGroupBox("Fit Method")
     fit_method_layout = QVBoxLayout(fit_method_group)
@@ -93,22 +47,132 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     fit_method_layout.addWidget(main_window.plot_method_ols_radio)
     fit_method_layout.addStretch()
 
-    # Two-column layout
-    columns = QHBoxLayout()
-    columns.addWidget(proximity_group)
-    columns.addWidget(fit_method_group)
-    layout.addLayout(columns)
+    # Precision summary group (read-only, populated after simulation)
+    precision_group = QGroupBox("Precision Summary")
+    precision_layout = QFormLayout(precision_group)
+
+    main_window.precision_std_label = QLabel("—")
+    main_window.precision_rse_label = QLabel("—")
+    main_window.precision_bias_label = QLabel("—")
+    main_window.precision_mean_ratio_label = QLabel("—")
+
+    precision_layout.addRow("Std Dev:", main_window.precision_std_label)
+    precision_layout.addRow("Relative Std Error:", main_window.precision_rse_label)
+    precision_layout.addRow("Bias (mean − nominal):", main_window.precision_bias_label)
+    precision_layout.addRow("Mean D_est / D_nom:", main_window.precision_mean_ratio_label)
+
+    main_window.precision_placeholder = QLabel("Run a simulation to see results.")
+    main_window.precision_placeholder.setProperty("class", "info-text")
+    precision_layout.addRow(main_window.precision_placeholder)
+
+    # Top row: fit method + precision summary
+    top_row = QHBoxLayout()
+    top_row.addWidget(fit_method_group)
+    top_row.addWidget(precision_group)
+    layout.addLayout(top_row)
+
+    # Explore accuracy threshold group (interactive, enabled after simulation)
+    explore_group = QGroupBox("Explore Accuracy Threshold")
+    explore_layout = QVBoxLayout(explore_group)
+    main_window.explore_proximity_group = explore_group
+
+    explore_description = QLabel(
+        "Adjust the threshold to see what fraction of estimates\n"
+        "fall within a given percentage of the nominal value."
+    )
+    explore_description.setWordWrap(True)
+    explore_description.setProperty("class", "info-text")
+    explore_layout.addWidget(explore_description)
+
+    # Spin box for proximity level
+    proximity_label = QLabel("&Threshold:")
+    main_window.proximity_spin = QDoubleSpinBox()
+    main_window.proximity_spin.setMinimum(0.01)
+    main_window.proximity_spin.setMaximum(0.50)
+    main_window.proximity_spin.setValue(0.10)
+    main_window.proximity_spin.setDecimals(2)
+    main_window.proximity_spin.setSingleStep(0.01)
+    main_window.proximity_spin.setToolTip(
+        "Fractional tolerance for accuracy assessment.\n"
+        "0.10 = ±10%, 0.20 = ±20%, 0.05 = ±5%"
+    )
+
+    main_window.proximity_pct_label = QLabel("(±10%)")
+    main_window.proximity_spin.valueChanged.connect(
+        lambda val: _on_proximity_changed(main_window, val)
+    )
+
+    add_keyboard_shortcut_to_label(proximity_label, main_window.proximity_spin)
+
+    spin_row = QHBoxLayout()
+    spin_row.addWidget(proximity_label)
+    spin_row.addWidget(main_window.proximity_spin)
+    spin_row.addWidget(main_window.proximity_pct_label)
+    spin_row.addStretch()
+    explore_layout.addLayout(spin_row)
+
+    # Fraction result label
+    main_window.proximity_fraction_label = QLabel("")
+    main_window.proximity_fraction_label.setStyleSheet("font-weight: bold;")
+    explore_layout.addWidget(main_window.proximity_fraction_label)
+
+    # Target visualization
+    main_window.proximity_target = ProximityTargetWidget(proximity=0.10)
+    explore_layout.addWidget(main_window.proximity_target)
+
+    # Disabled until results exist
+    explore_group.setEnabled(False)
+
+    layout.addWidget(explore_group)
     layout.addStretch()
 
     set_tab_order([
-        main_window.proximity_spin,
         main_window.plot_method_wls_radio,
         main_window.plot_method_ols_radio,
+        main_window.proximity_spin,
     ])
 
     return tab
 
 
-def update_proximity_target(main_window: "DiceGUI") -> None:
-    """Update the proximity target widget visualization."""
-    main_window.proximity_target.set_proximity(main_window.proximity_spin.value())
+def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
+    """Handle proximity spin box value change — update label, target, and fraction."""
+    pct = int(round(value * 100))
+    main_window.proximity_pct_label.setText(f"(±{pct}%)")
+    main_window.proximity_target.set_proximity(value)
+
+    # Recalculate fraction if results are available
+    if main_window.interface.last_result is not None:
+        fraction = main_window.interface.calculate_proximity_on_demand(
+            value, use_wls=main_window.plot_method_wls_radio.isChecked()
+        )
+        if fraction is not None:
+            main_window.proximity_fraction_label.setText(
+                f"{fraction:.1%} of estimates fall within ±{pct}% of nominal"
+            )
+
+
+def populate_precision_summary(main_window: "DiceGUI", metrics: dict) -> None:
+    """Populate the read-only precision summary labels after simulation."""
+    main_window.precision_std_label.setText(f"{metrics['std']:.5e}")
+    main_window.precision_rse_label.setText(f"{metrics['relative_std_error']:.3f}")
+    main_window.precision_bias_label.setText(f"{metrics['bias']:.5e}")
+    main_window.precision_mean_ratio_label.setText(f"{metrics['mean_relative_error']:.3f}")
+    main_window.precision_placeholder.setVisible(False)
+
+    # Enable the explore group
+    main_window.explore_proximity_group.setEnabled(True)
+
+    # Trigger initial proximity calculation
+    _on_proximity_changed(main_window, main_window.proximity_spin.value())
+
+
+def reset_precision_summary(main_window: "DiceGUI") -> None:
+    """Reset precision summary to placeholder state."""
+    main_window.precision_std_label.setText("—")
+    main_window.precision_rse_label.setText("—")
+    main_window.precision_bias_label.setText("—")
+    main_window.precision_mean_ratio_label.setText("—")
+    main_window.precision_placeholder.setVisible(True)
+    main_window.proximity_fraction_label.setText("")
+    main_window.explore_proximity_group.setEnabled(False)
