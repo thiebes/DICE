@@ -4,6 +4,8 @@ Simulation Thread Module
 Background thread for running DICE simulations without blocking the GUI.
 """
 
+import threading
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from dice_gui.dice_interface import DiceInterface
@@ -21,7 +23,7 @@ class SimulationThread(QThread):
         super().__init__()
         self.interface = interface
         self.parameters = parameters
-        self._stop_requested = False
+        self._stop_event = threading.Event()
 
     def run(self):
         """Run the simulation in a separate thread."""
@@ -37,7 +39,7 @@ class SimulationThread(QThread):
                 self.progress.emit("Starting simulation...")
 
             def progress_callback(current: int, total: int):
-                if self._stop_requested:
+                if self._stop_event.is_set():
                     raise InterruptedError("Simulation cancelled by user")
                 self.iteration_progress.emit(current, total)
 
@@ -53,4 +55,4 @@ class SimulationThread(QThread):
 
     def request_stop(self):
         """Request the simulation to stop."""
-        self._stop_requested = True
+        self._stop_event.set()

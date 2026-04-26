@@ -16,11 +16,17 @@ class ProximityTargetWidget(QWidget):
     For example, proximity=0.1 shows a ring at 10% of the radius from center.
     """
 
+    MIN_WIDTH, MIN_HEIGHT = 150, 230
+    MAX_WIDTH, MAX_HEIGHT = 200, 280
+    TARGET_SIZE_MAX = 150
+    TOP_MARGIN = 10
+    BORDER_MARGIN = 10
+
     def __init__(self, proximity: float = 0.10, parent=None):
         super().__init__(parent)
         self._proximity = proximity
-        self.setMinimumSize(150, 230)
-        self.setMaximumSize(200, 280)
+        self.setMinimumSize(self.MIN_WIDTH, self.MIN_HEIGHT)
+        self.setMaximumSize(self.MAX_WIDTH, self.MAX_HEIGHT)
 
     def set_proximity(self, proximity: float):
         """Update the proximity value and redraw."""
@@ -37,12 +43,12 @@ class ProximityTargetWidget(QWidget):
         height = self.height()
 
         # Use width for the target size since we need space below for the scale
-        target_size = min(width, 150)
+        target_size = min(width, self.TARGET_SIZE_MAX)
 
         # Calculate center and radius - position target in upper portion
         center_x = width / 2
-        center_y = target_size / 2 + 10  # Position near top with margin
-        outer_radius = target_size / 2 - 10  # Leave margin for border
+        center_y = target_size / 2 + self.TOP_MARGIN
+        outer_radius = target_size / 2 - self.BORDER_MARGIN
 
         # Get colors from palette
         palette = self.palette()

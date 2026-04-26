@@ -342,86 +342,91 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
         tau_text = main_window.lifetime_input.text().strip()
         tau_unit = combo_value(main_window.lifetime_unit_combo)
 
-        if computed == 'tau':
-            # Compute tau from L and D
-            if not l_text or not d_text:
-                main_window.lifetime_input.clear()
-                return
-            try:
-                l_val = float(l_text)
-                d_val = float(d_text)
-                if l_val <= 0 or d_val <= 0:
+        try:
+            if computed == 'tau':
+                # Compute tau from L and D
+                if not l_text or not d_text:
                     main_window.lifetime_input.clear()
                     return
-            except ValueError:
-                main_window.lifetime_input.clear()
-                return
+                try:
+                    l_val = float(l_text)
+                    d_val = float(d_text)
+                    if l_val <= 0 or d_val <= 0:
+                        main_window.lifetime_input.clear()
+                        return
+                except ValueError:
+                    main_window.lifetime_input.clear()
+                    return
 
-            l_si = convert_length(l_val, l_unit, 'meter')
-            d_si = convert_diffusion_coefficient(
-                d_val, d_l_unit, d_t_unit, 'meter', 'second'
-            )
-            if d_si <= 0:
-                main_window.lifetime_input.clear()
-                return
+                l_si = convert_length(l_val, l_unit, 'meter')
+                d_si = convert_diffusion_coefficient(
+                    d_val, d_l_unit, d_t_unit, 'meter', 'second'
+                )
+                if d_si <= 0:
+                    main_window.lifetime_input.clear()
+                    return
 
-            tau_si = (l_si ** 2) / d_si
-            tau_display = convert_time(tau_si, 'second', tau_unit)
-            main_window.lifetime_input.setText(f"{tau_display:.4g}")
+                tau_si = (l_si ** 2) / d_si
+                tau_display = convert_time(tau_si, 'second', tau_unit)
+                main_window.lifetime_input.setText(f"{tau_display:.4g}")
 
-        elif computed == 'D':
-            # Compute D from L and tau
-            if not l_text or not tau_text:
-                main_window.diffusion_coeff_input.clear()
-                return
-            try:
-                l_val = float(l_text)
-                tau_val = float(tau_text)
-                if l_val <= 0 or tau_val <= 0:
+            elif computed == 'D':
+                # Compute D from L and tau
+                if not l_text or not tau_text:
                     main_window.diffusion_coeff_input.clear()
                     return
-            except ValueError:
-                main_window.diffusion_coeff_input.clear()
-                return
+                try:
+                    l_val = float(l_text)
+                    tau_val = float(tau_text)
+                    if l_val <= 0 or tau_val <= 0:
+                        main_window.diffusion_coeff_input.clear()
+                        return
+                except ValueError:
+                    main_window.diffusion_coeff_input.clear()
+                    return
 
-            l_si = convert_length(l_val, l_unit, 'meter')
-            tau_si = convert_time(tau_val, tau_unit, 'second')
-            if tau_si <= 0:
-                main_window.diffusion_coeff_input.clear()
-                return
+                l_si = convert_length(l_val, l_unit, 'meter')
+                tau_si = convert_time(tau_val, tau_unit, 'second')
+                if tau_si <= 0:
+                    main_window.diffusion_coeff_input.clear()
+                    return
 
-            d_si = (l_si ** 2) / tau_si
-            d_display = convert_diffusion_coefficient(
-                d_si, 'meter', 'second', d_l_unit, d_t_unit
-            )
-            main_window.diffusion_coeff_input.setText(f"{d_display:.4g}")
+                d_si = (l_si ** 2) / tau_si
+                d_display = convert_diffusion_coefficient(
+                    d_si, 'meter', 'second', d_l_unit, d_t_unit
+                )
+                main_window.diffusion_coeff_input.setText(f"{d_display:.4g}")
 
-        else:  # computed == 'L'
-            # Compute L from D and tau
-            if not d_text or not tau_text:
-                main_window.diffusion_length_input.clear()
-                return
-            try:
-                d_val = float(d_text)
-                tau_val = float(tau_text)
-                if d_val < 0 or tau_val < 0:
+            else:  # computed == 'L'
+                # Compute L from D and tau
+                if not d_text or not tau_text:
                     main_window.diffusion_length_input.clear()
                     return
-            except ValueError:
-                main_window.diffusion_length_input.clear()
-                return
+                try:
+                    d_val = float(d_text)
+                    tau_val = float(tau_text)
+                    if d_val < 0 or tau_val < 0:
+                        main_window.diffusion_length_input.clear()
+                        return
+                except ValueError:
+                    main_window.diffusion_length_input.clear()
+                    return
 
-            d_si = convert_diffusion_coefficient(
-                d_val, d_l_unit, d_t_unit, 'meter', 'second'
-            )
-            tau_si = convert_time(tau_val, tau_unit, 'second')
-            if d_si < 0 or tau_si < 0:
-                main_window.diffusion_length_input.clear()
-                return
+                d_si = convert_diffusion_coefficient(
+                    d_val, d_l_unit, d_t_unit, 'meter', 'second'
+                )
+                tau_si = convert_time(tau_val, tau_unit, 'second')
+                if d_si < 0 or tau_si < 0:
+                    main_window.diffusion_length_input.clear()
+                    return
 
-            l_si = math.sqrt(d_si * tau_si)
-            l_display = convert_length(l_si, 'meter', l_unit)
-            main_window.diffusion_length_input.setText(f"{l_display:.4g}")
+                l_si = math.sqrt(d_si * tau_si)
+                l_display = convert_length(l_si, 'meter', l_unit)
+                main_window.diffusion_length_input.setText(f"{l_display:.4g}")
+        except (ValueError, KeyError):
+            # Invalid unit names or conversion failures — silently clear the
+            # computed field rather than freezing the UI.
+            return
     finally:
         main_window._updating_diffusion = False
 

@@ -72,9 +72,12 @@ class ValidationManager(QObject):
         self._connect_widget_signals(field_id, widget)
 
     def _connect_widget_signals(self, field_id: str, widget: QWidget) -> None:
-        """Connect widget signals for validation on focus loss."""
+        """Connect widget signals for validation on focus loss and error clearing."""
         if isinstance(widget, QLineEdit):
             widget.editingFinished.connect(lambda: self._validate_field(field_id))
+            # Re-validate on text change if field currently has an error,
+            # so stale error labels clear as soon as the user fixes input.
+            widget.textChanged.connect(lambda: self._revalidate_if_invalid(field_id))
         elif isinstance(widget, QTextEdit):
             # QTextEdit doesn't have editingFinished, use focusOutEvent via event filter
             widget.installEventFilter(self)
@@ -90,6 +93,12 @@ class ValidationManager(QObject):
             if field_id:
                 self._validate_field(field_id)
         return super().eventFilter(obj, event)
+
+    def _revalidate_if_invalid(self, field_id: str) -> None:
+        """Re-validate a field only if it currently has an error, clearing stale messages."""
+        field = self._fields.get(field_id)
+        if field and field.is_active and not field.last_result.is_valid:
+            self._validate_field(field_id)
 
     def _validate_field(self, field_id: str) -> None:
         """Validate a single field and update state."""
