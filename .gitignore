@@ -10,3 +10,6 @@ output/
 # Claude-related
 CLAUDE.md
 .claude/
+# PyInstaller build artifacts
+build/
+dist/
