@@ -6,7 +6,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10258191.svg)](https://doi.org/10.5281/zenodo.10258191)
 
-DICE is an open-source tool for researchers in time-resolved microscopy and related fields. It evaluates the precision and accuracy of diffusion coefficient estimates derived from optical measures of excited state transport. DICE provides a robust method for assessing experimental accuracy and precision by simulating parameters that mirror your experimental setup.
+DICE is an open-source tool for researchers in time-resolved microscopy and related fields. It evaluates the precision and accuracy of diffusion coefficient estimates derived from optical measures of excited state transport. DICE simulates measurements with parameters that match your experimental setup and reports how the estimates of the diffusion coefficient are distributed.
 
 DICE was developed alongside research that the tool was used to perform, published in the following paper:
 
@@ -14,34 +14,24 @@ Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in optical measu
 
 ## What Does DICE Do?
 
-DICE quantifies the precision and accuracy of diffusion estimates by reporting the fraction of estimates found within a user-specified proximity to the nominal diffusion parameter. For example: "50% of the diffusion coefficient estimates are within ±10% of the nominal value."
+DICE estimates how precise and how accurate a diffusion coefficient measurement can be with your experimental parameters, such as the initial spot width, the nominal diffusion length, and the initial contrast-to-noise ratio (CNR). It simulates many measurements with these parameters and estimates the diffusion coefficient from each one. It then reports the standard deviation, relative standard error, bias, and root-mean-square error (RMSE) of the estimates.
 
-Thus, DICE measures the likelihood that your estimated diffusion coefficient will attain the accuracy and precision required for your investigations based on your experimental parameters, such as the initial spot width, nominal diffusion length, and initial contrast-to-noise ratio.
+DICE also reports the fraction of estimates within a chosen proximity of the nominal value, for example: "50% of the diffusion coefficient estimates are within ±10% of the nominal value." That fraction estimates the probability that one measurement with your parameters reaches the accuracy and precision that your investigation requires. You choose the proximity level when you analyze the results, after the simulation. The summary file reports ±5%, ±10%, ±20%, and ±50%. In the GUI, you can choose any level from 1% to 50%.
 
 ### How it works
 
-1. **Generation of time-series profiles:**  DICE starts by simulating a population of excited states as a Gaussian distribution profile that undergoes decay and diffusion. The initial profile has an amplitude of unity, a width parameterized by either the full-width half-maximum or the Gaussian standard deviation, a mean position of zero, and a baseline background of zero.
-2. **Noise addition:** DICE incorporates white noise into the generated profiles to better resemble real-world scenarios. The magnitude of the noise is the same for every time frame and is parameterized by its standard deviation.
-3. **Gaussian fit:** The time-evolved noisy profiles are fitted with Gaussian functions, estimating the Mean Squared Displacement (MSD) at each time point.
-4. **Linear fit and diffusion coefficient estimation:** The MSD values are fitted to a linear function using a weighted least squares method. The slope of the linear fit is proportional to the estimated diffusion coefficient.
-5. **Analysis:** DICE compares the estimated diffusion coefficient to the nominal parameter used to generate the series of profiles. By conducting multiple simulations with the same parameters, DICE provides a statistical view of the precision and accuracy of diffusion estimates.
-6. **Presentation:** Several customizable plotting functions are provided to present the results.
+1. **Generation of time-series profiles:** DICE simulates a population of excited states as a Gaussian profile that diffuses and decays. The initial profile has an amplitude (usually 1), a width given as the full width at half maximum (FWHM) or the standard deviation, a mean position (usually zero), and a baseline of zero.
+2. **Noise addition:** DICE adds white noise to the profiles. The noise has the same standard deviation at every time point. You give the standard deviation directly, or DICE derives it from a measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package.
+3. **Gaussian fit:** DICE fits a Gaussian function to each noisy profile. The change of the fitted variance over time gives the mean squared displacement (MSD).
+4. **Linear fit and diffusion coefficient estimation:** DICE fits the variance against time with two linear fits, weighted least squares (WLS) and ordinary least squares (OLS). In one dimension, the slope of the fit is twice the estimated diffusion coefficient.
+5. **Analysis:** DICE compares the estimated diffusion coefficients with the nominal diffusion coefficient that generated the profiles. Because it repeats the simulation many times with the same parameters, the estimates form a distribution that shows the precision and accuracy of the measurement.
+6. **Presentation:** DICE writes a results file, a summary, and a histogram of the estimates.
 
 ## Quick Start
 
-### Option 1: GUI (Recommended for New Users)
+### Option 1: Graphical user interface (GUI), recommended for new users
 
-The graphical interface provides the easiest way to get started with DICE.
-
-1. **Install uv** (if not already installed):
-
-   ```bash
-   # macOS/Linux:
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-
-   # Windows:
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   ```
+1. **Install uv**, a Python package and project manager. For example, run `winget install --id=astral-sh.uv -e` on Windows or `brew install uv` on macOS. The [Installation Guide](docs/installation.md#install-uv) lists other methods.
 
 2. **Clone and run:**
 
@@ -52,27 +42,23 @@ The graphical interface provides the easiest way to get started with DICE.
    uv run dice-gui
    ```
 
-The GUI provides an intuitive interface with tab-based parameter organization, real-time validation, unit-aware input fields, and live calculations.
+The GUI organizes the parameters in tabs, checks each input as you type, has a unit selector for each input with a length or time dimension, and computes related quantities, such as the diffusion length from D and τ.
 
-See [GUI Guide](dice_gui/README.md) for detailed documentation.
+See the [GUI Guide](dice_gui/README.md) for details.
 
-### Option 2: Command Line
+### Option 2: Command line
 
-For batch processing and programmatic control, use the command-line interface.
+For batch processing and scripts, use the command-line interface (CLI). After the installation above, run a parameters file, for example one of the examples in `data/examples/`:
 
-1. **Install uv and clone** (same as above)
+```bash
+uv run dice data/examples/parameters.txt
+```
 
-2. **Run with parameters file:**
+See the [CLI Guide](docs/cli-guide.md) for details and the [Parameter Reference](docs/parameters.md) for all parameters.
 
-   ```bash
-   uv run dice parameters.txt
-   ```
+### Option 3: Online CNR estimator
 
-See [CLI Guide](docs/cli-guide.md) for detailed documentation and [Parameter Reference](docs/parameters.md) for all available parameters.
-
-### Option 3: Online CNR Estimator
-
-Use [this link](https://dice-thiebes.pythonanywhere.com) to access an online CNR estimator for your 1D noisy Gaussian profile. No Python installation necessary.
+The [online CNR estimator](https://dice-thiebes.pythonanywhere.com) estimates the CNR of a one-dimensional noisy profile with the fft-cnr package. It needs no Python installation.
 
 ## Documentation
 
@@ -85,52 +71,39 @@ Use [this link](https://dice-thiebes.pythonanywhere.com) to access an online CNR
 
 ## Installation
 
-### Quick Install (Recommended)
+The [Installation Guide](docs/installation.md) covers:
 
-```bash
-# Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
-# OR
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
-
-# Clone and install DICE
-git clone https://github.com/thiebes/DICE.git
-cd DICE
-uv sync
-```
-
-### Other Installation Methods
-
-- **Install with pip:** See [Installation Guide](docs/installation.md#method-2-install-dependencies-and-use-directly)
-- **Editable install:** See [Installation Guide](docs/installation.md#method-3-install-as-editable-package)
-- **Troubleshooting:** See [Installation Guide](docs/installation.md#troubleshooting)
+- [installation with uv](docs/installation.md#install-with-uv-recommended), the recommended method shown above
+- [installation with pip](docs/installation.md#install-with-pip), including an editable installation for development
+- [optional extras](docs/installation.md#optional-extras) for the web app and the tests
+- [troubleshooting](docs/installation.md#troubleshooting)
 
 ## Outputs
 
-DICE generates three main output files in `output/<filename_slug>/`:
+DICE writes three output files to `output/<filename_slug>/`:
 
-- **Summary text file** (`<slug>_summary.txt`): Human-readable report with statistical analysis
-- **Results CSV file** (`<slug>.csv`): Raw simulation data for further analysis
-- **Histogram plot** (`<slug>_accuracy_histogram.png`): Visualization of diffusion coefficient estimates
+- **Summary text file** (`<slug>_summary.txt`): the main parameters and the statistics of the estimates
+- **Results CSV file** (`<slug>.csv`): the results of every run, for further analysis
+- **Histogram plot** (`<slug>_accuracy_histogram.png`): the distribution of the ratio of estimated to nominal diffusion coefficient
 
-All simulation parameters and settings are included in the summary text file for reference.
+The [CLI Guide](docs/cli-guide.md#output-files) describes the contents of each file.
 
 ## Interpreting Results
 
-The result of simulations based on a given set of parameters is a distribution of diffusion coefficient estimates. By analyzing this distribution, users can assess whether a given experimental measurement with the same parameters is representative of the range of possible measurements that might be taken if the experiment were performed repeatedly.
+A simulation gives a distribution of diffusion coefficient estimates for one set of parameters. Compare a measured value with this distribution to judge whether the measurement is typical of the values that repeated experiments with the same parameters would give.
 
-When the parameters are input, the user chooses a diffusion coefficient and lifetime or a diffusion length. The "true" diffusion coefficient is inexorably unknown, so the input parameter is a best guess or an initial measurement.
+You enter either a diffusion coefficient and a lifetime, or a diffusion length. The diffusion coefficient of the sample is unknown, so the nominal value is a best guess or an earlier measurement.
 
-Importantly, the results of the simulation are not to be interpreted as a comment on whether the diffusion coefficient and other input parameters are correct. Rather, the results indicate a range of possible estimates that would arise in experiment if the input parameters are correct.
+The results show the range of estimates that experiments would give if the nominal values and the other parameters were correct. A simulation cannot test whether those values are correct.
 
 ## Known Issues and Limitations
 
-- The data format in an imported initial profile for estimation of CNR is limited to a single line of comma-separated values
-- This program only evaluates Gaussian function fits for distribution profiles
-- Profiles analyzed are 1-dimensional
-- Non-Fickian diffusion (e.g., subdiffusion) is not considered
-- Anisotropic diffusion is not considered
-- Lifetime is modeled as single-exponential
+- A measured profile for CNR estimation must be a single line of comma-separated values.
+- DICE fits Gaussian functions only.
+- Profiles are one-dimensional.
+- DICE models normal (Fickian) diffusion only. Anomalous diffusion, such as subdiffusion, is not modeled.
+- Diffusion is isotropic. Anisotropic diffusion is not modeled.
+- The lifetime model is a single-exponential decay.
 
 ## Acknowledgements
 
@@ -148,8 +121,10 @@ Thiebes, J. J. (2023). Diffusion Insight Computation Engine (DICE) [Software]. Z
 
 Diffusion Insight Computation Engine (DICE) by [Joseph J. Thiebes](http://thiebes.org) is licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
-Copyright (c) 2023-2025 Joseph J. Thiebes
+Copyright (c) 2023-2026 Joseph J. Thiebes
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+The full license text, including the warranty disclaimer, is in [LICENSE.md](LICENSE.md).
