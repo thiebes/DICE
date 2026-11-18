@@ -53,6 +53,8 @@ uv run dice data/examples/parameters.txt
 
 `uv run` runs the command inside the project environment. You do not need to activate the environment first.
 
+The first start after an installation with uv takes longer than later starts, because Python compiles the scientific libraries to bytecode when it first imports them. To do this work during the installation instead, run `uv sync --compile-bytecode`, or set the environment variable `UV_COMPILE_BYTECODE=1` before `uv sync`.
+
 ## Install with pip
 
 Create and activate a virtual environment, then install DICE from the repository directory:
