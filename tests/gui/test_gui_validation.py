@@ -98,6 +98,17 @@ class TestInlineFeedback:
         assert _visible_error(window, "noise_file").startswith("File")
         assert not window.run_button.isEnabled()
 
+    def test_inactive_field_drops_its_error_everywhere_when_mode_changes(self, qtbot, window):
+        enter_text(qtbot, window.noise_value_input, "-1")
+        assert window.validation_status_label.text() == "1 validation error"
+
+        window.noise_estimate_radio.setChecked(True)
+
+        assert _visible_error(window, "noise_value") is None
+        assert window.validation_status_label.text() == ""
+        assert window.tabs.tabText(2) == TAB_NAMES[2]
+        assert window.run_button.isEnabled()
+
 
 class TestRunIsBlocked:
 

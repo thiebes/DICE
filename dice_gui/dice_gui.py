@@ -1962,6 +1962,8 @@ class DiceGUI(QMainWindow):
             if error_label:
                 error_label.setText("")
                 error_label.setVisible(False)
+            self._update_tab_indicators()
+            self._update_validation_status_bar()
             return
 
         apply_validation_style(field.widget, is_valid)
