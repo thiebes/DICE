@@ -95,6 +95,7 @@ def run_and_wait(qtbot, window, dialogs, timeout_ms: int = 120_000) -> None:
     """Click Run and wait until the GUI reports completion or failure."""
     outcome_titles = {"Simulation Complete", "Simulation Error"}
     qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+    assert window.simulation_thread is not None, f"Run did not start: {dialogs.shown}"
     qtbot.waitUntil(lambda: bool(outcome_titles & set(dialogs.titles())), timeout=timeout_ms)
     assert "Simulation Complete" in dialogs.titles(), dialogs.shown
 

@@ -6,12 +6,13 @@ block a run before any simulation thread starts.
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QFocusEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from gui_support import TAB_NAMES, enter_text
+from gui_support import TAB_NAMES, enter_text, run_and_wait
 
 pytestmark = pytest.mark.gui
 
@@ -136,6 +137,36 @@ class TestRunIsBlocked:
 
         assert dialogs.titles("warning") == ["Validation Error"]
         assert dialogs.texts("warning")[0] == "Time range start must be less than stop, got 2.0 >= 1.0"
+        assert window.simulation_thread is None
+
+
+class TestZeroDiffusionInputs:
+    """
+    Lifetime 0 means no decay, which the engine supports; the derived diffusion
+    length is then 0 and must not block the run. D = 0 has no accuracy ratio
+    (estimates are divided by D), so it must be rejected on the D field itself.
+    """
+
+    def test_zero_lifetime_runs(self, qtbot, window, dialogs, work_dir):
+        window.num_runs_spin.setValue(3)
+        window.multiprocessing_check.setChecked(False)
+        enter_text(qtbot, window.filename_slug_input, "no_decay")
+        enter_text(qtbot, window.lifetime_input, "0")
+        assert float(window.diffusion_length_input.text()) == 0.0
+
+        run_and_wait(qtbot, window, dialogs)
+
+        assert _visible_error(window, "diffusion_length") is None
+        frame = pd.read_csv(work_dir / "output" / "no_decay" / "no_decay.csv")
+        assert (frame["nominal lifetime"] == 0).all()
+
+    def test_zero_diffusion_coefficient_is_rejected_on_its_own_field(self, qtbot, window, dialogs):
+        enter_text(qtbot, window.diffusion_coeff_input, "0")
+        _click_run(qtbot, window)
+
+        assert not window.run_button.isEnabled()
+        assert _visible_error(window, "diffusion_coeff") == "Diffusion coefficient must be greater than 0"
+        assert _visible_error(window, "diffusion_length") is None
         assert window.simulation_thread is None
 
 
