@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 
 import pytest
+from PyQt6.QtCore import Qt
 
 from dice.models.results import MonteCarloOutput
 from dice_gui.dice_interface import DiceInterface
@@ -93,3 +94,36 @@ class TestFailedRun:
         assert len(log.errors) == 1
         assert "'pixel width'" in log.errors[0]
         assert log.results == []
+
+
+class TestCancellation:
+    """A stop request ends the run as a cancellation, not as a failure."""
+
+    def test_stop_request_emits_cancelled_and_no_error(self, qtbot):
+        thread = SimulationThread(DiceInterface(), quick_test_engine_parameters(number_of_runs=300))
+        log = _SignalLog(thread)
+        thread.iteration_progress.connect(lambda current, total: thread.request_stop())
+
+        with qtbot.waitSignal(thread.cancelled, timeout=SIGNAL_TIMEOUT_MS):
+            thread.start()
+        thread.wait()
+
+        assert log.errors == []
+        assert log.results == []
+        assert 1 <= len(log.iterations) < 300
+
+    def test_stop_button_reports_a_stop_without_an_error_dialog(self, qtbot, window, dialogs):
+        window.num_runs_spin.setValue(300)
+        window.multiprocessing_check.setChecked(False)
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.progress_bar.value() >= 1, timeout=SIGNAL_TIMEOUT_MS)
+
+        qtbot.mouseClick(window.stop_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+        assert dialogs.titles("critical") == []
+        assert window.status_label.text() == "Simulation stopped by user"
+        assert window.run_button.isEnabled()
+        assert not window.stop_button.isEnabled()
+        assert window.progress_bar.isHidden()
+        assert window.interface.last_result is None

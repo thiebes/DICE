@@ -241,6 +241,9 @@ class DiceInterface:
 
             return result, processed_params
 
+        except InterruptedError:
+            # A progress callback requested cancellation; not a failure.
+            raise
         except ImportError as e:
             raise ImportError(f"Failed to import dice module: {e}")
         except Exception as e:

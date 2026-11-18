@@ -1130,6 +1130,7 @@ class DiceGUI(QMainWindow):
         self.simulation_thread.iteration_progress.connect(self._update_iteration_progress)
         self.simulation_thread.finished.connect(self.simulation_finished)
         self.simulation_thread.error.connect(self.simulation_error)
+        self.simulation_thread.cancelled.connect(self.simulation_cancelled)
         self.simulation_thread.start()
 
     def stop_simulation(self):
@@ -1248,6 +1249,16 @@ class DiceGUI(QMainWindow):
             self.simulation_thread = None
         self.status_label.setText("Simulation failed")
         QMessageBox.critical(self, "Simulation Error", f"Simulation failed:\n\n{error_message}")
+
+    def simulation_cancelled(self):
+        """Handle a run that stopped at the user's request."""
+        self.reset_ui_after_simulation()
+        if self.simulation_thread is not None:
+            self.simulation_thread.deleteLater()
+            self.simulation_thread = None
+        # Set last: queued progress updates from before the stop may have
+        # overwritten the message stop_simulation() showed.
+        self.status_label.setText("Simulation stopped by user")
 
     def reset_ui_after_simulation(self):
         """Reset UI elements after simulation completes or stops."""
