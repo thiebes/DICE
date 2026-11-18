@@ -4,12 +4,70 @@ End-to-end runs started from the GUI: what it exports and what it reports.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import pytest
 
-from gui_support import WLS_SLOPE_COLUMN, choose_global_units, enter_text, run_and_wait
+from gui_support import (
+    EXAMPLES_DIR, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
+    choose_global_units, d_estimates_from_csv, enter_text, fraction_within, run_and_wait,
+)
 
 pytestmark = pytest.mark.gui
+
+
+class TestRunFromTheWindow:
+    """Load the quick_test example, run it from the Run button, and follow the results."""
+
+    RUNS = 10
+
+    @pytest.fixture
+    def finished_window(self, qtbot, window, dialogs):
+        window.load_parameters_from_file(str(EXAMPLES_DIR / "quick_test.txt"))
+        window.num_runs_spin.setValue(self.RUNS)
+        window.multiprocessing_check.setChecked(False)
+        run_and_wait(qtbot, window, dialogs)
+        return window
+
+    def test_controls_return_to_ready(self, finished_window):
+        assert finished_window.status_label.text() == "Simulation completed successfully!"
+        assert finished_window.run_button.isEnabled()
+        assert not finished_window.stop_button.isEnabled()
+        assert finished_window.progress_bar.isHidden()
+        assert finished_window.progress_bar.maximum() == self.RUNS
+        assert finished_window.simulation_thread is None
+        assert finished_window.status_bar.currentMessage() == "No data loaded"
+
+    def test_files_named_in_the_output_preview_exist(self, finished_window):
+        preview = finished_window.output_path_preview.text()
+        directory = Path(re.search(r"<b>Directory:</b> (.*?)<br>", preview).group(1))
+        names = re.search(r"<b>Files:</b> (.*)$", preview).group(1).split(", ")
+        assert names == ["quick_test.csv", "quick_test_summary.txt", "quick_test_accuracy_histogram.png"]
+        assert all((directory / name).is_file() for name in names)
+
+    def test_exported_csv_has_one_row_per_run_and_the_columns_the_gui_reads(self, finished_window, work_dir):
+        frame = pd.read_csv(work_dir / "output" / "quick_test" / "quick_test.csv")
+        assert list(frame["run number"]) == list(range(self.RUNS))
+        assert {WLS_SLOPE_COLUMN, OLS_SLOPE_COLUMN, NOMINAL_D_COLUMN} <= set(frame.columns)
+        assert frame[NOMINAL_D_COLUMN].to_numpy() == pytest.approx(np.full(self.RUNS, 0.01))
+
+    def test_analysis_tab_reports_statistics_of_the_exported_estimates(self, finished_window, work_dir):
+        estimates, nominal = d_estimates_from_csv(
+            work_dir / "output" / "quick_test" / "quick_test.csv", WLS_SLOPE_COLUMN
+        )
+        window = finished_window
+        assert window.precision_std_label.text() == f"{np.std(estimates):.5e}"
+        assert window.precision_rse_label.text() == f"{np.std(estimates) / nominal:.3f}"
+        assert window.precision_bias_label.text() == f"{np.mean(estimates) - nominal:.5e}"
+        assert window.precision_mean_ratio_label.text() == f"{np.mean(estimates) / nominal:.3f}"
+        assert window.precision_placeholder.isHidden()
+        assert window.explore_proximity_group.isEnabled()
+        assert window.proximity_fraction_label.text() == (
+            f"{fraction_within(estimates, nominal, 0.10):.1%} of estimates fall within ±10% of nominal"
+        )
 
 
 def _enter_quick_test_physics(qtbot, window, fwhm: float, spatial_width: float, d: float) -> None:
