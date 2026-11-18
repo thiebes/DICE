@@ -74,11 +74,22 @@ def qapp_args() -> list[str]:
 
 
 @pytest.fixture(autouse=True)
-def isolated_settings(tmp_path_factory: pytest.TempPathFactory) -> None:
-    """Keep the recent-files list and other QSettings out of the developer's registry."""
+def isolated_settings(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """
+    Keep the recent-files list and other QSettings out of the developer's registry.
+
+    QSettings(organization, application) always uses the native format (the
+    registry on Windows), so setDefaultFormat cannot redirect it; instead the
+    GUI modules' QSettings name is replaced by an INI file per test.
+    """
     settings_dir = tmp_path_factory.mktemp("qsettings")
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(settings_dir))
+
+    def ini_settings(organization: str, application: str) -> QSettings:
+        return QSettings(str(settings_dir / f"{organization}_{application}.ini"), QSettings.Format.IniFormat)
+
+    for module in ("dice_gui.dice_gui", "dice_gui.collapsible_group"):
+        monkeypatch.setattr(f"{module}.QSettings", ini_settings)
+    return settings_dir
 
 
 @pytest.fixture(autouse=True)
