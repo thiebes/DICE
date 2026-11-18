@@ -1,181 +1,212 @@
 # DICE Parameter Reference
 
-Complete reference for all parameters used in DICE simulations. Parameters are specified in the `parameters.txt` file or through the GUI.
+This page describes every parameter of a DICE simulation. You set the parameters in a parameters file for the command-line interface (CLI) or in the tabs of the graphical user interface (GUI). The GUI can save and open the same parameters files.
 
 ## Overview
 
-Each simulation models one experimental diffusion measurement, comprising a series of time-evolved Gaussian profiles with noise. Each simulation uses one set of parameters.
+A simulation consists of many runs. Each run simulates one diffusion measurement: a series of Gaussian profiles that spread by diffusion and decay over time, with random noise added. DICE fits each noisy profile, estimates the diffusion coefficient from the fits, and compares the estimates of all runs with the nominal diffusion coefficient. All runs use the same parameters; only the random noise differs.
 
-## Simulation Control
+The table lists the parameters by group. "One of" means that you give exactly one option of the group.
 
-### Filename slug
+| Group | Keys | Required |
+| ------- | ------------- | ------------- |
+| Simulation control | `filename slug`, `number of runs` | `number of runs` |
+| Units | `length unit`, `time unit`, keys that end in `_unit` | No |
+| Diffusion | `nominal diffusion length`, or `nominal diffusion coefficient` with `nominal lifetime (tau)` | One of |
+| Initial profile | `amplitude_0`, `mean_0`, and `FWHM_0` or `sigma_0` | Yes |
+| Noise | `noise value`, `estimate noise from data`, `noise range, reciprocal`, `noise range, reciprocal log` | One of |
+| Spatial axis | `spatial width`, `pixel width` | Yes |
+| Temporal axis | `time range` or `time series` | One of |
+| Plot | keys that start with `image` | No |
+| Performance | `retain profile data`, `multiprocessing` | No |
 
-A prefix for your output files to help identify them later. The output file names will also automatically include the parameters below, so your slug could be a textual identifier connected to a set of experiments. Avoid special characters in the slug.
+## Simulation control
 
-**Example:**
+### `filename slug`
 
-If the Filename slug is set to `'example'`, simulation results are saved in the `output/example/` directory:
+A prefix for the output files. DICE writes the output to the directory `output/<slug>/` under the current working directory. For the slug `'example'`, the files are:
 
-- `output/example/example.csv` - Simulation results data
-- `output/example/example_summary.txt` - Human-readable summary
-- `output/example/example_accuracy_histogram.png` - Visualization plot
+- `output/example/example.csv`: results of every run
+- `output/example/example_summary.txt`: parameters and summary statistics
+- `output/example/example_accuracy_histogram.png`: histogram of the estimates
 
-All simulation parameters and settings are included in the summary text file for reference.
+Use only characters that are valid in file names. If the key is missing, the slug is `dice_simulation`.
 
-### Number of simulation iterations
+### `number of runs`
 
-Specify the number of Monte Carlo simulations to run. More iterations provide better statistical power but take longer to complete.
+The number of runs (Monte Carlo iterations). More runs give more precise statistics and take longer.
 
-**Typical values:** 1000-10000
+**Typical values:** 100 for a quick check; 1000 to 10000 for final results.
 
 ## Units
 
-### Length unit
+### `length unit` and `time unit`
 
-Specify the singular unit for length, like `'micrometer'` or `'nanometer'`. This unit applies to all parameters representing physical lengths.
+The global units of the simulation. All values with a length or time dimension are in these units, unless a per-parameter unit key (see below) gives another unit. The summary file and the results file report values in these units, except for the results-file columns marked `[cm²/s]`, which DICE converts to cm²/s.
 
-**Available units:** meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
+- **Length units:** meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
+- **Time units:** second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
 
-### Time unit
+Write the unit name in the singular, for example `'micrometer'`. If a key is missing, DICE uses micrometer and nanosecond.
 
-Specify the singular unit for time, like `'nanosecond'` or `'picosecond'`. This unit applies to all parameters representing time.
+### Per-parameter units
 
-**Available units:** second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
+A unit key gives the unit of one value. DICE converts that value to the global unit before the simulation. Without a unit key, a value is in the global unit.
 
-**Important:** Ensure that all parameter magnitudes are appropriately scaled to these units.
+| Unit key | Applies to | Dimension |
+| ------- | ------------- | ------------- |
+| `FWHM_0_unit` | `FWHM_0` | length |
+| `sigma_0_unit` | `sigma_0` | length |
+| `mu_0_unit` | `mean_0` | length |
+| `spatial_width_unit` | `spatial width` | length |
+| `diffusion_length_unit` | `nominal diffusion length` | length |
+| `diffusion_coefficient_length_unit` | `nominal diffusion coefficient` (length part) | length |
+| `diffusion_coefficient_time_unit` | `nominal diffusion coefficient` (time part) | time |
+| `lifetime_unit` | `nominal lifetime (tau)` | time |
+| `time_range_unit` | start and stop of `time range` | time |
+| `time_start_unit`, `time_stop_unit` | start or stop of `time range` | time |
+| `time_series_unit` | `time series` | time |
 
-## Diffusion and Lifetime Parameters
+The unit key for `mean_0` is `mu_0_unit`.
 
-Provide **either** diffusion length **or** (diffusion coefficient and lifetime). Do not provide both.
+**Example:** the global units are micrometer and nanosecond, the initial FWHM is 800 nm, the diffusion coefficient is 0.01 cm²/s, and the lifetime is 500 ps:
 
-### Option 1: Diffusion Length
+```python
+'length unit': 'micrometer',
+'time unit': 'nanosecond',
+'FWHM_0': 800,
+'FWHM_0_unit': 'nanometer',
+'nominal diffusion coefficient': 0.01,
+'diffusion_coefficient_length_unit': 'centimeter',
+'diffusion_coefficient_time_unit': 'second',
+'nominal lifetime (tau)': 500,
+'lifetime_unit': 'picosecond',
+```
 
-**nominal diffusion length**: The characteristic transport distance, $L_D = \sqrt{D\tau}$
+DICE converts these values to 0.8 μm, 0.001 μm²/ns, and 0.5 ns.
 
-**Units:** Specified by length unit
+## Diffusion and lifetime
 
-### Option 2: Diffusion Coefficient and Lifetime
+Give **either** the diffusion length **or** both the diffusion coefficient and the lifetime. Do not give all three.
 
-**nominal diffusion coefficient (D)**: The diffusion coefficient
+### `nominal diffusion length`
 
-**Units:** (length unit)² / (time unit)
+The diffusion length, L_D = √(Dτ).
 
-**nominal lifetime (tau)**: The excited state lifetime
+**Units:** length unit
 
-**Units:** Specified by time unit
+If you give only the diffusion length, DICE sets the lifetime to 1 time unit and the diffusion coefficient to L_D² per time unit. The time points of the temporal axis are then in units of the lifetime.
 
-### Scaling Examples
+### `nominal diffusion coefficient` and `nominal lifetime (tau)`
 
-**Example 1:** For a diffusion length of 100 nm, but the length unit is `'micrometer'`, use:
+The diffusion coefficient D and the excited state lifetime τ. DICE computes the diffusion length from them.
+
+**Units:** D in (length unit)² / (time unit); τ in time unit
+
+### Scaling examples
+
+**Example 1:** for a diffusion length of 100 nm with the length unit `'micrometer'`:
 
 ```python
 'nominal diffusion length': 0.1,
 ```
 
-**Example 2:** For a nominal diffusion coefficient of 1.0 cm²/s, but your length unit parameter is `'micrometer'` and your time unit is `'nanosecond'`, scale to μm²/ns as follows:
+**Example 2:** for a diffusion coefficient of 1.0 cm²/s and a lifetime of 1 ns, with the length unit `'micrometer'` and the time unit `'nanosecond'`. Because 1 cm²/s equals 0.1 μm²/ns:
 
 ```python
 'nominal diffusion coefficient': 0.1,
 'nominal lifetime (tau)': 1,
 ```
 
-## Initial Profile Parameters
+Alternatively, give the value in cm²/s with the unit keys `diffusion_coefficient_length_unit` and `diffusion_coefficient_time_unit` (see [Per-parameter units](#per-parameter-units)).
 
-Configure the amplitude, mean, and width of the initial Gaussian profile.
+## Initial profile
 
-### Amplitude
+The initial profile is a Gaussian function with an amplitude, a mean position, and a width.
 
-**amplitude_0**: Initial amplitude of the Gaussian profile
+### `amplitude_0`
 
-**Typical value:** 1.0 (unity)
+The amplitude of the initial Gaussian profile.
 
-**Note:** Amplitudes other than unity have not been tested.
+**Typical value:** 1.0
 
-### Mean Position
+DICE reports the nominal contrast-to-noise ratio (CNR) as 1 / `noise value`, which equals the CNR only for an amplitude of 1. Amplitudes other than 1 have not been tested.
 
-**mean_0**: Mean position of the initial Gaussian
+### `mean_0`
 
-**Typical value:** 0.0 (centered at origin)
+The mean position (center) of the initial Gaussian profile.
 
-**Units:** Specified by length unit
+**Typical value:** 0.0 (the center of the spatial axis)
 
-### Profile Width
+**Units:** length unit
 
-Provide **either** FWHM **or** sigma. Do not provide both.
+### `FWHM_0` or `sigma_0`
 
-**FWHM_0**: Full Width at Half Maximum of the initial Gaussian
+The width of the initial profile, as the full width at half maximum (FWHM) or as the standard deviation σ. Give exactly one of the two.
 
-**sigma_0**: Standard deviation of the initial Gaussian
+**Relationship:** FWHM = 2√(2 ln 2) σ ≈ 2.355 σ
 
-**Relationship:** FWHM = σ × 2 × √(2 ln 2) ≈ σ × 2.355
+**Units:** length unit
 
-**Units:** Specified by length unit
+## Noise
 
-## Noise Parameters
+DICE adds white Gaussian noise of standard deviation σ to every pixel of every profile, with the same σ at all time points. Give exactly one of the following options.
 
-Specify how noise is added to the simulated profiles. Provide **one** of the following options:
+### `noise value`
 
-### Option 1: Fixed Noise Value
+The standard deviation σ of the noise.
 
-**noise value**: Standard deviation of white noise added to each profile pixel
+**Units:** the units of the amplitude. For an amplitude of 1, the initial CNR is 1 / σ.
 
-**Units:** Same as amplitude (typically unitless if amplitude is 1.0)
+### `estimate noise from data`
 
-### Option 2: Estimate from Data
+The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the current working directory.
 
-**estimate noise from data**: Path to a CSV file containing an initial profile
+DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. It then sets the noise level so that the initial CNR of the simulated profiles equals that estimate. The amplitude and units of the measured profile do not matter. The estimate can differ slightly between versions of fft-cnr; see the [fft-cnr documentation](https://fft-cnr.readthedocs.io) for the method.
 
-The script will use FFT-based analysis to estimate the CNR (Contrast-to-Noise Ratio) from the experimental data.
+### `noise range, reciprocal` and `noise range, reciprocal log`
 
-**Format:** Single line of comma-separated values representing the profile
+**Format:** `[low, high]`, two noise standard deviations with low < high
 
-### Advanced Options (Not commonly used)
+DICE draws one noise value at random from this range. With `noise range, reciprocal`, the reciprocal of the noise value (the CNR for an amplitude of 1) is uniformly distributed between 1/high and 1/low. With `noise range, reciprocal log`, its base-10 logarithm is uniformly distributed. All runs of the simulation use the one drawn value, which the summary file reports.
 
-**noise range, reciprocal**: Range for noise with uniform distribution in reciprocal (CNR) space
+## Spatial axis
 
-**Format:** [min, max]
+### `spatial width`
 
-**noise range, reciprocal log**: Range for noise with logarithmic distribution in reciprocal space
+The total width of the spatial axis. The axis is centered on zero and runs from −width/2 to +width/2.
 
-**Format:** [min, max]
+**Units:** length unit
 
-## Spatial Axis Parameters
+Choose a width several times larger than the width of the profile at the last time point, so that the profile is not cut off at the edges.
 
-### Spatial width
+### `pixel width`
 
-**spatial width**: Total width of the spatial axis
+The number of points (pixels) on the spatial axis. The axis includes both end points, so the spacing between points is `spatial width` / (`pixel width` − 1).
 
-**Units:** Specified by length unit
+## Temporal axis
 
-### Pixel width
+Give **either** a time range **or** a time series. The linear fit needs at least two time points.
 
-**pixel width**: Number of pixels (points) across the spatial axis
+### `time range`
 
-**Derived value:** pixel size = spatial width / pixel width
+Evenly spaced time points.
 
-## Temporal Axis Parameters
-
-Provide **either** time range **or** time series. Do not provide both.
-
-### Option 1: Time Range
-
-**time range**: Evenly spaced time points
-
-**Format:** [start, stop, steps]
+**Format:** `[start, stop, steps]`, where `steps` is the number of time points. Both `start` and `stop` are included, and `start` must be less than `stop`.
 
 **Example:**
 
 ```python
-'time range': [0.0, 10.0, 11]  # 11 points from 0 to 10
+'time range': [0.0, 10.0, 11]  # 11 points: 0, 1, 2, ..., 10
 ```
 
-**Units:** start and stop in time unit specified
+**Units:** time unit
 
-### Option 2: Time Series
+### `time series`
 
-**time series**: Explicit list of time points
+An explicit list of time points.
 
-**Format:** [t₁, t₂, t₃, ...]
+**Format:** `[t1, t2, t3, ...]`
 
 **Example:**
 
@@ -183,95 +214,85 @@ Provide **either** time range **or** time series. Do not provide both.
 'time series': [0.1, 0.3, 0.5, 0.7, 0.9]
 ```
 
-**Units:** Specified by time unit
+**Units:** time unit
 
-**Note:** Values will be automatically sorted and must be unique.
+List the time points in increasing order, without duplicates. The results file reports the fitted variance and the CNR estimate of the profile at the first time point as `estimated sigma^2_0` and `estimated CNR`. The GUI sorts the list and rejects duplicate values.
 
 ## Analysis output
 
-DICE reports the standard deviation, relative standard error, bias, and RMSE of diffusion coefficient estimates as primary precision metrics. Proximity analysis (fraction of estimates within ±X% of nominal) is available as a post-hoc tool in the GUI and is computed at standard thresholds (5%, 10%, 20%) in CLI output.
+For each run, DICE fits a Gaussian function to each noisy profile. It then fits the variance of these Gaussians against time with two linear fits: weighted least squares (WLS) and ordinary least squares (OLS). In one dimension the slope equals 2D, so each linear fit gives one estimate of the diffusion coefficient. For all runs together, DICE reports:
 
-## Plotting parameters
+- the standard deviation of the estimates
+- the relative standard error (standard deviation divided by the nominal diffusion coefficient)
+- the mean estimate, the bias (mean estimate minus nominal value), and the root-mean-square error (RMSE)
+- the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
 
-Optional parameters for customizing output plots.
+The proximity level (the fraction of the nominal value within which an estimate counts as close) is not a simulation parameter. The summary file reports the four standard levels listed above. In the GUI, choose any level from 1% to 50% in the Analysis Settings tab after a run. From Python or a results file, you can compute the fraction for any level (see the [CLI Guide](cli-guide.md#analyze-the-results-in-python)). DICE ignores a `proximity level` key in a parameters file and warns about it.
 
-### Image type
+## Plot parameters
 
-**image type**: File format for plots
+Optional parameters for the accuracy histogram.
 
-**Options:** 'jpg', 'png', 'svg', 'tif', 'pdf'
+### `image type`
 
-**Default:** 'png'
+The file format of the plot.
 
-### Image dimensions
+**Options:** `'png'`, `'jpg'`, `'svg'`, `'tif'`, `'pdf'`
 
-**image width**: Width of output images in centimeters
+**Default:** `'png'`
 
-**Default:** 10 cm
+### `image width` and `image height`
 
-**image height**: Height of output images in centimeters
+The width and height of the plot in centimeters.
 
-**Default:** 6 cm
+**Defaults:** 10 cm and 6 cm
 
-### Image resolution
+### `image dpi`
 
-**image dpi**: Resolution in dots per inch
+The resolution in dots per inch.
 
 **Default:** 100
 
-### Typography
+### `image font size`, `image tick length`, `image tick width`, `image numbins`
 
-**image font size**: Font size for plot text in points
+The font size of the plot text (points), the length and width of the axis ticks (points), and the number of histogram bins.
 
-**Default:** 12
+The GUI applies these values from its Output Settings tab. The command-line interface does not apply them; it uses a font size of 12 points, ticks 4 points long and 1 point wide, and 50 bins.
 
-**image tick length**: Axis tick length in points
+### `image x_lim`
 
-**image tick width**: Axis tick width in points
+DICE accepts this key but does not apply it. The x-axis of the histogram spans the mean ± 3 standard deviations of the plotted ratios.
 
-### Histogram settings
+## Performance parameters
 
-**image numbins**: Number of bins for histograms
+### `retain profile data`
 
-**Default:** 50
+Whether to keep the simulated profiles, the noisy profiles, and the fitted widths of every run in memory.
 
-**image x_lim**: X-axis limits for plots
+**Options:** `True` or `1` to keep them; `False` or `0` to discard them
 
-**Format:** [min, max] or None
+**Default:** `False`
 
-**Default:** None (auto-calculated as ±3 standard deviations)
+The output files do not include the retained data. The data are available from Python, in the result of `dice.dice_runner()`. The command-line interface ignores this key and uses the `--retain-profiles` option instead.
 
-## Performance Parameters
+**Warning:** retained profile data can use a large amount of memory, in proportion to the number of runs.
 
-### Data retention
+### `multiprocessing`
 
-**retain profile data**: Whether to retain all profile data
-
-**Options:**
-- `True` or `1`: Keep all data (necessary for plotting individual profiles)
-- `False` or `0`: Discard raw data (retain only fitting results)
-
-**Default:** False
-
-**Warning:** Keeping profile data may significantly increase memory usage, depending on the number of profiles generated.
-
-### Parallel processing
-
-**multiprocessing**: Enable parallel processing
+Whether to run the simulations in parallel.
 
 **Options:**
-- `False` or `0`: Disable parallel processing
-- `True` or `1`: Enable with all available cores
-- `-1`: Use all available cores
-- `n > 0`: Use n specific cores
 
-**Default:** True
+- `False` or `0`: run the simulations one after another
+- `True` or any other number: run the simulations in parallel on all available CPU cores
 
-**Note:** Parallel processing can significantly speed up simulations with many iterations.
+**Default:** `True`
 
-## Parameter File Format
+A number other than 0 does not set the number of cores. In the command-line interface, the `--multiprocessing` option overrides this key.
 
-Parameters are specified as a Python dictionary literal in `parameters.txt`:
+## Parameters file format
+
+A parameters file contains one Python dictionary literal. Each entry has the form `'key': value,`. Text after `#` on a line is a comment.
 
 ```python
 {
@@ -291,7 +312,14 @@ Parameters are specified as a Python dictionary literal in `parameters.txt`:
 }
 ```
 
-## See Also
+The directory `data/examples/` contains example files:
+
+- `parameters.txt`: all parameters, with comments
+- `quick_test.txt`: 100 runs, for a quick check
+- `publication.txt`: 1000 runs
+- `high_precision.txt`: 10000 runs on a finer grid
+
+## See also
 
 - [Installation Guide](installation.md)
 - [CLI Guide](cli-guide.md)
