@@ -73,6 +73,32 @@ def enter_text(qtbot, line_edit: QLineEdit, text: str) -> None:
     qtbot.keyClick(line_edit, Qt.Key.Key_Return)
 
 
+def trigger_menu_action(window, menu_title: str, action_text: str) -> None:
+    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == menu_title)
+    next(a for a in menu.actions() if a.text() == action_text).trigger()
+
+
+def choose_global_units(window, monkeypatch, length_unit: str, time_unit: str) -> None:
+    """Pick global units through Settings > Global Units, accepting the dialog as a user would."""
+    from dice_gui.global_units_dialog import GlobalUnitsDialog
+
+    def accept_choice(dialog: GlobalUnitsDialog) -> int:
+        dialog.length_combo.setCurrentText(length_unit)
+        dialog.time_combo.setCurrentText(time_unit)
+        return int(GlobalUnitsDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(GlobalUnitsDialog, "exec", accept_choice)
+    trigger_menu_action(window, "&Settings", "&Global Units...")
+
+
+def run_and_wait(qtbot, window, dialogs, timeout_ms: int = 120_000) -> None:
+    """Click Run and wait until the GUI reports completion or failure."""
+    outcome_titles = {"Simulation Complete", "Simulation Error"}
+    qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: bool(outcome_titles & set(dialogs.titles())), timeout=timeout_ms)
+    assert "Simulation Complete" in dialogs.titles(), dialogs.shown
+
+
 def d_estimates_from_csv(csv_path: Path, slope_column: str) -> tuple[np.ndarray, float]:
     """Diffusion coefficient estimates (slope / 2) and the nominal value, read from an exported CSV."""
     frame = pd.read_csv(csv_path)
