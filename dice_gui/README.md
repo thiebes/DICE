@@ -1,215 +1,143 @@
 # DICE GUI
 
-Graphical User Interface for the Diffusion Insight Computation Engine.
+The graphical user interface (GUI) of the Diffusion Insight Computation Engine (DICE). The GUI sets up and runs the same Monte Carlo simulation as the command-line interface, writes the same output files, and adds an interactive analysis of the results.
 
-## Features
+## Start the GUI
 
-The DICE GUI provides an intuitive interface for configuring and running DICE simulations:
-
-- **Unit Selection**: Choose length and time units, with automatic label updates throughout the interface
-- **Tabbed Organization**: Parameters organized into logical sections:
-  - Simulation Setup: Number of runs, output filenames
-  - Physical Parameters: Diffusion parameters and initial profile configuration
-  - Experimental Conditions: Noise, spatial domain, and temporal domain settings
-  - Analysis Settings: Proximity level for accuracy assessment
-
-- **Smart Input Validation**: Real-time validation with clear error messages
-- **Radio Button Groups**: Mutually exclusive parameters with automatic enable/disable logic:
-  - Diffusion: Length vs (Coefficient + Lifetime)
-  - Profile Width: FWHM vs Sigma
-  - Noise: Fixed value vs Estimate from data
-  - Time: Range vs Series
-
-- **Live Calculations**: Automatic calculation and display of:
-  - Diffusion length from D and τ
-  - FWHM ↔ Sigma conversion
-  - Pixel size from spatial parameters
-  - Proximity level percentage
-
-- **Progress Tracking**: Visual feedback during simulation execution
-- **Error Handling**: Clear error messages for invalid inputs or simulation failures
-
-## Installation
-
-### Using uv
+Install DICE first (see the [Installation Guide](../docs/installation.md)). Then start the GUI with one of these commands:
 
 ```bash
-uv sync
+uv run dice-gui        # with uv, from the DICE directory
+dice-gui               # with pip, environment active
+python -m dice_gui     # as a module, environment active
 ```
 
-### Using pip
+All three show a splash screen while the scientific libraries load, then open the main window.
 
-```bash
-pip install -e .
-```
-
-This will install all dependencies including PyQt6.
-
-## Running the GUI
-
-### From Command Line
-
-```bash
-uv run dice-gui
-```
-
-Or with pip:
-
-```bash
-dice-gui
-```
-
-Or as a module:
-
-```bash
-python -m dice_gui.dice_gui
-```
-
-### From Python
+To start the GUI from Python:
 
 ```python
-from dice_gui.dice_gui import main
+from dice_gui.__main__ import main
+
 main()
 ```
 
-## Usage
+## Main window
 
-### Basic Workflow
+The main window has five tabs, a control panel at the bottom, a status bar, and a menu bar.
 
-1. **Select Units**: Choose length and time units from the dropdowns at the top
-2. **Configure Simulation**:
-   - Set number of Monte Carlo runs
-   - Specify output filename slug
-3. **Set Physical Parameters**:
-   - Choose diffusion specification method (length OR coefficient+lifetime)
-   - Set initial profile parameters (amplitude, mean, width)
-   - Select width type (FWHM or Sigma)
-4. **Configure Experimental Conditions**:
-   - Choose noise specification (fixed value OR estimate from data)
-   - Set spatial domain (width and number of pixels)
-   - Set temporal domain (range OR explicit series)
-5. **Analysis Settings**: Adjust proximity level for accuracy threshold
-6. **Run Simulation**: Click "Run Simulation" button
-7. **View Results**: Check output files in the working directory
+### Simulation Setup
 
-### Parameter Dependencies
+- **Number of Runs**: the number of Monte Carlo runs (simulated experiments).
+- **Filename Slug**: the prefix of the output files. The tab shows the output location that results from it.
+- **Multiprocessing**: run the simulations in parallel on all CPU cores.
+- **Data Retention**: keep the simulated profiles of every run in memory. Retained profiles use much memory and are not written to the output files.
 
-The GUI enforces parameter dependencies automatically:
+### Physical Parameters
 
-- **Diffusion Parameters**:
-  - Select "Diffusion Length" OR "Coefficient + Lifetime"
-  - If Coefficient + Lifetime selected, both D and τ are required
-  - Live calculation shows diffusion length when D and τ are entered
+- **Diffusion Parameters**: diffusion length L, diffusion coefficient D, and lifetime τ, related by L² = D × τ. Enter any two of the three; the GUI computes the third.
+- **Initial Profile**: amplitude, mean position, and width of the initial Gaussian profile. Choose whether the width is the full width at half maximum (FWHM) or the standard deviation (σ). The GUI shows the equivalent value of the other quantity.
 
-- **Profile Width**:
-  - Select either FWHM or Sigma
-  - Live conversion shows equivalent value in the other unit
+### Experimental Conditions
 
-- **Noise Specification**:
-  - Fixed value: Enter noise standard deviation directly
-  - Estimate from data: Browse to CSV file with experimental profile
+- **Noise Parameters**: choose one of two options.
+  - **Fixed Noise Value**: enter the noise standard deviation σ or the contrast-to-noise ratio (CNR). The two fields are linked through the amplitude (CNR = amplitude / σ).
+  - **Estimate from Data**: select a CSV file that contains a measured initial profile as a single line of comma-separated values. DICE estimates the CNR of that profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package and sets the simulated noise level so that the simulated initial CNR equals the estimate. The amplitude and units of the measured profile do not matter.
+- **Spatial Domain**: the total width of the spatial axis and the number of pixels. The GUI shows the resulting pixel size.
+- **Temporal Domain**: choose one of two options.
+  - **Time Range**: start, stop, and number of evenly spaced time points.
+  - **Time Series**: an explicit, comma-separated list of time points. The GUI sorts the list and rejects duplicate values.
 
-- **Temporal Axis**:
-  - Time Range: Evenly spaced points (start, stop, steps)
-  - Time Series: Explicit comma-separated time values
+### Analysis Settings
 
-### Unit System
+The analysis acts on the results of the last simulation. It does not change the simulation.
 
-The GUI automatically updates all unit labels when you change the length or time units:
+- **Fit Method**: show results for the weighted least squares (WLS) or the ordinary least squares (OLS) fit of the mean squared displacement (MSD) against time.
+- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value.
+- **Explore Accuracy Threshold**: after a run, choose a threshold between 1% and 50% (0.01 to 0.50). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, for example "within ±10%". A target diagram shows the threshold. You can change the threshold as often as you like without running the simulation again.
 
-- Length units: meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
-- Time units: second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
-- Derived units update automatically (e.g., μm²/ns for diffusion coefficient)
+### Output Settings
 
-## Architecture
+- **Quick Setup**: presets for publication, presentation, and draft figures.
+- **Image Format**, **Resolution & Histogram**, **Typography**: file type (PNG, JPG, SVG, TIF), size, resolution, number of histogram bins, font size, and tick size of the accuracy histogram.
+- **Regenerate Plot**, **Load Results**, **Reset to Defaults**: redraw the histogram with the current settings, plot a results CSV file from an earlier run, or restore the default output settings.
 
-### Modules
+### Control panel
 
-- **dice_gui.py**: Main GUI application with PyQt6 interface
-- **validators.py**: Input validation functions for all parameter types
-- **dice_interface.py**: Bridge between GUI and DICE simulation engine
+- **Load Example...**: fill all tabs with example parameters.
+- **Run Simulation (Ctrl+R)**: check the inputs and start the simulation. Before the run starts, the GUI warns about settings that make the fits unreliable: a low CNR at the last time point, an initial profile that is narrow compared with the pixel size, or very few time points. You can continue or go back.
+- **Stop**: stop a running simulation.
+- A progress bar with elapsed and estimated remaining time.
 
-### Key Classes
+### Menus
 
-- **DiceGUI**: Main window with tab interface and parameter controls
-- **SimulationThread**: Background thread for running simulations without blocking UI
-- **DiceInterface**: Handles parameter conversion and simulation execution
-- **ValidationResult**: Encapsulates validation results with error messages
+- **File**: new, open, and save parameters files (the same text format that the command-line interface reads), recently used parameters files, and **Load Results...** (Ctrl+L) for a results CSV file.
+- **Plots**: **Accuracy Histogram** (Ctrl+H) redraws the histogram from the loaded results. The other entries in the menu are disabled.
+- **Settings**: **Global Units...** sets the default length unit and time unit.
+- **Help**: a link to the documentation, the list of keyboard shortcuts, and version information.
 
-## Validation
+## Units
 
-All inputs are validated before running simulations:
+The Global Units dialog (**Settings > Global Units...**) sets the default length unit and time unit. Each dimensioned input field also has its own unit selector, so you can enter, for example, the FWHM in nanometers and the spatial width in micrometers. A unit selector follows the global unit until you change it. When you save a parameters file, the per-parameter units are saved as `_unit` keys (see the [Parameter Reference](../docs/parameters.md#per-parameter-units)).
 
-- Positive integers: Number of runs, pixel width, time steps
-- Positive floats: Diffusion parameters, profile width, spatial width, noise value
-- Proximity level: Must be between 0 and 1
-- Time range: Start must be less than stop
-- Time series: Must be comma-separated finite values, no duplicates
-- File paths: Must exist and be valid files
+Available units:
 
-Invalid inputs show clear error messages indicating what needs to be corrected.
+- Length: meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
+- Time: second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
+
+## Input validation
+
+The GUI checks each field as you type and shows an error message below a field with an invalid value. A tab that contains an invalid field is marked. The rules are:
+
+- Number of runs and number of pixels: positive integers
+- Diffusion length, profile width, and spatial width: positive numbers
+- Diffusion coefficient, lifetime, amplitude, and noise σ: zero or positive numbers
+- Mean position: any number
+- Time range: numeric start and stop, with start less than stop
+- Time series: comma-separated finite numbers, without duplicates
+- Filename slug: not empty, with no characters that are invalid in file names
+- Noise data file: the file must exist
 
 ## Output
 
-The GUI generates the same outputs as the command-line DICE tool:
+The GUI writes the same files as the command-line interface, in `output/<slug>/` under the directory from which you started the GUI:
 
-- CSV files with simulation results
-- Histogram plots of diffusion coefficient estimates
-- Summary statistics (precision, accuracy metrics)
-- Text summaries of simulation parameters and results
+- `<slug>.csv`: results of every run
+- `<slug>_summary.txt`: parameters and summary statistics
+- `<slug>_accuracy_histogram.<type>`: histogram of the ratio of estimated to nominal diffusion coefficient (WLS fit)
 
-Output files are saved in the current working directory with the specified filename slug.
+The [CLI Guide](../docs/cli-guide.md#output-files) describes the contents of these files.
+
+## Code structure
+
+- `__main__.py`: entry point with the splash screen
+- `dice_gui.py`: main window (`DiceGUI`), menus, and control panel
+- `tabs/`: one module for each tab
+- `dice_interface.py`: `DiceInterface`, which converts the GUI inputs to parameters and runs the simulation
+- `simulation_thread.py`: `SimulationThread`, which runs the simulation in the background so that the window stays responsive
+- `validators.py`, `validation_manager.py`: input validation (`ValidationResult`, `ValidationManager`)
+- `global_units_dialog.py`, `presets.py`, `proximity_widget.py`, `styles.py`, `accessibility.py`: units dialog, output presets, target diagram, theme, and keyboard access
 
 ## Troubleshooting
 
-### GUI Won't Start
+### The GUI does not start
 
-If the GUI fails to start, check:
+1. Check that PyQt6 can be imported: `uv run python -c "import PyQt6"`.
+2. Install the dependencies again: `uv sync`.
+3. Check that a display is available. See the [Installation Guide](../docs/installation.md#troubleshooting) for Linux, SSH, and Windows.
 
-1. PyQt6 is installed: `uv run python -c "import PyQt6"`
-2. All dependencies are installed: `uv sync`
-3. Display environment is available (required for GUI applications)
+### Validation errors
 
-### Validation Errors
+1. Read the error message below the marked field.
+2. Check that each required field has a value and that values are positive where required.
+3. For "Estimate from Data", check that the file exists.
 
-If you receive validation errors:
+### The simulation fails
 
-1. Check that all required fields are filled
-2. Verify numeric values are positive where required
-3. Ensure mutually exclusive groups have exactly one option selected
-4. Check that file paths exist for "estimate from data" option
-
-### Simulation Errors
-
-If simulation fails:
-
-1. Verify dice.py is importable from the working directory
-2. Check that all parameters are physically reasonable
-3. Ensure sufficient memory for large simulations
-4. Review error message for specific failure cause
-
-## Future Enhancements
-
-Planned features for future releases:
-
-- Advanced settings dialog for visualization and performance parameters
-- Results viewer window with embedded plots
-- Parameter save/load functionality (JSON format)
-- Parameter templates and presets
-- Batch processing capabilities
-- Enhanced CNR estimation with FFT visualization
-- Help system with parameter descriptions and examples
-
-## Requirements
-
-- Python >= 3.11
-- PyQt6 >= 6.0.0
-- numpy >= 1.20.0
-- scipy >= 1.7.0
-- pandas >= 1.3.0
-- matplotlib >= 3.3.0
-- All other DICE dependencies
+1. Read the error message for the cause.
+2. Check that the parameters are physically reasonable, for example that the spatial width is several times larger than the final profile width.
+3. Reduce the number of runs, or turn off data retention, if memory is low.
 
 ## License
 
-Same license as DICE (see main repository LICENSE file).
+DICE, including the GUI, is licensed under the MIT License. See [LICENSE.md](../LICENSE.md).
