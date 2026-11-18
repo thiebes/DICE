@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QAbstractButton, QLabel, QWidget
 
 from dice import __version__
 from dice.utils.units import length_abbreviation
-from gui_support import TAB_NAMES
+from gui_support import TAB_NAMES, fit_method_radio
 
 pytestmark = pytest.mark.gui
 
@@ -103,7 +103,8 @@ class TestDefaultValues:
         assert not window.noise_file_input.isEnabled()
 
     def test_analysis_tab_waits_for_results(self, window):
-        assert window.plot_method_wls_radio.isChecked()
+        assert fit_method_radio(window, "WLS").isChecked()
+        assert not fit_method_radio(window, "OLS").isChecked()
         assert [window.precision_std_label.text(), window.precision_rse_label.text(),
                 window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] == ["—"] * 4
         assert not window.precision_placeholder.isHidden()

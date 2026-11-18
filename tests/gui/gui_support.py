@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLineEdit
+from PyQt6.QtWidgets import QLineEdit, QRadioButton
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES_DIR = REPO_ROOT / "data" / "examples"
@@ -71,6 +71,15 @@ def enter_text(qtbot, line_edit: QLineEdit, text: str) -> None:
     line_edit.clear()
     qtbot.keyClicks(line_edit, text)
     qtbot.keyClick(line_edit, Qt.Key.Key_Return)
+
+
+def fit_method_radio(window, abbreviation: str) -> QRadioButton:
+    """The Analysis tab's fit-method radio whose label ends with '(WLS)' or '(OLS)'."""
+    analysis_tab = window.tabs.widget(TAB_NAMES.index("Analysis Settings"))
+    return next(
+        radio for radio in analysis_tab.findChildren(QRadioButton)
+        if radio.text().endswith(f"({abbreviation})")
+    )
 
 
 def trigger_menu_action(window, menu_title: str, action_text: str) -> None:

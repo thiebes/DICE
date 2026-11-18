@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import QMessageBox
 
 from gui_support import (
     EXAMPLE_PROFILE_CSV, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
-    d_estimates_from_csv, fraction_within, trigger_menu_action,
+    d_estimates_from_csv, fit_method_radio, fraction_within, trigger_menu_action,
 )
 
 pytestmark = pytest.mark.gui
@@ -47,13 +47,12 @@ def _fraction_text(fraction: float, threshold: float) -> str:
     return f"{fraction:.1%} of estimates fall within ±{round(threshold * 100)}% of nominal"
 
 
-def _select_fit_method(qtbot, window, method: str) -> None:
-    radio = window.plot_method_wls_radio if method == "wls" else window.plot_method_ols_radio
-    radio.click()
+def _select_fit_method(window, method: str) -> None:
+    fit_method_radio(window, method.upper()).click()
 
 
 @pytest.fixture
-def window_with_results(qtbot, window, dialogs, completed_run):
+def window_with_results(window, dialogs, completed_run):
     window.simulation_finished(completed_run.as_thread_result())
     assert dialogs.titles("information") == ["Simulation Complete"]
     return window
@@ -62,8 +61,8 @@ def window_with_results(qtbot, window, dialogs, completed_run):
 class TestPrecisionSummary:
 
     @pytest.mark.parametrize("method", ["wls", "ols"])
-    def test_summary_describes_the_selected_fit_method(self, qtbot, window, completed_run, method):
-        _select_fit_method(qtbot, window, method)
+    def test_summary_describes_the_selected_fit_method(self, window, completed_run, method):
+        _select_fit_method(window, method)
         window.simulation_finished(completed_run.as_thread_result())
 
         estimates, nominal = d_estimates_from_csv(completed_run.csv_path, FIT_METHOD_COLUMNS[method])
@@ -74,12 +73,12 @@ class TestPrecisionSummary:
 
     @pytest.mark.parametrize("method", ["ols", "wls"])
     def test_changing_fit_method_after_a_run_updates_the_summary(
-        self, qtbot, window_with_results, completed_run, method,
+        self, window_with_results, completed_run, method,
     ):
-        _select_fit_method(qtbot, window_with_results, "ols" if method == "wls" else "wls")
+        _select_fit_method(window_with_results, "ols" if method == "wls" else "wls")
         window_with_results.proximity_spin.setValue(0.2)
 
-        _select_fit_method(qtbot, window_with_results, method)
+        _select_fit_method(window_with_results, method)
 
         estimates, nominal = d_estimates_from_csv(completed_run.csv_path, FIT_METHOD_COLUMNS[method])
         assert _summary_labels(window_with_results) == _expected_summary(estimates, nominal)

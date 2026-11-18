@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import os
 
+import pandas as pd
 import pytest
 from PyQt6.QtCore import Qt
 
 from dice.models.results import MonteCarloOutput
 from dice_gui.dice_interface import DiceInterface
 from dice_gui.simulation_thread import SimulationThread
-from gui_support import quick_test_engine_parameters
+from gui_support import OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN, quick_test_engine_parameters
 
 pytestmark = pytest.mark.gui
 
@@ -55,7 +56,6 @@ class TestSuccessfulRun:
         [(result, processed)] = finished_run.results
         assert isinstance(result, MonteCarloOutput)
         assert result.num_runs == len(result.run_results) == 5
-        assert all(run.wls_slope is not None and run.ols_slope is not None for run in result.run_results)
         assert processed["filename slug"] == "quick_test"
         assert processed["nominal diffusion length"] == pytest.approx(0.1)
         assert len(processed["time series"]) == 5
@@ -69,6 +69,9 @@ class TestSuccessfulRun:
         assert sorted(path.name for path in output_dir.iterdir()) == [
             "quick_test.csv", "quick_test_accuracy_histogram.png", "quick_test_summary.txt",
         ]
+        frame = pd.read_csv(output_dir / "quick_test.csv")
+        for column in (WLS_SLOPE_COLUMN, OLS_SLOPE_COLUMN):
+            assert frame[column].notna().sum() == 5, column
 
 
 class TestFailedRun:
