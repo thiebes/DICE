@@ -1,416 +1,217 @@
 # DICE Installation Guide
 
-Complete installation instructions for all platforms and methods.
+DICE runs on Windows, macOS, and Linux and requires Python 3.11 or later. The recommended installation uses uv, which installs the dependency versions recorded in `uv.lock`. Installation with pip is also supported.
 
-## Python Requirements
+## Python
 
-DICE requires Python 3.8 or later and has been tested with Python 3.11, 3.12, and 3.13.
+DICE requires Python 3.11 or later. The test suite runs on Python 3.11 and 3.12, on Windows and Linux.
 
-### Installing Python
+uv can download a suitable Python version for you. If you install with pip, install Python first, for example from [python.org](https://www.python.org/downloads/) or with conda.
 
-- **Official website:** [python.org/downloads](https://www.python.org/downloads/)
-- **Package managers:** conda, homebrew (macOS), apt (Linux)
-- **Online environments:** [Google Colab](https://colab.research.google.com/), [DataLore](https://datalore.jetbrains.com/)
+## Install with uv (recommended)
 
-## Installation Methods
+[uv](https://docs.astral.sh/uv/) is a Python package and project manager. For DICE, it creates a virtual environment and installs the exact dependency versions recorded in `uv.lock`, so every installation uses the versions that the tests ran against.
 
-### Method 1: Using uv (Recommended)
+### Install uv
 
-[uv](https://github.com/astral-sh/uv) is a fast Python package installer and resolver that simplifies dependency management.
-
-#### Install uv
-
-**macOS and Linux:**
+Install uv with a package manager:
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows
+winget install --id=astral-sh.uv -e
+
+# macOS (Homebrew)
+brew install uv
+
+# Any platform that already has Python and pipx
+pipx install uv
 ```
 
-**Windows:**
+The [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) lists the other methods.
 
-```powershell
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+### Install DICE
+
+```bash
+git clone https://github.com/thiebes/DICE.git
+cd DICE
+uv sync
 ```
 
-#### Install DICE
+`uv sync` creates a virtual environment in `.venv/` and installs DICE with its runtime dependencies, including the graphical user interface (GUI).
 
-1. **Clone the repository:**
+### Run DICE
 
-   ```bash
-   git clone https://github.com/thiebes/DICE.git
-   cd DICE
-   ```
+From the `DICE` directory:
 
-2. **Sync dependencies:**
+```bash
+# Graphical user interface
+uv run dice-gui
 
-   ```bash
-   uv sync
-   ```
+# Command-line interface with an example parameters file
+uv run dice data/examples/parameters.txt
+```
 
-   This automatically creates a virtual environment and installs all dependencies including the GUI.
+`uv run` runs the command inside the project environment. You do not need to activate the environment first.
 
-3. **Run DICE:**
+## Install with pip
 
-   ```bash
-   # Launch GUI
-   uv run dice-gui
+Create and activate a virtual environment, then install DICE from the repository directory:
 
-   # Or run command-line version
-   uv run dice parameters.txt
-   ```
+```bash
+git clone https://github.com/thiebes/DICE.git
+cd DICE
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install .
+```
 
-#### Benefits of uv
+`pip install .` installs DICE and the dependencies declared in `pyproject.toml`. pip selects the newest versions that satisfy the declared ranges, so they can differ from the versions in `uv.lock`.
 
-- Fast dependency resolution and installation
-- Automatic virtual environment management
-- Reproducible environments with lock files
-- No need to manually activate/deactivate environments
+For development, install in editable mode with the `dev` extra. Changes to the source code then take effect without a reinstall:
 
-### Method 2: Install Dependencies and Use Directly
+```bash
+pip install -e ".[dev]"
+```
 
-This method installs dependencies into your current Python environment.
+While the environment is active, the `dice` and `dice-gui` commands are available from any directory:
 
-1. **Clone or download** this repository to your local machine
+```bash
+dice-gui
+dice data/examples/parameters.txt
+```
 
-2. **Navigate** to the DICE directory:
+### Install with conda
 
-   ```bash
-   cd DICE
-   ```
+conda can provide Python; pip then installs DICE into the conda environment:
 
-3. **Install dependencies** using pip:
+```bash
+conda create -n dice python=3.12
+conda activate dice
+pip install .
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+Run the last command from the `DICE` directory.
 
-4. **Run DICE:**
+## Optional extras
 
-   ```bash
-   # Launch GUI
-   python -m dice_gui.dice_gui
+`pyproject.toml` defines three optional groups of dependencies (extras):
 
-   # Or run command-line version
-   python run_dice.py parameters.txt
-   ```
-
-### Method 3: Install as Editable Package
-
-This method installs DICE as a package, allowing you to use the `dice` and `dice-gui` commands from anywhere.
-
-1. **Clone** this repository:
-
-   ```bash
-   git clone https://github.com/thiebes/DICE.git
-   cd DICE
-   ```
-
-2. **Install** in development mode:
-
-   ```bash
-   pip install -e .
-   ```
-
-   This installs DICE and all dependencies, and creates command-line entry points.
-
-3. **Run DICE:**
-
-   ```bash
-   # Launch GUI (from any directory)
-   dice-gui
-
-   # Or run command-line version
-   dice parameters.txt
-   ```
-
-## Dependencies
-
-### Required Packages
-
-DICE depends on the following Python packages:
-
-- **numpy>=1.20.0** - Fundamental package for scientific computing
-- **scipy>=1.7.0** - Scientific and technical computing
-- **pandas>=1.3.0** - High-performance data structures and analysis
-- **statsmodels>=0.12.0** - Statistical modeling and econometrics
-- **matplotlib>=3.3.0** - Plotting and visualization
-- **seaborn>=0.11.0** - Statistical data visualization
-- **joblib>=1.0.0** - Lightweight pipelining and parallel processing
-- **PyQt6>=6.0.0** - GUI framework (required for graphical interface)
-
-### Optional Packages
-
-For web application (CNR estimator):
-
-- **flask>=2.0.0** - Web framework
-
-For testing:
-
-- **pytest>=6.0.0** - Testing framework
-- **pytest-cov>=2.12.0** - Coverage plugin
-
-### Installing Optional Dependencies
+| Extra | Adds | Needed for |
+| ------- | ------------- | ------------- |
+| `webapp` | Flask | Running the CNR estimator web app in `webapp/` locally |
+| `test` | pytest, pytest-cov, pytest-qt | Running the test suite |
+| `dev` | Everything in `test`, plus Flask | Development |
 
 With uv:
 
 ```bash
-# Install web app dependencies
 uv sync --extra webapp
-
-# Install test dependencies
-uv sync --extra test
-
-# Install all optional dependencies
+uv sync --extra dev
 uv sync --all-extras
 ```
 
-With pip:
-
-```bash
-# Install web app dependencies
-pip install -e .[webapp]
-
-# Install test dependencies
-pip install -e .[test]
-
-# Install all optional dependencies
-pip install -e .[dev]
-```
-
-### Standard Library Modules
-
-The following are part of the Python Standard Library and do not need separate installation:
-
-- **ast** - For working with abstract syntax trees
-- **os** - Operating system dependent functionality
-- **re** - Regular expression matching operations
-- **typing** - Type hint support
-
-## Virtual Environments
-
-### Using uv (automatic)
-
-When you run `uv sync`, uv automatically creates and manages a virtual environment in `.venv/`.
-
-### Using venv manually
-
-If not using uv, it's recommended to use a virtual environment:
-
-**Create virtual environment:**
-
-```bash
-python -m venv venv
-```
-
-**Activate virtual environment:**
-
-```bash
-# macOS/Linux:
-source venv/bin/activate
-
-# Windows:
-venv\Scripts\activate
-```
-
-**Install dependencies:**
-
-```bash
-pip install -r requirements.txt
-```
-
-**Deactivate when done:**
-
-```bash
-deactivate
-```
-
-### Using conda
-
-```bash
-# Create conda environment
-conda create -n dice python=3.11
-conda activate dice
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-## Verifying Installation
-
-### Check Python version
-
-```bash
-python --version
-```
-
-Should show Python 3.8 or later.
-
-### Check installed packages
-
-With uv:
-
-```bash
-uv pip list
-```
+`uv sync` installs only the extras named in the command and removes packages that belong to other extras. To keep all of them, use `uv sync --all-extras`.
 
 With pip:
 
 ```bash
-pip list
+pip install ".[webapp]"
+pip install -e ".[dev]"
 ```
 
-Should show all required packages installed.
+## Dependencies
 
-### Test DICE import
+DICE depends on numpy, scipy, pandas, statsmodels, matplotlib, seaborn, joblib, PyQt6, and fft-cnr. Both installation methods install them automatically. The version ranges are declared in `pyproject.toml`, and the tested versions are recorded in `uv.lock`.
 
-```python
-python -c "import dice; print('DICE imported successfully')"
+DICE estimates the contrast-to-noise ratio (CNR) of a profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. Its documentation is at [fft-cnr.readthedocs.io](https://fft-cnr.readthedocs.io).
+
+## Verify the installation
+
+Print the installed version:
+
+```bash
+uv run dice --version       # with uv
+dice --version              # with pip, environment active
 ```
 
-### Test GUI availability
+Both commands print the installed version, for example `dice 1.3.0`.
 
-```python
-python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 available')"
+Check that the GUI toolkit can be imported:
+
+```bash
+uv run python -c "from PyQt6.QtWidgets import QApplication; print('PyQt6 available')"
 ```
+
+Run a short simulation (100 runs) from the `DICE` directory:
+
+```bash
+uv run dice data/examples/quick_test.txt
+```
+
+The results are written to `output/quick_test/`.
 
 ## Troubleshooting
 
-### PyQt6 Installation Issues
+### The GUI does not start on Linux
 
-**Linux:**
-
-PyQt6 may require additional system dependencies:
+The PyQt6 packages include Qt, but Qt uses some system libraries. If the error message says that Qt could not load the platform plugin "xcb", install the XCB cursor library:
 
 ```bash
-# Ubuntu/Debian
-sudo apt-get install python3-pyqt6
+# Debian, Ubuntu
+sudo apt-get install libxcb-cursor0
 
 # Fedora
-sudo dnf install python3-pyqt6
+sudo dnf install xcb-util-cursor
 ```
 
-**macOS:**
+### The GUI does not start over SSH or in a virtual machine
 
-If you encounter issues, try:
+A GUI needs a display. Over SSH, connect with X forwarding (`ssh -X` or `ssh -Y`). In a virtual machine, configure display forwarding. Alternatively, use the command-line interface, which needs no display.
 
-```bash
-pip install --upgrade pip
-pip install PyQt6 --no-cache-dir
-```
+### The GUI does not start on Windows
 
-**Windows:**
+Install the current Microsoft Visual C++ Redistributable, which PyQt6 requires.
 
-Ensure you have the latest Visual C++ Redistributable installed.
+### `No module named 'dice'` or `No module named 'fft_cnr'`
 
-### Display Issues
+Python is running outside the DICE environment. Use `uv run` from the `DICE` directory, or activate the virtual environment before you run `python`, `dice`, or `dice-gui`. If the error remains, install again with `uv sync` or `pip install .`.
 
-If the GUI won't launch, check:
+### Permission errors
 
-1. **Display environment is available:** GUI applications require a display
-2. **SSH with X forwarding:** If connecting via SSH, use `ssh -X` or `ssh -Y`
-3. **Virtual machines:** Ensure display forwarding is configured
+Install into a virtual environment, as described above. Do not use `sudo pip`.
 
-### Permission Errors
+### Dependency conflicts
 
-If you get permission errors during installation:
+Create a new virtual environment and install DICE into it. With uv, `uv sync` installs the locked versions and avoids conflicts with other projects.
 
-- Use a virtual environment (recommended)
-- Or install with `--user` flag: `pip install --user -r requirements.txt`
-- Avoid using `sudo pip` (not recommended)
-
-### Dependency Conflicts
-
-If you encounter version conflicts:
-
-1. **Create fresh virtual environment:**
-
-   ```bash
-   python -m venv fresh_venv
-   source fresh_venv/bin/activate  # or fresh_venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   ```
-
-2. **Use uv for better dependency resolution:**
-
-   ```bash
-   uv sync
-   ```
-
-### Import Errors
-
-If you get import errors when running DICE:
-
-1. **Check you're in the DICE directory**
-2. **Verify virtual environment is activated**
-3. **Reinstall dependencies:**
-
-   ```bash
-   pip install --force-reinstall -r requirements.txt
-   ```
-
-## Updating DICE
-
-### With git
+## Update DICE
 
 ```bash
 cd DICE
-git pull origin main
-uv sync  # or pip install -r requirements.txt
+git pull
+uv sync
 ```
 
-### Updating dependencies
+With pip, run `pip install .` (or `pip install -e ".[dev]"`) again after `git pull`, with the environment active.
 
-```bash
-# With uv
-uv sync --upgrade
+## Uninstall
 
-# With pip
-pip install --upgrade -r requirements.txt
-```
+- pip installation: `pip uninstall dice`
+- uv or venv environment: delete the `.venv` directory inside `DICE`
+- conda environment: `conda env remove -n dice`
+- source code: delete the `DICE` directory
 
-## Uninstalling
+## Get help
 
-### If installed with pip -e
-
-```bash
-pip uninstall dice
-```
-
-### Remove virtual environment
-
-```bash
-# uv
-rm -rf .venv
-
-# venv
-rm -rf venv
-
-# conda
-conda env remove -n dice
-```
-
-### Remove repository
-
-```bash
-cd ..
-rm -rf DICE
-```
-
-## Getting Help
-
-If you encounter issues during installation:
-
-1. **Check existing issues:** [GitHub Issues](https://github.com/thiebes/DICE/issues)
-2. **Create new issue:** Include:
-   - Operating system and version
+1. Search the existing issues: [GitHub Issues](https://github.com/thiebes/DICE/issues)
+2. Open a new issue that includes:
+   - operating system and version
    - Python version (`python --version`)
-   - Error messages (full traceback)
-   - Installation method used
-3. **Contact author:** [joseph@thiebes.org](mailto:joseph@thiebes.org)
+   - the full error message
+   - the installation method
+3. Contact the author: [joseph@thiebes.org](mailto:joseph@thiebes.org)
 
-Remember to regularly update your packages to ensure smooth functioning of DICE.
-
-## See Also
+## See also
 
 - [Parameter Reference](parameters.md)
 - [CLI Guide](cli-guide.md)
