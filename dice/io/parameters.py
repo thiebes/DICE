@@ -197,7 +197,16 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
                 raise ValueError("Error reading CSV for noise estimation.") from e
-            sigma_n = fft_cnr(t0_profile_y).noise_rms
+            # The measured profile is in its own intensity units, so its noise_rms
+            # cannot be reused directly. The simulated profile has peak amplitude
+            # amplitude_0; its noise must reproduce the measured initial CNR.
+            cnr_estimate = fft_cnr(t0_profile_y).cnr
+            if not 0 < cnr_estimate < np.inf:
+                raise ValueError(
+                    f"Could not estimate a finite, positive CNR from {noise_filename!r} "
+                    f"(estimate: {cnr_estimate})."
+                )
+            sigma_n = parameters_dictionary['amplitude_0'] / cnr_estimate
             parameters_dictionary['noise series'] = [sigma_n]
 
         elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):

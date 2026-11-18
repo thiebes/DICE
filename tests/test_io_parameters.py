@@ -445,5 +445,69 @@ class TestMixedUnitParameters:
         assert 'sigma2_0' in result
 
 
+EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
+EXAMPLE_PROFILE = EXAMPLES_DIR / 'example_profile.csv'
+
+
+class TestEstimateNoiseFromData:
+    """'estimate noise from data' must set the noise so the simulated initial CNR
+    equals the CNR fft-cnr estimates from the measured profile."""
+
+    def _write_parameters(self, directory: Path, noise_file: Path, amplitude_0: float) -> Path:
+        import ast
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params['estimate noise from data'] = str(noise_file)
+        params['amplitude_0'] = amplitude_0
+        params_file = directory / 'estimate_noise.txt'
+        params_file.write_text(str(params))
+        return params_file
+
+    def _write_profile(self, directory: Path, profile: np.ndarray) -> Path:
+        profile_file = directory / 'profile.csv'
+        np.savetxt(profile_file, profile.reshape(1, -1), delimiter=',', fmt='%.17g')
+        return profile_file
+
+    @pytest.mark.parametrize('amplitude_0', [1.0, 2.5])
+    def test_simulated_cnr_equals_file_cnr(self, tmp_path, amplitude_0):
+        from fft_cnr import fft_cnr
+        file_estimate = fft_cnr(np.loadtxt(EXAMPLE_PROFILE, delimiter=','))
+
+        params = open_parameters(self._write_parameters(tmp_path, EXAMPLE_PROFILE, amplitude_0))
+
+        assert len(params['noise series']) == 1
+        noise_sigma = params['noise series'][0]
+        assert amplitude_0 / noise_sigma == pytest.approx(file_estimate.cnr, rel=1e-12)
+        # The file's noise_rms is in its own intensity units and must not leak through.
+        assert noise_sigma != pytest.approx(file_estimate.noise_rms)
+
+    def test_constant_profile_rejected(self, tmp_path):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        constant_file = self._write_profile(tmp_path, np.full_like(measured, measured[0]))
+        params_file = self._write_parameters(tmp_path, constant_file, 1.0)
+        with pytest.raises(ValueError, match="finite, positive CNR"):
+            open_parameters(params_file)
+
+    def test_short_profile_rejected(self, tmp_path):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        short_file = self._write_profile(tmp_path, measured[:10])
+        params_file = self._write_parameters(tmp_path, short_file, 1.0)
+        with pytest.raises(ValueError, match="too short"):
+            open_parameters(params_file)
+
+    def test_non_numeric_profile_rejected(self, tmp_path):
+        text = EXAMPLE_PROFILE.read_text().replace('1530', 'peak', 1)
+        bad_file = tmp_path / 'non_numeric.csv'
+        bad_file.write_text(text)
+        params_file = self._write_parameters(tmp_path, bad_file, 1.0)
+        with pytest.raises(ValueError, match="Error reading CSV"):
+            open_parameters(params_file)
+
+    def test_missing_amplitude_rejected(self):
+        params = {'estimate noise from data': str(EXAMPLE_PROFILE)}
+        with pytest.raises(ValueError, match="amplitude_0"):
+            handle_noise_parameters(params)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
