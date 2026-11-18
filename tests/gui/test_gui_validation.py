@@ -194,3 +194,13 @@ class TestConsistencyWarnings:
         assert window.simulation_thread is None
         assert window.run_button.isEnabled()
         assert window.status_label.text() == "Ready to run"
+
+    def test_short_time_series_warns(self, qtbot, window, dialogs):
+        window.time_series_radio.click()
+        window.time_series_input.setPlainText("0, 2")
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        _click_run(qtbot, window)
+
+        assert "Only 2 time point(s)" in dialogs.texts("question")[0]
+        assert window.simulation_thread is None
