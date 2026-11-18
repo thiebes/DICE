@@ -2075,9 +2075,9 @@ Shortcuts are scoped to the active tab.</p>
 
 <h3>Tab 4: Analysis Settings</h3>
 <table>
-<tr><td><b>Alt+P</b></td><td>Proximity Level</td></tr>
 <tr><td><b>Alt+W</b></td><td>Weighted Least Squares</td></tr>
 <tr><td><b>Alt+O</b></td><td>Ordinary Least Squares</td></tr>
+<tr><td><b>Alt+T</b></td><td>Accuracy Threshold</td></tr>
 </table>
 
 <h3>Tab 5: Output Settings</h3>

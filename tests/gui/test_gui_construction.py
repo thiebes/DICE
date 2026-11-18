@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QAbstractButton, QLabel, QWidget
 
 from dice import __version__
 from dice.utils.units import length_abbreviation
@@ -19,6 +19,18 @@ pytestmark = pytest.mark.gui
 def _menu_action_texts(window, menu_title: str) -> list[str]:
     menu = next(a.menu() for a in window.menuBar().actions() if a.text() == menu_title)
     return [action.text() for action in menu.actions() if not action.isSeparator()]
+
+
+def _mnemonics_on_tab(tab: QWidget) -> dict[str, str]:
+    """Map Alt+letter to its widget text for every buddy label and button mnemonic on a tab."""
+    labelled = [label for label in tab.findChildren(QLabel) if label.buddy() is not None]
+    widgets = labelled + tab.findChildren(QAbstractButton)
+    mnemonics = {}
+    for widget in widgets:
+        match = re.search(r"&(\w)", widget.text())
+        if match:
+            mnemonics[f"Alt+{match.group(1).upper()}"] = widget.text().replace("&", "").rstrip(":")
+    return mnemonics
 
 
 def _shortcuts_by_tab(dialog_html: str) -> list[dict[str, str]]:
@@ -138,3 +150,14 @@ class TestAuxiliaryDialogs:
         window.show_keyboard_shortcuts()
         assert dialogs.titles("information") == ["Keyboard Shortcuts"]
         assert len(_shortcuts_by_tab(dialogs.texts("information")[0])) == len(TAB_NAMES)
+
+    @pytest.mark.parametrize("tab_index", range(len(TAB_NAMES)), ids=TAB_NAMES)
+    def test_keyboard_shortcuts_dialog_matches_label_mnemonics(self, window, dialogs, tab_index):
+        """Each Alt+letter the dialog lists must be the mnemonic of a label on that tab."""
+        window.show_keyboard_shortcuts()
+        listed = _shortcuts_by_tab(dialogs.texts("information")[0])[tab_index]
+        actual = _mnemonics_on_tab(window.tabs.widget(tab_index))
+        assert set(listed) <= set(actual), (
+            f"Shortcuts listed but not wired on '{TAB_NAMES[tab_index]}': "
+            f"{ {key: listed[key] for key in set(listed) - set(actual)} }; actual mnemonics: {actual}"
+        )
