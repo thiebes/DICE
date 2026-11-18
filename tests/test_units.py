@@ -24,6 +24,8 @@ from dice.utils.units import (
     length_abbreviation,
     time_abbreviation,
     diffusion_coefficient_label,
+    global_length_unit,
+    global_time_unit,
     resolve_units,
 )
 
@@ -568,3 +570,22 @@ class TestResolveUnits:
         result = resolve_units(params)
         assert 'FWHM_0_unit' not in result
         assert 'FWHM_0' not in result
+
+
+class TestGlobalUnits:
+    """Global unit lookup shared by resolve_units and the output writers."""
+
+    def test_defaults(self):
+        assert global_length_unit({}) == 'micrometer'
+        assert global_time_unit({}) == 'nanosecond'
+
+    def test_legacy_keys(self):
+        params = {'length unit': 'nanometer', 'time unit': 'picosecond'}
+        assert global_length_unit(params) == 'nanometer'
+        assert global_time_unit(params) == 'picosecond'
+
+    def test_canonical_keys_take_precedence(self):
+        params = {'length unit': 'nanometer', 'length_unit': 'angstrom',
+                  'time unit': 'picosecond', 'time_unit': 'femtosecond'}
+        assert global_length_unit(params) == 'angstrom'
+        assert global_time_unit(params) == 'femtosecond'

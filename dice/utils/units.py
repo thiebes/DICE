@@ -316,6 +316,16 @@ def diffusion_coefficient_label(length_unit: str, time_unit: str) -> str:
     return f"{l_abbr}\u00b2/{t_abbr}"
 
 
+def global_length_unit(parameters: Dict[str, Any]) -> str:
+    """Global simulation length unit of a parameters dictionary (default 'micrometer')."""
+    return parameters.get('length_unit', parameters.get('length unit', 'micrometer'))
+
+
+def global_time_unit(parameters: Dict[str, Any]) -> str:
+    """Global simulation time unit of a parameters dictionary (default 'nanosecond')."""
+    return parameters.get('time_unit', parameters.get('time unit', 'nanosecond'))
+
+
 def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize all parameter values to the global simulation unit system.
@@ -342,8 +352,8 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
     result = dict(parameters)
 
-    target_length = result.get('length_unit', result.get('length unit', 'micrometer'))
-    target_time = result.get('time_unit', result.get('time unit', 'nanosecond'))
+    target_length = global_length_unit(result)
+    target_time = global_time_unit(result)
 
     # Length-dimension parameters and their override key mappings.
     # Each entry: (value_keys, override_keys)

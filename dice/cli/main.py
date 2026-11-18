@@ -20,6 +20,7 @@ from ..analysis.statistics import analyze_simulation_results
 from ..io.results import export_collated_results, write_summary_file
 from ..visualization.histograms import plot_accuracy_histogram
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.units import global_length_unit, global_time_unit
 
 
 def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]) -> Path:
@@ -192,9 +193,12 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     args : Namespace
         Command-line arguments.
     """
+    length_unit = global_length_unit(parameters)
+    time_unit = global_time_unit(parameters)
+
     if not args.quiet:
         print("Saving results...")
-    
+
     # Analyze results with standard proximity levels
     analysis = analyze_simulation_results(result)
     
@@ -212,7 +216,9 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     if export_format in ['csv', 'both']:
         csv_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}.csv"
         # The export function returns a DataFrame and writes CSV automatically
-        df = export_collated_results(result, str(csv_file))
+        df = export_collated_results(
+            result, str(csv_file), length_unit=length_unit, time_unit=time_unit
+        )
         if not args.quiet:
             print(f"Results saved to: {csv_file}")
     
@@ -239,7 +245,10 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     
     # Write summary  
     summary_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}_summary.txt"
-    write_summary_file(result, str(summary_file), parameters, analysis)
+    write_summary_file(
+        result, str(summary_file), parameters, analysis,
+        length_unit=length_unit, time_unit=time_unit,
+    )
     if not args.quiet:
         print(f"Summary saved to: {summary_file}")
 

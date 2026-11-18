@@ -14,6 +14,9 @@ from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.units import (
+    global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
+)
 from fft_cnr import fft_cnr
 from ..core.noise import make_noise_distribution
 from ..models.parameters import SimulationParameters
@@ -446,7 +449,12 @@ def validate_parameters(params) -> None:
         
         if params.get('pixel width', 0) <= 0:
             raise ValueError("Pixel width must be positive.")
-        
+
+        # Outputs convert from the global units, so reject an unknown unit
+        # before the simulation runs rather than when the results are written.
+        validate_length_unit(global_length_unit(params))
+        validate_time_unit(global_time_unit(params))
+
         return
     
     # Original validation for SimulationParameters object
