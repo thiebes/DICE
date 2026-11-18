@@ -370,6 +370,30 @@ class TestSeededSimulation:
         assert {child.entropy for child in children} == {11}
 
 
+class TestSplitIntoBatches:
+    """Parallel batches cover every run once and keep every worker busy."""
+
+    @pytest.mark.parametrize('worker_count', [1, 2, 8])
+    @pytest.mark.parametrize('run_count', [1, 7, 8, 9, 70, 71, 100])
+    def test_batches_cover_each_run_once(self, run_count, worker_count):
+        from dice.analysis.simulation import MAX_PROGRESS_BATCHES, split_into_batches
+        batches = split_into_batches(run_count, worker_count)
+        assert [i for batch in batches for i in batch] == list(range(run_count))
+        assert 1 <= len(batches) <= MAX_PROGRESS_BATCHES
+        sizes = [len(batch) for batch in batches]
+        assert max(sizes) - min(sizes) <= 1
+        assert min(sizes) >= min(run_count, worker_count)
+
+    def test_fewer_runs_than_workers_is_one_batch(self):
+        from dice.analysis.simulation import split_into_batches
+        assert split_into_batches(8, 8) == [range(0, 8)]
+        assert split_into_batches(3, 8) == [range(0, 3)]
+
+    def test_no_runs_no_batches(self):
+        from dice.analysis.simulation import split_into_batches
+        assert split_into_batches(0, 8) == []
+
+
 class TestScanRunnerCompatibility:
     """Test backward compatibility wrapper."""
     

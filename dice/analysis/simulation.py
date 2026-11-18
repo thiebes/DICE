@@ -7,7 +7,7 @@ simulations of diffusion measurements with noise.
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
@@ -21,6 +21,9 @@ from ..utils.legacy_compatibility import (
     create_parameters_from_legacy,
     convert_legacy_result_to_dict,
 )
+
+# Most batches a parallel simulation is split into; the progress callback reports after each.
+MAX_PROGRESS_BATCHES = 10
 
 
 def run_single_simulation(
@@ -199,29 +202,20 @@ def run_monte_carlo_simulation(
     
     # Run simulations
     if multiprocessing:
-        # Batch parallel execution to enable progress reporting.
-        # Each batch creates a joblib worker pool, trading some startup
-        # overhead for per-batch progress callbacks.
-        num_batches = min(10, total_runs)
-        batch_size = (total_runs + num_batches - 1) // num_batches  # Ceiling division
+        # Run in batches so the progress callback can report between them;
+        # joblib reuses its worker pool from one batch to the next.
+        n_jobs = -1
         results = []
 
-        for batch_idx in range(num_batches):
-            start = batch_idx * batch_size
-            end = min(start + batch_size, total_runs)
-            batch_params = run_parameters[start:end]
-
-            if not batch_params:
-                break
-
-            batch_results = Parallel(n_jobs=-1)(
-                delayed(run_single_simulation)(*params)
-                for params in batch_params
+        for batch in split_into_batches(total_runs, effective_n_jobs(n_jobs)):
+            batch_results = Parallel(n_jobs=n_jobs)(
+                delayed(run_single_simulation)(*run_parameters[run_index])
+                for run_index in batch
             )
             results.extend(batch_results)
 
             if progress_callback:
-                progress_callback(end, total_runs)
+                progress_callback(batch.stop, total_runs)
     else:
         # Sequential execution with optional progress updates
         results = []
@@ -256,6 +250,26 @@ def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedS
     else:
         root = np.random.SeedSequence(seed)
     return root.spawn(run_count)
+
+
+def split_into_batches(run_count: int, worker_count: int) -> List[range]:
+    """Consecutive run-index ranges for progress reporting, each with at least one run per worker.
+
+    At most MAX_PROGRESS_BATCHES batches, with sizes that differ by at most one.
+    A batch smaller than the worker pool would leave workers idle and make
+    them start one batch at a time instead of together.
+    """
+    if run_count <= 0:
+        return []
+    batch_count = max(1, min(MAX_PROGRESS_BATCHES, run_count // max(1, worker_count)))
+    base_size, larger_batches = divmod(run_count, batch_count)
+    batches = []
+    start = 0
+    for batch_index in range(batch_count):
+        stop = start + base_size + (1 if batch_index < larger_batches else 0)
+        batches.append(range(start, stop))
+        start = stop
+    return batches
 
 
 def scan_runner_compatibility(
