@@ -288,7 +288,7 @@ Whether to run the simulations in parallel.
 
 **Default:** `True`
 
-A number other than 0 does not set the number of cores. In the command-line interface, the `--multiprocessing` option overrides this key.
+To set the number of worker processes, use the command-line option `--multiprocessing N`, which overrides this key (see the [CLI Guide](cli-guide.md#command-line-options)).
 
 ## Parameters file format
 

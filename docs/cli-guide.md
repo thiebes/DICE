@@ -61,7 +61,7 @@ dice [options] parameters_file
 | `--quiet`, `-q` | Print errors only. |
 | `--output-dir DIR`, `-o DIR` | Write the output files to `DIR` instead of `output/<slug>/`. |
 | `--no-plots` | Do not create the histogram. |
-| `--multiprocessing N` | `0` runs the simulations one after another. Any other value, for example `-1`, runs them in parallel on all CPU cores. Overrides the `multiprocessing` parameter. |
+| `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
 | `--seed N` | Use the random seed `N` (a non-negative integer) for the noise. See [Reproducible results](#reproducible-results). |
 | `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. `both` writes both files. |
 | `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
@@ -207,7 +207,7 @@ Each value writes its results to `output/scan_noise_<value>/`.
 
 ## Performance
 
-- Parallel processing is on by default and uses all CPU cores. Turn it off with `'multiprocessing': False` in the parameters file or with `--multiprocessing 0`.
+- Parallel processing is on by default and uses all CPU cores. Turn it off with `'multiprocessing': False` in the parameters file or with `--multiprocessing 0`. To leave some cores free for other work, set the number of worker processes, for example `--multiprocessing 4`.
 - The run time grows in proportion to the number of runs, and with the number of pixels and time points. Use `data/examples/quick_test.txt` (100 runs) to check a setup before a long simulation.
 - Keep `--retain-profiles` off for large simulations, because retained profiles use much memory.
 
