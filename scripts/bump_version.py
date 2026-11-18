@@ -57,16 +57,23 @@ def update_citation_cff(file_path: Path, new_version: str, new_date: str) -> boo
     # Update version (both occurrences)
     version_pattern = r'version: "[^"]+"'
     version_replacement = f'version: "{new_version}"'
-    new_content = re.sub(version_pattern, version_replacement, content)
-
-    # Update date-released
     date_pattern = r'date-released: "\d{4}-\d{2}-\d{2}"'
     date_replacement = f'date-released: "{new_date}"'
+
+    if not re.search(version_pattern, content):
+        print(f"ERROR: Could not find version in {file_path}")
+        return False
+
+    if not re.search(date_pattern, content):
+        print(f"ERROR: Could not find date-released in {file_path}")
+        return False
+
+    new_content = re.sub(version_pattern, version_replacement, content)
     new_content = re.sub(date_pattern, date_replacement, new_content)
 
     if content == new_content:
-        print(f"WARNING: No changes made to {file_path}")
-        return False
+        print(f"No changes needed in {file_path}")
+        return True
 
     file_path.write_text(new_content, encoding='utf-8')
     print(f"Updated {file_path}")
@@ -79,11 +86,15 @@ def update_pyproject_toml(file_path: Path, new_version: str) -> bool:
     pattern = r'(^version = ")[^"]+(")$'
     replacement = rf'\g<1>{new_version}\g<2>'
 
+    if not re.search(pattern, content, flags=re.MULTILINE):
+        print(f"ERROR: Could not find version in {file_path}")
+        return False
+
     new_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
 
     if content == new_content:
-        print(f"ERROR: Could not find version in {file_path}")
-        return False
+        print(f"No changes needed in {file_path}")
+        return True
 
     file_path.write_text(new_content, encoding='utf-8')
     print(f"Updated {file_path}")
@@ -188,11 +199,12 @@ def main():
     if success:
         print(f"\nVersion successfully bumped to {args.version}")
         print("\nNext steps:")
-        print("  1. Review changes: git diff")
-        print("  2. Run tests to ensure everything works")
-        print("  3. Commit changes: git add -A && git commit -m \"Bump version to {args.version}\"")
-        print("  4. Tag release: git tag -a v{args.version} -m \"Release v{args.version}\"")
-        print("  5. Push: git push && git push --tags")
+        print("  1. Refresh the lockfile: uv lock")
+        print("  2. Review changes: git diff")
+        print("  3. Run tests to ensure everything works")
+        print(f"  4. Commit changes: git add -A && git commit -m \"Bump version to {args.version}\"")
+        print(f"  5. Tag release: git tag -a v{args.version} -m \"Release v{args.version}\"")
+        print("  6. Push: git push && git push --tags")
     else:
         print("\nERROR: Some files could not be updated")
         sys.exit(1)
