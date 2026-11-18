@@ -249,7 +249,9 @@ def _apply_output_preset(main_window: "DiceGUI", index: int) -> None:
     main_window.image_font_size_spin.setValue(settings.get("image_font_size", 6))
     main_window.image_font_unit_combo.setCurrentText(settings.get("image_font_unit", "pt"))
     main_window.image_tick_length_spin.setValue(settings.get("image_tick_length", 6))
+    main_window.image_tick_length_unit_combo.setCurrentText(settings.get("image_tick_length_unit", "pt"))
     main_window.image_tick_width_spin.setValue(settings.get("image_tick_width", 2))
+    main_window.image_tick_width_unit_combo.setCurrentText(settings.get("image_tick_width_unit", "pt"))
 
 
 def _reset_all_plot_settings(main_window: "DiceGUI") -> None:

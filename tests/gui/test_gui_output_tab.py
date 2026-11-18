@@ -50,6 +50,20 @@ class TestPresets:
         _choose_preset(window, preset_key)
         assert _widget_values(window, settings) == settings
 
+    @pytest.mark.parametrize("preset_key", sorted(PRESETS))
+    def test_preset_tick_sizes_are_in_the_preset_units(self, window, preset_key):
+        window.image_tick_length_unit_combo.setCurrentText("px")
+        window.image_tick_width_unit_combo.setCurrentText("px")
+
+        _choose_preset(window, preset_key)
+
+        settings = PRESETS[preset_key].settings
+        assert window.image_tick_length_unit_combo.currentText() == settings["image_tick_length_unit"]
+        assert window.image_tick_width_unit_combo.currentText() == settings["image_tick_width_unit"]
+        image_settings = window.collect_image_settings()
+        assert image_settings["image_tick_length"] == settings["image_tick_length"]
+        assert image_settings["image_tick_width"] == settings["image_tick_width"]
+
     def test_reset_restores_defaults_and_custom_preset(self, qtbot, window):
         _choose_preset(window, "presentation")
         window.image_width_unit_combo.setCurrentText("in")
