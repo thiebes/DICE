@@ -37,7 +37,7 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
     if print_to_console:
         print(message)
     
-    with open(filename, 'a') as f:
+    with open(filename, 'a', encoding='utf-8') as f:
         f.write(message + '\n')
 
 
@@ -171,7 +171,7 @@ def write_summary_file(
     output_units : OutputUnitPreferences, optional
         Preferred units for output display. When None, uses simulation units.
     """
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
         f.write("=" * 50 + "\n\n")
@@ -387,7 +387,7 @@ def export_legacy_format(
     df = export_collated_results(results, csv_filename, length_unit, time_unit)
     
     # Write legacy summary format
-    with open(summary_filename, 'w') as f:
+    with open(summary_filename, 'w', encoding='utf-8') as f:
         f.write(f"Running {results.num_runs} simulations with the following parameters (rounded):\n")
         f.write("\n")
         
