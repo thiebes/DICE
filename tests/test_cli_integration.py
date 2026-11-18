@@ -10,6 +10,7 @@ quick_test.txt with named values replaced.
 
 import ast
 import contextlib
+import importlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -198,3 +199,30 @@ class TestSeedReproducibility:
         other = self._csv(tmp_path_factory.mktemp('c'), self.NOISE_RANGE, '--seed', '4')
         pd.testing.assert_frame_equal(first, second, check_exact=True)
         assert first['nominal CNR'].iloc[0] != other['nominal CNR'].iloc[0]
+
+
+class TestMultiprocessingFlag:
+    """--multiprocessing N reaches the simulation as its worker count."""
+
+    @pytest.mark.parametrize('cli_args, expected', [
+        ((), {'multiprocessing': True, 'n_jobs': -1}),
+        (('--multiprocessing', '0'), {'multiprocessing': False}),
+        (('--multiprocessing', '2'), {'multiprocessing': True, 'n_jobs': 2}),
+        (('--multiprocessing', '-1'), {'multiprocessing': True, 'n_jobs': -1}),
+    ])
+    def test_flag_sets_worker_count(self, tmp_path, monkeypatch, cli_args, expected):
+        # The package attribute dice.cli.main is the entry function, not the module.
+        cli_main = importlib.import_module('dice.cli.main')
+        simulate = cli_main.run_monte_carlo_simulation
+        recorded_calls = []
+
+        def record_then_run_serially(**kwargs):
+            recorded_calls.append(kwargs)
+            return simulate(**{**kwargs, 'multiprocessing': False})
+
+        monkeypatch.setattr(cli_main, 'run_monte_carlo_simulation', record_then_run_serially)
+        params_file = write_quick_test_variant(tmp_path, 'workers', {'number of runs': 2})
+        with contextlib.chdir(tmp_path):
+            assert main([str(params_file), '--quiet', '--no-plots', *cli_args]) == 0
+        [call] = recorded_calls
+        assert {key: call[key] for key in expected} == expected

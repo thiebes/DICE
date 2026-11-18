@@ -315,21 +315,18 @@ class TestRunMonteCarloSimulation:
 
 
 class TestSeededSimulation:
-    """A seed reproduces a simulation exactly; without one every run draws fresh entropy.
+    """A seed reproduces a simulation exactly; without one every run draws fresh entropy."""
 
-    Serial against parallel is compared once, through the CLI, in
-    test_cli_integration.py, to pay the joblib start-up cost only once.
-    """
-
-    def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3):
+    def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3, **parallel_options):
         return run_monte_carlo_simulation(
             parameters=get_legacy_simulation_params(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
             noise_values=list(noise_values),
             num_runs=num_runs,
-            multiprocessing=False,
+            multiprocessing=parallel_options.pop('multiprocessing', False),
             seed=seed,
+            **parallel_options,
         )
 
     @staticmethod
@@ -361,6 +358,25 @@ class TestSeededSimulation:
         first, second = self._simulate(root), self._simulate(root)
         np.testing.assert_array_equal(self._estimates(first), self._estimates(second))
         np.testing.assert_array_equal(self._estimates(first), self._estimates(self._simulate(11)))
+
+    def test_same_seed_identical_for_any_worker_count(self):
+        # Starts joblib worker pools of two sizes, which costs tens of seconds.
+        from joblib import effective_n_jobs
+        run_counts = (3, effective_n_jobs(-1) + 3)  # below and above the full pool size
+        run_count_to_serial = {
+            num_runs: self._estimates(self._simulate(21, noise_values=(0.02,), num_runs=num_runs))
+            for num_runs in run_counts
+        }
+        for n_jobs in (1, 2, -1):
+            for num_runs, serial in run_count_to_serial.items():
+                progress_calls = []
+                parallel = self._simulate(
+                    21, noise_values=(0.02,), num_runs=num_runs, multiprocessing=True,
+                    n_jobs=n_jobs, progress_callback=lambda done, total: progress_calls.append((done, total)),
+                )
+                np.testing.assert_array_equal(self._estimates(parallel), serial)
+                assert [r.run_id for r in parallel.run_results] == list(range(num_runs))
+                assert progress_calls[-1] == (num_runs, num_runs)
 
     def test_run_seeds_are_children_of_one_root(self):
         from dice.analysis.simulation import spawn_run_seeds

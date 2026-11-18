@@ -86,7 +86,8 @@ For more information, visit: https://github.com/your-repo/DICE
         '--multiprocessing',
         type=int,
         metavar='N',
-        help='Number of parallel processes to use (0 for single-threaded, -1 for all cores)'
+        help='Number of parallel worker processes (0 runs serially, -1 uses all cores; '
+             'default: the parameters file setting, with all cores)'
     )
     
     parser.add_argument(

@@ -107,13 +107,10 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
     x_axis = parameters['x array']
     time_axis = parameters['time series']
     
-    # Setup multiprocessing
+    # --multiprocessing N: 0 runs serially, -1 uses all cores, N > 0 uses N workers.
     if args.multiprocessing is not None:
         use_parallel = args.multiprocessing != 0
-        if args.multiprocessing == -1:
-            n_jobs = -1  # Use all cores
-        else:
-            n_jobs = args.multiprocessing
+        n_jobs = args.multiprocessing if use_parallel else -1
     else:
         use_parallel = parameters.get('multiprocessing', 1) != 0
         n_jobs = -1
@@ -157,6 +154,7 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
         retain_profile_data=args.retain_profiles if hasattr(args, 'retain_profiles') else False,
         progress_callback=progress_callback,
         seed=seed,
+        n_jobs=n_jobs,
     )
     
     end_time = time.time()

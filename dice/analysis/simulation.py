@@ -147,6 +147,7 @@ def run_monte_carlo_simulation(
     retain_profile_data: bool = False,
     progress_callback: Optional[callable] = None,
     seed: Seed = None,
+    n_jobs: int = -1,
 ) -> MonteCarloOutput:
     """
     Run Monte Carlo simulation with multiple noise values.
@@ -173,6 +174,8 @@ def run_monte_carlo_simulation(
         Root seed. Each run gets its own child stream, so a seeded simulation
         gives identical results serially or in parallel. None draws fresh
         entropy for every run.
+    n_jobs : int
+        Number of joblib workers when multiprocessing; -1 uses all cores.
 
     Returns
     -------
@@ -204,7 +207,6 @@ def run_monte_carlo_simulation(
     if multiprocessing:
         # Run in batches so the progress callback can report between them;
         # joblib reuses its worker pool from one batch to the next.
-        n_jobs = -1
         results = []
 
         for batch in split_into_batches(total_runs, effective_n_jobs(n_jobs)):
