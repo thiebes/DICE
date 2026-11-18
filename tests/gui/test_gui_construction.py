@@ -1,0 +1,140 @@
+"""
+Construction of the main window, its tabs, menus, and auxiliary dialogs.
+"""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+from PyQt6.QtWidgets import QLabel
+
+from dice import __version__
+from dice.utils.units import length_abbreviation
+from gui_support import TAB_NAMES
+
+pytestmark = pytest.mark.gui
+
+
+def _menu_action_texts(window, menu_title: str) -> list[str]:
+    menu = next(a.menu() for a in window.menuBar().actions() if a.text() == menu_title)
+    return [action.text() for action in menu.actions() if not action.isSeparator()]
+
+
+def _shortcuts_by_tab(dialog_html: str) -> list[dict[str, str]]:
+    """Parse the shortcuts dialog into one {Alt+X: description} map per tab section."""
+    sections = re.split(r"<h3>Tab \d+:[^<]*</h3>", dialog_html)[1:]
+    return [
+        dict(re.findall(r"<td><b>(Alt\+\w)</b></td><td>([^<]+)</td>", section))
+        for section in sections
+    ]
+
+
+class TestMainWindow:
+
+    def test_title_and_five_tabs_in_order(self, window):
+        assert window.windowTitle() == "DICE - Diffusion Insight Computation Engine"
+        assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == TAB_NAMES
+
+    def test_status_bar_shows_version_and_no_loaded_data(self, window):
+        permanent_texts = [label.text() for label in window.status_bar.findChildren(QLabel)]
+        assert f"DICE v{__version__}" in permanent_texts
+        assert window.status_bar.currentMessage() == "No data loaded"
+
+    def test_menus_offer_the_file_and_plot_actions(self, window):
+        assert _menu_action_texts(window, "&File") == [
+            "&New Parameters", "&Open Parameters...", "&Save Parameters",
+            "Save Parameters &As...", "Recent &Parameters", "Load &Results...", "E&xit",
+        ]
+        assert _menu_action_texts(window, "&Plots")[0] == "&Accuracy Histogram"
+        assert _menu_action_texts(window, "&Settings") == ["&Global Units..."]
+        assert _menu_action_texts(window, "&Help") == [
+            "&Documentation", "&Keyboard Shortcuts", "&About DICE",
+        ]
+
+    def test_control_panel_starts_ready_to_run(self, window):
+        assert window.run_button.isEnabled()
+        assert not window.stop_button.isEnabled()
+        assert window.progress_bar.isHidden()
+        assert window.status_label.text() == "Ready to run"
+        assert window.parameters_modified is False
+
+
+class TestDefaultValues:
+    """The defaults set_default_values() writes into each tab."""
+
+    def test_simulation_setup_tab(self, window):
+        assert window.num_runs_spin.value() == 1000
+        assert window.filename_slug_input.text() == "DICE_results"
+        assert window.multiprocessing_check.isChecked()
+        assert not window.retain_profile_check.isChecked()
+
+    def test_physical_parameters_tab_derives_diffusion_length(self, window):
+        assert float(window.diffusion_coeff_input.text()) == 0.01
+        assert float(window.lifetime_input.text()) == 2.0
+        assert float(window.diffusion_length_input.text()) == pytest.approx((0.01 * 2.0) ** 0.5, rel=1e-3)
+        assert window.fwhm_radio.isChecked()
+        assert window.width_input.text() == "1.0"
+        assert window.width_conversion_label.text() == f"Equivalent: σ = 0.4247 {length_abbreviation('micrometer')}"
+
+    def test_experimental_conditions_tab(self, window):
+        assert window.noise_fixed_radio.isChecked()
+        assert window.noise_value_input.text() == "0.05"
+        assert window.noise_cnr_input.text() == "20"
+        assert window.spatial_width_input.text() == "10.0"
+        assert window.pixel_width_input.value() == 101
+        assert window.pixel_size_label.text() == f"Pixel Size: 0.09901 {length_abbreviation('micrometer')}/pixel"
+        assert window.time_range_radio.isChecked()
+        assert (window.time_start_input.text(), window.time_stop_input.text()) == ("0", "2")
+        assert window.time_steps_input.value() == 10
+        assert not window.time_series_input.isEnabled()
+        assert not window.noise_file_input.isEnabled()
+
+    def test_analysis_tab_waits_for_results(self, window):
+        assert window.plot_method_wls_radio.isChecked()
+        assert [window.precision_std_label.text(), window.precision_rse_label.text(),
+                window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] == ["—"] * 4
+        assert not window.precision_placeholder.isHidden()
+        assert window.precision_placeholder.text() == "Run a simulation to see results."
+        assert not window.explore_proximity_group.isEnabled()
+        assert window.proximity_spin.value() == pytest.approx(0.10)
+        assert window.proximity_pct_label.text() == "(±10%)"
+
+    def test_output_settings_tab(self, window):
+        assert window.preset_combo.currentText() == "Custom"
+        assert [window.image_type_combo.itemText(i) for i in range(window.image_type_combo.count())] == [
+            "png", "jpg", "svg", "tif",
+        ]
+        assert window.image_dpi_spin.value() == 300
+        assert window.image_numbins_spin.value() == 35
+
+
+class TestAuxiliaryDialogs:
+
+    def test_global_units_dialog_preselects_and_reports_units(self, qtbot):
+        from dice_gui.global_units_dialog import GlobalUnitsDialog
+
+        dialog = GlobalUnitsDialog(current_length="nanometer", current_time="picosecond")
+        qtbot.addWidget(dialog)
+        assert dialog.windowTitle() == "Global Units"
+        assert (dialog.selected_length_unit(), dialog.selected_time_unit()) == ("nanometer", "picosecond")
+
+        dialog.length_combo.setCurrentText("angstrom")
+        dialog.time_combo.setCurrentText("femtosecond")
+        assert (dialog.selected_length_unit(), dialog.selected_time_unit()) == ("angstrom", "femtosecond")
+
+    def test_about_dialog_reports_version(self, window, dialogs):
+        window.show_about_dialog()
+        assert dialogs.titles("about") == ["About DICE"]
+        assert f"<b>Version:</b> {__version__}" in dialogs.texts("about")[0]
+
+    def test_documentation_opens_repository_readme(self, window, monkeypatch):
+        opened = []
+        monkeypatch.setattr("dice_gui.dice_gui.webbrowser.open", opened.append)
+        window.open_documentation()
+        assert opened == ["https://github.com/thiebes/DICE#readme"]
+
+    def test_keyboard_shortcuts_dialog_lists_every_tab(self, window, dialogs):
+        window.show_keyboard_shortcuts()
+        assert dialogs.titles("information") == ["Keyboard Shortcuts"]
+        assert len(_shortcuts_by_tab(dialogs.texts("information")[0])) == len(TAB_NAMES)
