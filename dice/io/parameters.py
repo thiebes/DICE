@@ -18,7 +18,7 @@ from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
 )
 from fft_cnr import fft_cnr
-from ..core.noise import make_noise_distribution
+from ..core.noise import Seed, make_noise_distribution
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
@@ -26,7 +26,7 @@ from ..models.parameter_keys import (
 )
 
 
-def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
+def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
     """
     Read simulation parameters from a file.
     
@@ -34,6 +34,9 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
     ----------
     filename : str or Path
         Path to the parameters file.
+    seed : int or SeedSequence, optional
+        Seed for the noise draw of the 'noise range' options; None draws
+        fresh entropy.
     
     Returns
     -------
@@ -56,7 +59,7 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
             # parser converts between representations (e.g., FWHM -> sigma^2).
             from ..utils.units import resolve_units
             parms_dict = resolve_units(parms_dict)
-            result = parameter_parser(parms_dict)
+            result = parameter_parser(parms_dict, seed=seed)
         return result
     except FileNotFoundError:
         raise FileNotFoundError(f"The file {filename} was not found.")
@@ -160,7 +163,9 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
             del parameters_dictionary[unique_time_key]
 
 
-def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int = 1) -> None:
+def handle_noise_parameters(
+    parameters_dictionary: Dict[str, Any], num_vals: int = 1, seed: Seed = None
+) -> None:
     """
     Process noise-related parameters.
 
@@ -172,6 +177,8 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
         Dictionary containing noise parameters.
     num_vals : int
         Number of noise values to generate.
+    seed : int or SeedSequence, optional
+        Seed for the 'noise range' draws; None draws fresh entropy.
 
     Updates the dictionary with 'noise series' key.
     """
@@ -216,14 +223,14 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
             noise_range = parameters_dictionary[unique_noise_key]
             validate_noise_range(noise_range)
             parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=True
+                noise_range[0], noise_range[1], num_vals, logarithmic=True, seed=seed
             )
 
         elif unique_noise_key in ('noise range, reciprocal', 'noise_range_reciprocal'):
             noise_range = parameters_dictionary[unique_noise_key]
             validate_noise_range(noise_range)
             parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=False
+                noise_range[0], noise_range[1], num_vals, logarithmic=False, seed=seed
             )
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
@@ -322,7 +329,7 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
                        "'nominal diffusion coefficient' and 'nominal lifetime (tau)'.")
 
 
-def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
+def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -> Dict[str, Any]:
     """
     Parse and validate simulation parameters.
 
@@ -333,6 +340,8 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     ----------
     parameters_dictionary : dict
         Raw parameters dictionary (can use either legacy or canonical keys).
+    seed : int or SeedSequence, optional
+        Seed for the 'noise range' draws; None draws fresh entropy.
 
     Returns
     -------
@@ -367,7 +376,7 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     handle_time_parameters(parameters_dictionary)
     
     # Process noise parameters
-    handle_noise_parameters(parameters_dictionary, num_vals=1)
+    handle_noise_parameters(parameters_dictionary, num_vals=1, seed=seed)
     
     # Process profile width
     parameters_dictionary['sigma^2_0'] = handle_profile_width_parameters(parameters_dictionary)

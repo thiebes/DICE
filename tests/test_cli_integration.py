@@ -59,9 +59,13 @@ def run_cli(workdir: Path, params_file: Path, slug: str, *extra_args: str) -> Cl
     return CliRun(exit_code, workdir / 'output' / slug, slug)
 
 
-def write_quick_test_variant(directory: Path, slug: str, overrides: dict[str, Any]) -> Path:
-    """Write quick_test.txt with the given values replaced and a new filename slug."""
+def write_quick_test_variant(
+    directory: Path, slug: str, overrides: dict[str, Any], removed: tuple[str, ...] = ()
+) -> Path:
+    """Write quick_test.txt with values replaced or removed and a new filename slug."""
     params = ast.literal_eval(QUICK_TEST.read_text())
+    for key in removed:
+        del params[key]
     params.update(overrides)
     params['filename slug'] = slug
     params_file = directory / f'{slug}.txt'
@@ -146,3 +150,51 @@ class TestGlobalUnitsReachOutputs:
         assert run.exit_code == 1
         assert "Unknown length unit 'um'" in capsys.readouterr().out
         assert not (tmp_path / 'output').exists()
+
+
+class TestSeedReproducibility:
+    """--seed N reproduces the CSV exactly, serially or in parallel; no seed does not.
+
+    Values are compared between runs, never against stored numbers, which
+    depend on the numpy, scipy, and fft-cnr versions and on the platform.
+    """
+
+    SEED_RUNS = 6
+    NOISE_RANGE = {'noise range, reciprocal': [0.01, 0.05]}
+
+    def _csv(self, workdir: Path, overrides: dict[str, Any], *cli_args: str) -> pd.DataFrame:
+        removed = ('noise value',) if 'noise range, reciprocal' in overrides else ()
+        params_file = write_quick_test_variant(
+            workdir, 'seeded', {'number of runs': self.SEED_RUNS} | overrides, removed)
+        run = run_cli(workdir, params_file, 'seeded', '--no-plots', *cli_args)
+        assert run.exit_code == 0
+        return run.read_csv()
+
+    def test_same_seed_identical(self, tmp_path_factory):
+        first = self._csv(tmp_path_factory.mktemp('a'), {}, '--seed', '3')
+        second = self._csv(tmp_path_factory.mktemp('b'), {}, '--seed', '3')
+        pd.testing.assert_frame_equal(first, second, check_exact=True)
+
+    def test_different_seeds_differ(self, tmp_path_factory):
+        first = self._csv(tmp_path_factory.mktemp('a'), {}, '--seed', '3')
+        second = self._csv(tmp_path_factory.mktemp('b'), {}, '--seed', '4')
+        assert not first[WLS_D_COLUMN].equals(second[WLS_D_COLUMN])
+
+    def test_unseeded_runs_differ(self, tmp_path_factory):
+        first = self._csv(tmp_path_factory.mktemp('a'), {})
+        second = self._csv(tmp_path_factory.mktemp('b'), {})
+        assert not first[WLS_D_COLUMN].equals(second[WLS_D_COLUMN])
+
+    def test_serial_equals_parallel(self, tmp_path_factory):
+        # The parallel run starts joblib workers, which costs tens of seconds.
+        serial = self._csv(tmp_path_factory.mktemp('serial'), {}, '--seed', '3')
+        parallel = self._csv(tmp_path_factory.mktemp('parallel'), {}, '--seed', '3',
+                             '--multiprocessing', '-1')
+        pd.testing.assert_frame_equal(serial, parallel, check_exact=True)
+
+    def test_noise_range_draw_reproducible(self, tmp_path_factory):
+        first = self._csv(tmp_path_factory.mktemp('a'), self.NOISE_RANGE, '--seed', '3')
+        second = self._csv(tmp_path_factory.mktemp('b'), self.NOISE_RANGE, '--seed', '3')
+        other = self._csv(tmp_path_factory.mktemp('c'), self.NOISE_RANGE, '--seed', '4')
+        pd.testing.assert_frame_equal(first, second, check_exact=True)
+        assert first['nominal CNR'].iloc[0] != other['nominal CNR'].iloc[0]

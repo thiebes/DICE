@@ -6,14 +6,17 @@ generating noise distributions, and estimating CNR from noisy data.
 """
 
 import numpy as np
-from numpy.random import default_rng
+from numpy.random import SeedSequence, default_rng
 from fft_cnr import fft_cnr
 from typing import Union, List, Dict, Optional
 from ..utils.validators import validate_numeric, validate_array_like, validate_integer
 
+# A reproducible seed: an integer, or a SeedSequence spawned from one. None draws fresh entropy.
+Seed = Optional[Union[int, SeedSequence]]
+
 
 def add_noise(nominal_profiles: np.ndarray, noise_sigma: float, 
-              seed: Optional[int] = None) -> Dict[str, np.ndarray]:
+              seed: Seed = None) -> Dict[str, np.ndarray]:
     """
     Add normally distributed noise to nominal Gaussian profiles.
     
@@ -24,8 +27,8 @@ def add_noise(nominal_profiles: np.ndarray, noise_sigma: float,
         Can be 1D (single profile) or 2D (multiple profiles).
     noise_sigma : float
         Standard deviation of the noise.
-    seed : int, optional
-        Random seed for reproducibility.
+    seed : int or SeedSequence, optional
+        Seed for reproducibility; None draws fresh entropy.
     
     Returns
     -------
@@ -54,7 +57,7 @@ def add_noise(nominal_profiles: np.ndarray, noise_sigma: float,
 
 def make_noise_distribution(noise_low: float, noise_high: float, 
                           num: int, logarithmic: bool = False,
-                          seed: Optional[int] = None) -> List[float]:
+                          seed: Seed = None) -> List[float]:
     """
     Create a distribution of noise sigmas, uniform in reciprocal space.
     
@@ -71,8 +74,8 @@ def make_noise_distribution(noise_low: float, noise_high: float,
         The number of samples to generate.
     logarithmic : bool, optional
         Flag to generate the distribution in reciprocal log space.
-    seed : int, optional
-        Random seed for reproducibility.
+    seed : int or SeedSequence, optional
+        Seed for reproducibility; None draws fresh entropy.
     
     Returns
     -------

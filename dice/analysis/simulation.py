@@ -12,7 +12,7 @@ import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
 from fft_cnr import fft_cnr
-from ..core.noise import add_noise
+from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
@@ -29,7 +29,8 @@ def run_single_simulation(
     time_axis: np.ndarray,
     parameters: LegacySimulationParameters,
     noise_sigma: float,
-    retain_profile_data: bool = False
+    retain_profile_data: bool = False,
+    seed: Seed = None,
 ) -> RunResult:
     """
     Execute a single Monte Carlo simulation run.
@@ -51,7 +52,9 @@ def run_single_simulation(
         Standard deviation of noise to add.
     retain_profile_data : bool
         Whether to retain full profile data in results.
-    
+    seed : int or SeedSequence, optional
+        Seed for this run's noise; None draws fresh entropy.
+
     Returns
     -------
     RunResult
@@ -71,9 +74,9 @@ def run_single_simulation(
     
     # Add noise to the profiles
     noisy_result = add_noise(
-        nominal_profiles['y_values_t'], 
+        nominal_profiles['y_values_t'],
         noise_sigma=noise_sigma,
-        seed=None  # Random seed for each run
+        seed=seed,
     )
     noisy_profiles = noisy_result['y_values_t']
     
@@ -139,7 +142,8 @@ def run_monte_carlo_simulation(
     num_runs: int,
     multiprocessing: bool = True,
     retain_profile_data: bool = False,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    seed: Seed = None,
 ) -> MonteCarloOutput:
     """
     Run Monte Carlo simulation with multiple noise values.
@@ -162,16 +166,22 @@ def run_monte_carlo_simulation(
         Whether to retain full profile data.
     progress_callback : callable, optional
         Function to call with progress updates.
-    
+    seed : int or SeedSequence, optional
+        Root seed. Each run gets its own child stream, so a seeded simulation
+        gives identical results serially or in parallel. None draws fresh
+        entropy for every run.
+
     Returns
     -------
     MonteCarloOutput
         Aggregated simulation results.
     """
+    run_seeds = spawn_run_seeds(seed, len(noise_values) * num_runs)
+
     # Create parameter sets for all runs
     run_parameters = []
     run_id = 0
-    
+
     for noise_sigma in noise_values:
         for _ in range(num_runs):
             run_parameters.append((
@@ -180,7 +190,8 @@ def run_monte_carlo_simulation(
                 time_axis,
                 parameters,
                 noise_sigma,
-                retain_profile_data
+                retain_profile_data,
+                run_seeds[run_id],
             ))
             run_id += 1
     
@@ -230,6 +241,21 @@ def run_monte_carlo_simulation(
     )
 
     return simulation_result
+
+
+def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:
+    """One independent child seed per run from a single root; all None when unseeded.
+
+    A SeedSequence argument is copied before spawning, so the caller's object
+    is not advanced and the same seed always yields the same children.
+    """
+    if seed is None:
+        return [None] * run_count
+    if isinstance(seed, np.random.SeedSequence):
+        root = np.random.SeedSequence(seed.entropy, spawn_key=seed.spawn_key, pool_size=seed.pool_size)
+    else:
+        root = np.random.SeedSequence(seed)
+    return root.spawn(run_count)
 
 
 def scan_runner_compatibility(

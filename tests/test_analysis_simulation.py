@@ -314,6 +314,62 @@ class TestRunMonteCarloSimulation:
         assert progress_calls[-1] == (3, 3)
 
 
+class TestSeededSimulation:
+    """A seed reproduces a simulation exactly; without one every run draws fresh entropy.
+
+    Serial against parallel is compared once, through the CLI, in
+    test_cli_integration.py, to pay the joblib start-up cost only once.
+    """
+
+    def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3):
+        return run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(),
+            x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]),
+            noise_values=list(noise_values),
+            num_runs=num_runs,
+            multiprocessing=False,
+            seed=seed,
+        )
+
+    @staticmethod
+    def _estimates(result) -> np.ndarray:
+        return np.array([
+            (r.cnr_0_estimate, r.estimated_sigma2_0, r.ols_slope, r.wls_slope)
+            for r in result.run_results
+        ])
+
+    def test_same_seed_identical(self):
+        np.testing.assert_array_equal(
+            self._estimates(self._simulate(11)), self._estimates(self._simulate(11)))
+
+    def test_different_seeds_differ(self):
+        assert not np.array_equal(
+            self._estimates(self._simulate(11)), self._estimates(self._simulate(12)))
+
+    def test_unseeded_simulations_differ(self):
+        assert not np.array_equal(
+            self._estimates(self._simulate(None)), self._estimates(self._simulate(None)))
+
+    def test_runs_draw_distinct_noise(self):
+        estimates = self._estimates(self._simulate(11, noise_values=(0.02,), num_runs=4))
+        assert len(np.unique(estimates[:, 0])) == 4
+
+    def test_seed_sequence_reused_without_advancing(self):
+        from numpy.random import SeedSequence
+        root = SeedSequence(11)
+        first, second = self._simulate(root), self._simulate(root)
+        np.testing.assert_array_equal(self._estimates(first), self._estimates(second))
+        np.testing.assert_array_equal(self._estimates(first), self._estimates(self._simulate(11)))
+
+    def test_run_seeds_are_children_of_one_root(self):
+        from dice.analysis.simulation import spawn_run_seeds
+        assert spawn_run_seeds(None, 3) == [None, None, None]
+        children = spawn_run_seeds(11, 3)
+        assert [child.spawn_key for child in children] == [(0,), (1,), (2,)]
+        assert {child.entropy for child in children} == {11}
+
+
 class TestScanRunnerCompatibility:
     """Test backward compatibility wrapper."""
     
