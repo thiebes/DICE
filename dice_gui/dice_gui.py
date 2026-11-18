@@ -1326,14 +1326,7 @@ class DiceGUI(QMainWindow):
 
     def load_parameters_from_file(self, file_path: str):
         """Load parameters from a specific file path."""
-        import ast
-
-        # Read and parse the parameter file
-        with open(file_path, 'r') as f:
-            content = f.read()
-
-        # Parse the dictionary
-        params = ast.literal_eval(content)
+        params = self._read_parameter_file(file_path)
 
         # Populate GUI from parameters
         self.populate_gui_from_parameters(params)
@@ -1349,8 +1342,15 @@ class DiceGUI(QMainWindow):
             f"Parameters loaded from:\n{file_path}"
         )
 
+    def _read_parameter_file(self, file_path: str) -> dict:
+        """Parse a parameters.txt-format file into its dictionary."""
+        import ast
+
+        with open(file_path, 'r') as f:
+            return ast.literal_eval(f.read())
+
     def load_example(self, example_name: str):
-        """Load example parameters."""
+        """Load example parameters without making the bundled file the save target."""
         if self.parameters_modified:
             reply = QMessageBox.question(
                 self, "Unsaved Changes",
@@ -1360,22 +1360,17 @@ class DiceGUI(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        # Try to load from file first
+        # Prefer the bundled file; fall back to the embedded copy
+        params = EXAMPLE_PARAMETERS.get(example_name)
         example_file = Path(__file__).parent.parent / "data" / "examples" / f"{example_name}.txt"
         if example_file.exists():
             try:
-                self.load_parameters_from_file(str(example_file))
-                return
-            except Exception:
+                params = self._read_parameter_file(str(example_file))
+            except (OSError, SyntaxError, ValueError):
                 pass  # Fall back to embedded
 
-        # Use embedded parameters
-        if example_name in EXAMPLE_PARAMETERS:
-            self._populating = True
-            try:
-                self.populate_gui_from_parameters(EXAMPLE_PARAMETERS[example_name])
-            finally:
-                self._populating = False
+        if params is not None:
+            self.populate_gui_from_parameters(params)
             self.current_parameter_file = None
             self.parameters_modified = False
             self.update_window_title()

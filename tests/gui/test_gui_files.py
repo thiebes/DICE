@@ -207,6 +207,35 @@ class TestSaveAndReload:
         assert window.windowTitle() == DEFAULT_TITLE + "*"
 
 
+class TestLoadExampleMenu:
+
+    @pytest.mark.parametrize(("action_index", "filename"), [
+        (0, "quick_test.txt"), (1, "high_precision.txt"), (2, "publication.txt"),
+    ])
+    def test_each_example_loads_its_bundled_values(self, window, dialogs, action_index, filename):
+        expected = read_example(filename)
+        window.example_menu.actions()[action_index].trigger()
+
+        assert len(dialogs.titles("information")) == 1
+        assert window.filename_slug_input.text() == expected["filename slug"]
+        assert window.num_runs_spin.value() == expected["number of runs"]
+        assert window.pixel_width_input.value() == expected["pixel width"]
+
+    def test_loaded_example_is_not_the_save_target(self, qtbot, window, dialogs):
+        bundled = EXAMPLES_DIR / "quick_test.txt"
+        original = bundled.read_bytes()
+        window.example_menu.actions()[0].trigger()
+        # Checked before saving, so a regression fails here instead of overwriting the example.
+        assert window.windowTitle() == DEFAULT_TITLE
+        assert [action.text() for action in window.recent_menu.actions()] == ["No recent files"]
+
+        enter_text(qtbot, window.filename_slug_input, "my_quick_test")
+        trigger_menu_action(window, "&File", "&Save Parameters")
+
+        assert dialogs.titles("save-file") == ["Save Parameters As"]
+        assert bundled.read_bytes() == original
+
+
 class TestRecentFiles:
 
     def _recent_names(self, window) -> list[str]:
