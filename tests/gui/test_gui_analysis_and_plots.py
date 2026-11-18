@@ -13,7 +13,6 @@ import shutil
 
 import numpy as np
 import pytest
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMessageBox
 
 from gui_support import (
@@ -50,7 +49,7 @@ def _fraction_text(fraction: float, threshold: float) -> str:
 
 def _select_fit_method(qtbot, window, method: str) -> None:
     radio = window.plot_method_wls_radio if method == "wls" else window.plot_method_ols_radio
-    qtbot.mouseClick(radio, Qt.MouseButton.LeftButton)
+    radio.click()
 
 
 @pytest.fixture
