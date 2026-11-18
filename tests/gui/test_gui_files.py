@@ -5,6 +5,8 @@ unsaved-changes prompts, and how load errors are reported.
 
 from __future__ import annotations
 
+from pathlib import PureWindowsPath
+
 import numpy as np
 import pytest
 from PyQt6.QtWidgets import QMessageBox
@@ -153,6 +155,21 @@ class TestSaveAndReload:
         before, after = self._round_trip(window, dialogs, work_dir / "b.txt")
         assert after == before
         assert dialogs.titles("critical") == []
+
+    @pytest.mark.parametrize(("widget_name", "text"), [
+        ("filename_slug_input", "Joe's_run"),
+        ("noise_file_input", str(PureWindowsPath(EXAMPLE_PROFILE_CSV))),
+    ], ids=["apostrophe-in-slug", "windows-path"])
+    def test_text_values_needing_escapes_survive(self, qtbot, window, dialogs, work_dir, widget_name, text):
+        window.noise_estimate_radio.setChecked(True)
+        enter_text(qtbot, window.noise_file_input, EXAMPLE_PROFILE_CSV.as_posix())
+        enter_text(qtbot, getattr(window, widget_name), text)
+
+        before, after = self._round_trip(window, dialogs, work_dir / "escapes.txt")
+
+        assert dialogs.titles("critical") == []
+        assert after == before
+        assert getattr(window, widget_name).text() == text
 
     def test_saved_file_is_readable_by_the_cli(self, qtbot, window, dialogs, work_dir):
         self._configure_series_sigma_overrides(qtbot, window)

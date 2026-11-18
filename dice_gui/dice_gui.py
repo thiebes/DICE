@@ -1458,7 +1458,7 @@ class DiceGUI(QMainWindow):
         ]
 
         # Filename slug
-        lines.append(f"    'filename slug': '{gui_params['filename_slug']}',")
+        lines.append(f"    'filename slug': {gui_params['filename_slug']!r},")
         lines.append("")
 
         # Number of runs
@@ -1467,20 +1467,20 @@ class DiceGUI(QMainWindow):
 
         # Units
         lines.append("    ### Units ###")
-        lines.append(f"    'length unit': '{gui_params['length_unit']}',")
-        lines.append(f"    'time unit': '{gui_params['time_unit']}',")
+        lines.append(f"    'length unit': {gui_params['length_unit']!r},")
+        lines.append(f"    'time unit': {gui_params['time_unit']!r},")
         lines.append("")
 
         # Diffusion parameters
         lines.append("    ### Nominal diffusion and lifetime parameters ###")
         lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
         if 'diffusion_coefficient_length_unit' in gui_params:
-            lines.append(f"    'diffusion_coefficient_length_unit': '{gui_params['diffusion_coefficient_length_unit']}',")
+            lines.append(f"    'diffusion_coefficient_length_unit': {gui_params['diffusion_coefficient_length_unit']!r},")
         if 'diffusion_coefficient_time_unit' in gui_params:
-            lines.append(f"    'diffusion_coefficient_time_unit': '{gui_params['diffusion_coefficient_time_unit']}',")
+            lines.append(f"    'diffusion_coefficient_time_unit': {gui_params['diffusion_coefficient_time_unit']!r},")
         lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
         if 'lifetime_unit' in gui_params:
-            lines.append(f"    'lifetime_unit': '{gui_params['lifetime_unit']}',")
+            lines.append(f"    'lifetime_unit': {gui_params['lifetime_unit']!r},")
         lines.append("")
 
         # Initial profile
@@ -1488,15 +1488,15 @@ class DiceGUI(QMainWindow):
         if gui_params['profile_width_type'] == 'fwhm':
             lines.append(f"    'FWHM_0': {gui_params['profile_width_value']},")
             if 'fwhm_0_unit' in gui_params:
-                lines.append(f"    'FWHM_0_unit': '{gui_params['fwhm_0_unit']}',")
+                lines.append(f"    'FWHM_0_unit': {gui_params['fwhm_0_unit']!r},")
         else:
             lines.append(f"    'sigma_0': {gui_params['profile_width_value']},")
             if 'sigma_0_unit' in gui_params:
-                lines.append(f"    'sigma_0_unit': '{gui_params['sigma_0_unit']}',")
+                lines.append(f"    'sigma_0_unit': {gui_params['sigma_0_unit']!r},")
         lines.append(f"    'amplitude_0': {gui_params['amplitude_0']},")
         lines.append(f"    'mean_0': {gui_params['mean_0']},")
         if 'mu_0_unit' in gui_params:
-            lines.append(f"    'mu_0_unit': '{gui_params['mu_0_unit']}',")
+            lines.append(f"    'mu_0_unit': {gui_params['mu_0_unit']!r},")
         lines.append("")
 
         # Noise
@@ -1504,14 +1504,14 @@ class DiceGUI(QMainWindow):
         if gui_params['noise_type'] == 'fixed':
             lines.append(f"    'noise value': {gui_params['noise_value']},")
         else:
-            lines.append(f"    'estimate noise from data': '{gui_params['noise_data_file']}',")
+            lines.append(f"    'estimate noise from data': {gui_params['noise_data_file']!r},")
         lines.append("")
 
         # Spatial axis
         lines.append("    ### Spatial axis parameters ###")
         lines.append(f"    'spatial width': {gui_params['spatial_width']},")
         if 'spatial_width_unit' in gui_params:
-            lines.append(f"    'spatial_width_unit': '{gui_params['spatial_width_unit']}',")
+            lines.append(f"    'spatial_width_unit': {gui_params['spatial_width_unit']!r},")
         lines.append(f"    'pixel width': {gui_params['pixel_width']},")
         lines.append("")
 
@@ -1520,9 +1520,9 @@ class DiceGUI(QMainWindow):
         if gui_params['time_type'] == 'range':
             lines.append(f"    'time range': [{gui_params['time_start']}, {gui_params['time_stop']}, {gui_params['time_steps']}],")
             if 'time_start_unit' in gui_params:
-                lines.append(f"    'time_start_unit': '{gui_params['time_start_unit']}',")
+                lines.append(f"    'time_start_unit': {gui_params['time_start_unit']!r},")
             if 'time_stop_unit' in gui_params:
-                lines.append(f"    'time_stop_unit': '{gui_params['time_stop_unit']}',")
+                lines.append(f"    'time_stop_unit': {gui_params['time_stop_unit']!r},")
         else:
             try:
                 ts_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
@@ -1533,7 +1533,7 @@ class DiceGUI(QMainWindow):
 
         # Plot parameters
         lines.append("    ### Plot image parameters ###")
-        lines.append(f"    'image type': '{gui_params['image_type']}',")
+        lines.append(f"    'image type': {gui_params['image_type']!r},")
         lines.append(f"    'image width': {gui_params['image_width']},")
         lines.append(f"    'image height': {gui_params['image_height']},")
         lines.append(f"    'image dpi': {gui_params['image_dpi']},")
