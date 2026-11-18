@@ -9,7 +9,7 @@ import pytest
 
 from dice_gui.global_units_dialog import GlobalUnitsDialog
 from dice_gui.tabs.base import combo_value, set_combo_value
-from gui_support import choose_global_units, enter_text, trigger_menu_action
+from gui_support import EXAMPLES_DIR, choose_global_units, enter_text, trigger_menu_action
 
 pytestmark = pytest.mark.gui
 
@@ -107,6 +107,37 @@ class TestPerParameterUnits:
         assert _override_keys(window) == {}
         assert set(_selected_units(window, LENGTH_SELECTORS).values()) == {"micrometer"}
         assert set(_selected_units(window, TIME_SELECTORS).values()) == {"nanosecond"}
+
+
+class TestUnitsFromParameterFiles:
+    """A parameter file's `_unit` keys set selectors; selectors it does not mention follow global."""
+
+    def _save_file_with_nanometer_width(self, qtbot, window, path) -> None:
+        set_combo_value(window.width_unit_combo, "nanometer")
+        enter_text(qtbot, window.width_input, "1000")
+        window.save_parameters_to_file(str(path))
+
+    def test_file_overrides_are_applied_and_kept_on_global_change(self, qtbot, window, monkeypatch, work_dir):
+        saved = work_dir / "nanometer_width.txt"
+        self._save_file_with_nanometer_width(qtbot, window, saved)
+        window.new_parameters()
+
+        window.load_parameters_from_file(str(saved))
+        choose_global_units(window, monkeypatch, "angstrom", "nanosecond")
+
+        assert combo_value(window.width_unit_combo) == "nanometer"
+        assert _override_keys(window) == {"fwhm_0_unit": "nanometer"}
+
+    def test_next_file_without_overrides_does_not_inherit_them(self, qtbot, window, work_dir):
+        saved = work_dir / "nanometer_width.txt"
+        self._save_file_with_nanometer_width(qtbot, window, saved)
+        window.load_parameters_from_file(str(saved))
+
+        window.load_parameters_from_file(str(EXAMPLES_DIR / "quick_test.txt"))
+
+        assert combo_value(window.width_unit_combo) == "micrometer"
+        assert _override_keys(window) == {}
+        assert window.collect_parameters()["profile_width_value"] == 1.0
 
 
 class TestUnitAwareDisplays:

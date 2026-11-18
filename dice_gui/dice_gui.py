@@ -1676,8 +1676,13 @@ class DiceGUI(QMainWindow):
 
         If a _unit key is present, the corresponding combo is set and marked
         as user-modified so that subsequent global unit changes do not
-        override it.
+        override it. Combos without a key follow the global unit again, so
+        overrides from a previously loaded file do not carry over.
         """
+        for combo in self._get_all_per_param_unit_combos():
+            combo.setProperty("_user_modified", False)
+        self.sync_unit_combos()
+
         def _set_combo(combo, *keys):
             for key in keys:
                 if key in params:
