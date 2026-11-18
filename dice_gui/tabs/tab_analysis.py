@@ -47,6 +47,12 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     fit_method_layout.addWidget(main_window.plot_method_ols_radio)
     fit_method_layout.addStretch()
 
+    # The summary and threshold fraction describe the selected method, so
+    # recompute them when it changes (no-op until results exist).
+    main_window.plot_method_wls_radio.toggled.connect(
+        lambda checked: main_window._populate_precision_from_results()
+    )
+
     # Precision summary group (read-only, populated after simulation)
     precision_group = QGroupBox("Precision Summary")
     precision_layout = QFormLayout(precision_group)

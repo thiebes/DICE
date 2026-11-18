@@ -73,6 +73,21 @@ class TestPrecisionSummary:
             fraction_within(estimates, nominal, 0.10), 0.10
         )
 
+    @pytest.mark.parametrize("method", ["ols", "wls"])
+    def test_changing_fit_method_after_a_run_updates_the_summary(
+        self, qtbot, window_with_results, completed_run, method,
+    ):
+        _select_fit_method(qtbot, window_with_results, "ols" if method == "wls" else "wls")
+        window_with_results.proximity_spin.setValue(0.2)
+
+        _select_fit_method(qtbot, window_with_results, method)
+
+        estimates, nominal = d_estimates_from_csv(completed_run.csv_path, FIT_METHOD_COLUMNS[method])
+        assert _summary_labels(window_with_results) == _expected_summary(estimates, nominal)
+        assert window_with_results.proximity_fraction_label.text() == _fraction_text(
+            fraction_within(estimates, nominal, 0.2), 0.2
+        )
+
     def test_results_enable_the_threshold_tool(self, window_with_results):
         assert window_with_results.precision_placeholder.isHidden()
         assert window_with_results.explore_proximity_group.isEnabled()
