@@ -253,12 +253,12 @@ webapp = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fft-cnr", specifier = ">=0.1.1" },
+    { name = "fft-cnr", specifier = ">=0.4.1,<0.5" },
     { name = "flask", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "flask", marker = "extra == 'webapp'", specifier = ">=2.0.0" },
     { name = "joblib", specifier = ">=1.0.0" },
     { name = "matplotlib", specifier = ">=3.3.0" },
-    { name = "numpy", specifier = ">=1.20.0" },
+    { name = "numpy", specifier = ">=1.24" },
     { name = "pandas", specifier = ">=1.3.0" },
     { name = "pyqt6", specifier = ">=6.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -267,7 +267,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "pytest-qt", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "pytest-qt", marker = "extra == 'test'", specifier = ">=4.0.0" },
-    { name = "scipy", specifier = ">=1.7.0" },
+    { name = "scipy", specifier = ">=1.10" },
     { name = "seaborn", specifier = ">=0.11.0" },
     { name = "statsmodels", specifier = ">=0.12.0" },
 ]
@@ -275,15 +275,15 @@ provides-extras = ["webapp", "test", "dev"]
 
 [[package]]
 name = "fft-cnr"
-version = "0.1.1"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/31/a1ac1f924f2580c4335cdcf58d03d2b6c60d507a699bcc6abc444abd7b1c/fft_cnr-0.1.1.tar.gz", hash = "sha256:36dbc9feb0e0b34c72d8a546dbc30495a731359dc54b5219ba520667953382e2", size = 180611, upload-time = "2026-03-22T18:17:29.698Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/4c/89cbefee5e580e242bbf60192c57e12257995cadc598d0e186f90d587248/fft_cnr-0.4.1.tar.gz", hash = "sha256:a6419dd9dcdd42b9bfff1cde0613b97b4950a60a65665fa3e0580b831e4a59f6", size = 88665, upload-time = "2026-11-18T11:50:34.889Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/c7/9b0f0f49401aaa58ac31cbee89e613e9523628ea2a912c22273814598a47/fft_cnr-0.1.1-py3-none-any.whl", hash = "sha256:93a5abf7b51be9b0aa28c71aeab4efccfc31da2584eae0fe11b6dee76f8892ec", size = 11176, upload-time = "2026-03-22T18:17:28.46Z" },
+    { url = "https://files.pythonhosted.org/packages/38/86/d4f8fedcdc39c03b4c8fed456390e827b84960fe63494e5c618405804b87/fft_cnr-0.4.1-py3-none-any.whl", hash = "sha256:2cb25fe73e9dfa6d4eb89abcf3678e82eb1140190b1bf7c50a7dc8613ecbf663", size = 33389, upload-time = "2026-11-18T11:50:33.629Z" },
 ]
 
 [[package]]
