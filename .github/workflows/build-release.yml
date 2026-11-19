@@ -40,8 +40,9 @@ jobs:
       matrix:
         # Linux builds on the oldest supported Ubuntu runner, so the binary
         # also runs on older distributions: Ubuntu 22.04 has glibc 2.35, and
-        # the locked PyQt6 wheels need 2.34.
-        os: [windows-latest, ubuntu-22.04, macos-latest]
+        # the locked PyQt6 wheels need 2.34. macOS builds twice: macos-latest
+        # gives arm64 (Apple silicon) and macos-15-intel gives x86_64 (Intel).
+        os: [windows-latest, ubuntu-22.04, macos-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
