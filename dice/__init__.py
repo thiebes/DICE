@@ -7,7 +7,7 @@ excited state transport in optoelectronic semiconducting materials.
 
 __version__ = "1.3.0"
 __author__ = "Joseph J. Thiebes"
-__license__ = "CC BY 4.0"
+__license__ = "MIT"
 
 # Lazy imports (PEP 562) so that importing the package for metadata
 # (e.g. __version__) does not pull in heavy dependencies like scipy.
