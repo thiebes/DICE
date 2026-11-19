@@ -39,7 +39,7 @@ Examples:
   dice parameters.txt --dry-run          # Validate parameters without running
   dice --version                         # Show version information
   
-For more information, visit: https://github.com/your-repo/DICE
+For more information, visit: https://github.com/thiebes/DICE
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
