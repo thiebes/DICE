@@ -385,9 +385,11 @@ class OutputParameters:
     retain_profiles: bool = False
     
     def __post_init__(self):
-        valid_image_types = ['png', 'svg', 'jpg', 'tif', 'pdf']
-        if self.image_type not in valid_image_types:
-            raise ValueError(f"Image type must be one of {valid_image_types}")
+        # Same rule as the run-time check. The common types skip the lookup,
+        # which imports matplotlib, so constructing parameters stays light.
+        if str(self.image_type).lower() not in ('png', 'svg', 'pdf', 'jpg', 'jpeg', 'tif', 'tiff'):
+            from ..visualization.histograms import validate_image_type
+            validate_image_type(self.image_type)
         
         if self.image_width <= 0 or self.image_height <= 0:
             raise ValueError("Image dimensions must be positive")
@@ -554,8 +556,10 @@ class SimulationParameters:
         time_unit = normalized.get('time_unit', 'nanosecond')
         multiprocessing = normalized.get('multiprocessing', True)
 
-        # Extract diffusion parameters - either from diffusion_length or coefficient+lifetime
-        if 'diffusion_length' in normalized:
+        # Extract diffusion parameters: the coefficient and lifetime when both are
+        # given (the parser always adds the derived length too, which is infinite
+        # for a lifetime of 0), otherwise derive them from the diffusion length.
+        if not ('diffusion_coefficient' in normalized and 'lifetime' in normalized):
             # Derive coefficient from diffusion length
             # Need lifetime - use default if not provided
             lifetime = normalized.get('lifetime', 1.0)

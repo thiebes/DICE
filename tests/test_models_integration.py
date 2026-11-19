@@ -136,7 +136,7 @@ class TestParameterValidation:
         (lambda: TemporalParameters(mode='range', start=0.0), "required for range mode"),
         (lambda: TemporalParameters(mode='series', series=[]), "cannot be empty"),
         (lambda: TemporalParameters.from_legacy({}), "Either 'time_series' or 'time_range'"),
-        (lambda: OutputParameters(image_type='bmp'), "Image type must be one of"),
+        (lambda: OutputParameters(image_type='bmp'), "Unknown image type 'bmp'"),
         (lambda: OutputParameters(image_width=0.0), "dimensions must be positive"),
         (lambda: OutputParameters(image_dpi=0), "DPI must be positive"),
         (lambda: OutputParameters(num_bins=0), "bins must be positive"),
@@ -267,3 +267,26 @@ class TestTimeSeriesProfileFromGenerator:
                 time_axis=quick_test_parameters['time series'][:-1],
                 y_values=np.asarray(quick_test_generated['y_values_t']),
             )
+
+
+class TestLegacyConstructorConventions:
+    """SimulationParameters.from_legacy and OutputParameters follow the run path's rules."""
+
+    def test_zero_lifetime_keeps_the_diffusion_coefficient(self, tmp_path):
+        import ast
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['nominal diffusion length']
+        params.update({'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 0})
+        params_file = tmp_path / 'no_decay.txt'
+        params_file.write_text(str(params))
+        parsed = open_parameters(params_file)
+
+        sim = SimulationParameters.from_legacy(parsed)
+
+        assert sim.diffusion_coefficient == 0.01
+        assert sim.lifetime == 0
+        assert sim.diffusion_length == float('inf')
+
+    @pytest.mark.parametrize('image_type', ['png', 'eps', 'WEBP', 'tiff'])
+    def test_output_parameters_accept_the_run_time_image_types(self, image_type):
+        assert OutputParameters(image_type=image_type).image_type == image_type
