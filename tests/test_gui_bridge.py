@@ -277,3 +277,25 @@ class TestRunValidation:
         summary = (output_dir / 'quick_test_summary.txt').read_text(encoding='utf-8')
         assert "Nominal diffusion coefficient:\n    10.00000 nanometer^2/picosecond\n" in summary
 
+
+
+class TestFiguresAreClosed:
+    """Each histogram the bridge draws is closed after saving, so a long GUI session holds no figures."""
+
+    def test_csv_load_and_regeneration_leave_no_open_figure(self, tmp_path):
+        import matplotlib.pyplot as plt
+
+        csv_file = tmp_path / 'exported.csv'
+        export_collated_results(_output(WLS_SLOPES, OLS_SLOPES), csv_file)
+        plt.close('all')
+        interface = DiceInterface()
+
+        interface.load_and_plot_from_csv(
+            str(csv_file), str(tmp_path / 'loaded.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['wls'])
+        for method in ('wls', 'ols'):
+            interface.regenerate_plot_from_memory(
+                str(tmp_path / f'again_{method}.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS[method])
+
+        assert plt.get_fignums() == []
+        assert all((tmp_path / name).stat().st_size > 0
+                   for name in ('loaded.png', 'again_wls.png', 'again_ols.png'))

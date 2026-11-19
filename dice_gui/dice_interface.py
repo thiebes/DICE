@@ -258,11 +258,15 @@ class DiceInterface:
                 # Create plot
                 plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
 
-                plot_accuracy_histogram(
+                figure = plot_accuracy_histogram(
                     simulation_result=legacy_result,
                     filename=str(plot_file),
                     **histogram_options(processed_params)
                 )
+                # The GUI shows the saved file; close the figure so a long session does not keep one per plot.
+                if figure is not None:
+                    import matplotlib.pyplot as plt
+                    plt.close(figure)
 
             return result, processed_params
 
@@ -376,7 +380,7 @@ class DiceInterface:
             }
 
             # Create plot with specified settings
-            plot_accuracy_histogram(
+            figure = plot_accuracy_histogram(
                 simulation_result=legacy_result,
                 filename=filename,
                 image_type=image_settings.get('image_type', 'png'),
@@ -388,6 +392,10 @@ class DiceInterface:
                 tick_width=image_settings.get('image_tick_width', 2),
                 num_bins=image_settings.get('image_numbins', 35)
             )
+            # The GUI shows the saved file; close the figure so a long session does not keep one per plot.
+            if figure is not None:
+                import matplotlib.pyplot as plt
+                plt.close(figure)
 
         except ImportError as e:
             raise ImportError(f"Failed to import required modules: {e}")
@@ -492,7 +500,7 @@ class DiceInterface:
             }
 
             # Create plot with specified settings
-            plot_accuracy_histogram(
+            figure = plot_accuracy_histogram(
                 simulation_result=legacy_result,
                 filename=filename,
                 image_type=image_settings.get('image_type', 'png'),
@@ -504,6 +512,10 @@ class DiceInterface:
                 tick_width=image_settings.get('image_tick_width', 2),
                 num_bins=image_settings.get('image_numbins', 35)
             )
+            # The GUI shows the saved file; close the figure so a long session does not keep one per plot.
+            if figure is not None:
+                import matplotlib.pyplot as plt
+                plt.close(figure)
 
             # Store loaded data in memory for regeneration: every estimator's
             # slopes whose column the CSV has, one entry per CSV row, so each
