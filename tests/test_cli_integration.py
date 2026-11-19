@@ -315,3 +315,16 @@ class TestQuietMode:
         run = run_cli(tmp_path, params_file, 'quiet', '--seed', '1', '--no-plots')
         assert run.exit_code == 0
         assert capsys.readouterr().out == ''
+
+
+class TestZeroNoiseRun:
+    """'noise value': 0 runs to completion and writes a complete summary."""
+
+    def test_noise_free_run_completes(self, tmp_path):
+        params_file = write_quick_test_variant(tmp_path, 'noise_free', {'noise value': 0, 'number of runs': 3})
+        run = run_cli(tmp_path, params_file, 'noise_free', '--no-plots')
+        assert run.exit_code == 0
+        summary = run.read_summary()
+        assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in summary
+        assert summary.endswith("Simulation completed successfully.\n")
+        assert (run.read_csv()['nominal CNR'] == float('inf')).all()

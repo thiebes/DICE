@@ -82,3 +82,26 @@ class TestTextOutputEncoding:
         print_and_append(log_file, message, print_to_console=False)
         print_and_append(log_file, message, print_to_console=False)
         assert log_file.read_text(encoding='utf-8') == f"{message}\n{message}\n"
+
+
+class TestZeroNoise:
+    """A noise-free run has an infinite initial CNR, which the summaries report as 'inf'."""
+
+    def test_summary_reports_infinite_cnr(self, tmp_path, quick_test_simulation,
+                                          quick_test_parameters, quick_test_analysis):
+        import dataclasses
+        noise_free = dataclasses.replace(quick_test_simulation, noise_values=[0.0])
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(noise_free, summary_file, quick_test_parameters, quick_test_analysis)
+        text = summary_file.read_text(encoding='utf-8')
+        assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in text
+        assert text.endswith("Simulation completed successfully.\n")
+
+    def test_legacy_summary_reports_infinite_cnr(self, tmp_path, quick_test_simulation,
+                                                 quick_test_parameters):
+        import dataclasses
+        noise_free = dataclasses.replace(quick_test_simulation, noise_values=[0.0])
+        summary_file = tmp_path / 'legacy_summary.txt'
+        export_legacy_format(noise_free, {'parameters': quick_test_parameters},
+                             tmp_path / 'legacy.csv', summary_file)
+        assert "Initial contrast-to-noise ratio (CNR): inf\n" in summary_file.read_text(encoding='utf-8')
