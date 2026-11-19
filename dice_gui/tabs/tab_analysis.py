@@ -34,7 +34,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     main_window.plot_method_wls_radio.setChecked(True)
     main_window.plot_method_wls_radio.setToolTip(
         "Weighted Least Squares regression.\n\n"
-        "Weights each data point by the inverse of its variance.\n"
+        "Weights each data point by the inverse of its squared relative error.\n"
         "Recommended for most applications as it accounts for\n"
         "heteroscedasticity in MSD measurements."
     )
