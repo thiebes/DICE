@@ -181,14 +181,9 @@ The archive contains one file, the executable `DICE`, and keeps its execute perm
 
 ### Where results are saved
 
-The application saves results in an `output` folder inside its working directory. Started from File Explorer on Windows, that is the folder that contains the `.exe` file. Started from a terminal, it is the current folder of the terminal. The Simulation Setup tab shows the full path.
+The application saves results in an `output` folder inside the folder it was started from, if it can write there. Started from File Explorer on Windows, that is the folder that contains the `.exe` file. Started from a terminal, it is the current folder of the terminal.
 
-On macOS, an app started from Finder runs in the system root folder (`/`), where DICE cannot create the `output` folder. Start DICE from Terminal in the folder where you want the results:
-
-```bash
-cd ~/Documents
-/Applications/DICE.app/Contents/MacOS/DICE
-```
+If DICE cannot write to that folder, it saves results in `DICE/output` inside your Documents folder, or inside your home folder if you have no Documents folder. On macOS this is where results go when you start DICE from the Finder, because the Finder starts applications in the system root folder (`/`). The Output Location on the Simulation Setup tab shows the full path, and the dialogs that open and save parameter files start in the same place.
 
 ### Standalone application and Python installation compared
 

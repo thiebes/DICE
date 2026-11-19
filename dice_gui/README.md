@@ -106,6 +106,8 @@ The GUI writes the same files as the command-line interface, in `output/<slug>/`
 - `<slug>_summary.txt`: parameters and summary statistics
 - `<slug>_accuracy_histogram.<type>`: histogram of the ratio of estimated to nominal diffusion coefficient (WLS fit)
 
+If the GUI cannot write to that directory, it writes to `DICE/output/<slug>/` in your Documents folder instead, or in your home folder if there is no Documents folder. That happens, for example, when the macOS Finder starts the standalone application in the read-only root folder (`/`). The Output Location on the Simulation Setup tab shows the folder in use.
+
 The [CLI Guide](../docs/cli-guide.md#output-files) describes the contents of these files.
 
 ## Code structure
@@ -115,6 +117,7 @@ The [CLI Guide](../docs/cli-guide.md#output-files) describes the contents of the
 - `tabs/`: one module for each tab
 - `dice_interface.py`: `DiceInterface`, which converts the GUI inputs to parameters and runs the simulation
 - `simulation_thread.py`: `SimulationThread`, which runs the simulation in the background so that the window stays responsive
+- `output_location.py`: `output_root()`, the folder where the GUI saves results and where its file dialogs open
 - `validators.py`, `validation_manager.py`: input validation (`ValidationResult`, `ValidationManager`)
 - `global_units_dialog.py`, `presets.py`, `proximity_widget.py`, `styles.py`, `accessibility.py`: units dialog, output presets, target diagram, theme, and keyboard access
 

@@ -26,6 +26,7 @@ from dice_gui.validators import (
     calculate_diffusion_length, calculate_pixel_size
 )
 from dice_gui.dice_interface import DiceInterface
+from dice_gui.output_location import output_root
 from dice_gui.styles import DiceTheme, apply_theme
 from dice_gui.accessibility import (
     add_accessible_name_and_description,
@@ -527,14 +528,12 @@ class DiceGUI(QMainWindow):
 
     def _update_output_path_preview(self):
         """Update the output path preview based on current slug."""
-        from pathlib import Path
-
         slug = self.filename_slug_input.text().strip()
         if not slug:
             self.output_path_preview.setText("Enter a filename slug to see output paths")
             return
 
-        output_dir = Path.cwd() / 'output' / slug
+        output_dir = output_root() / slug
         image_type = getattr(self, 'image_type_combo', None)
         ext = image_type.currentText() if image_type else 'png'
 
@@ -658,8 +657,7 @@ class DiceGUI(QMainWindow):
 
             # Get output location (original directory)
             slug = self.interface.last_parameters.get('filename slug', 'plot')
-            from pathlib import Path
-            output_dir = Path.cwd() / 'output' / slug
+            output_dir = output_root() / slug
 
             # Get plot filename with overwrite handling
             filename = self.get_plot_filename(output_dir, slug, image_settings['image_type'])
@@ -688,11 +686,12 @@ class DiceGUI(QMainWindow):
         from pathlib import Path
 
         # Get default directory from filename slug output path
-        default_dir = Path.cwd() / 'output' / self.filename_slug_input.text()
+        root = output_root()
+        default_dir = root / self.filename_slug_input.text()
         if not default_dir.exists():
-            default_dir = Path.cwd() / 'output'
+            default_dir = root
         if not default_dir.exists():
-            default_dir = Path.cwd()
+            default_dir = root.parent
 
         # Open file dialog
         csv_file, _ = QFileDialog.getOpenFileName(
@@ -1300,8 +1299,8 @@ class DiceGUI(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        # Open file dialog
-        default_dir = str(Path.cwd())
+        # Open file dialog in the folder that holds the output root
+        default_dir = str(output_root().parent)
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Open Parameters File",
@@ -1391,7 +1390,7 @@ class DiceGUI(QMainWindow):
 
     def save_parameters_as(self):
         """Save parameters to a new file."""
-        default_dir = str(Path.cwd())
+        default_dir = str(output_root().parent)
         default_name = "parameters.txt"
         if self.current_parameter_file:
             default_name = Path(self.current_parameter_file).name

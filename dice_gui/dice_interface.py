@@ -10,6 +10,7 @@ import os
 
 from dice.models.estimators import ESTIMATORS, SlopeFit, get_estimator
 from dice.models.results import RunResult, MonteCarloOutput
+from dice_gui.output_location import output_root
 
 
 class DiceInterface:
@@ -183,7 +184,7 @@ class DiceInterface:
 
             # Setup output directory
             slug = processed_params.get('filename slug', 'dice_output')
-            output_dir = Path.cwd() / 'output' / slug
+            output_dir = output_root() / slug
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Results are in the global units resolve_units() converted to;
