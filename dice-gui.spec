@@ -1,139 +1,90 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for DICE GUI application.
+PyInstaller spec file for the DICE GUI application.
 
-Build command:
+Build from the repository root, in an environment synced from uv.lock with
+PyInstaller installed from .github/pyinstaller-requirements.txt (see
+.github/workflows/build-release.yml, which syncs without extras so that test
+and web-app packages are not bundled):
+
     pyinstaller dice-gui.spec
 
 Output:
-    dist/DICE.exe (Windows)
-    dist/DICE (Linux)
-    dist/DICE.app (macOS)
+    dist/DICE.exe (Windows, one file)
+    dist/DICE (Linux, one file)
+    dist/DICE.app (macOS, one-folder application bundle)
 """
 
+import re
 import sys
-import os
 from pathlib import Path
 
-# Configuration
-onefile = True
-app_name = 'DICE'
+from PyInstaller.utils.hooks import collect_submodules
 
-block_cipher = None
+app_name = 'DICE'
 root_path = Path(SPECPATH)
 
-# Read version from package
-import re
+# One file on Windows and Linux. On macOS, PyInstaller deprecates one-file
+# .app bundles (an error from PyInstaller 7) because they conflict with code
+# signing and Gatekeeper, so the bundle is built in one-folder mode.
+onefile = sys.platform != 'darwin'
+
 with open(root_path / 'dice' / '__init__.py') as _f:
     _version_match = re.search(r"__version__\s*=\s*['\"](.+?)['\"]", _f.read())
     app_version = _version_match.group(1) if _version_match else '0.0.0'
 
-# Platform-specific settings
-if sys.platform == 'win32':
-    icon_file = str(root_path / 'webapp' / 'static' / 'favicon.ico')
-    exe_name = f'{app_name}.exe'
-elif sys.platform == 'darwin':
-    icon_file = None  # Would need .icns file for macOS
-    exe_name = app_name
+if sys.platform == 'darwin':
+    icon_file = None  # Would need an .icns file for macOS
 else:
     icon_file = str(root_path / 'webapp' / 'static' / 'favicon.ico')
-    exe_name = app_name
 
-# Collect missing DLLs from conda environment (Windows)
-binaries = []
-if sys.platform == 'win32':
-    conda_prefix = os.environ.get('CONDA_PREFIX', sys.prefix)
-    conda_dlls = Path(conda_prefix) / 'Library' / 'bin'
-    if conda_dlls.exists():
-        # DLLs that PyInstaller may miss from conda
-        missing_dlls = [
-            'libexpat.dll',
-            'liblzma.dll',
-            'LIBBZ2.dll',
-            'ffi.dll',
-            'sqlite3.dll',
-            'zlib.dll',
-        ]
-        for dll in missing_dlls:
-            dll_path = conda_dlls / dll
-            if dll_path.exists():
-                binaries.append((str(dll_path), '.'))
+# The entry script is dice_gui/dice_gui.py, not dice_gui/__main__.py (the
+# `dice-gui` console script): __main__.py starts joblib workers at launch to
+# warm them up, and in a frozen application a loky worker re-runs the entry
+# script instead of the worker code, so each launch would start further
+# copies of the application.
 
-# Data files to include
-datas = [
-    (str(root_path / 'logo'), 'logo'),
-    (str(root_path / 'graphics'), 'graphics'),
-    (str(root_path / 'data'), 'data'),
+# The project is built from the source tree, not installed, so put it on
+# sys.path before collect_submodules imports the packages in a subprocess.
+sys.path.insert(0, str(root_path))
+
+# Static analysis follows the GUI's direct imports, but dice/__init__.py and
+# dice/core/__init__.py resolve their public names lazily through
+# importlib.import_module (PEP 562), which PyInstaller cannot follow. Bundle
+# every first-party submodule, so a module reached only through those lazy
+# names is still present. on_error='raise' fails the build if a package
+# cannot be imported, instead of silently bundling a partial list.
+first_party_modules = [
+    *collect_submodules('dice', on_error='raise'),
+    *collect_submodules('dice_gui', on_error='raise'),
+]
+for _required in ('dice.core.fitting', 'dice_gui.dice_gui'):
+    if _required not in first_party_modules:
+        raise SystemExit(
+            f"collect_submodules did not find {_required!r}; "
+            "run PyInstaller from the repository root"
+        )
+
+hiddenimports = [
+    *first_party_modules,
+    # Named only as a string in the lazy-import table of dice/core/__init__.py.
+    *collect_submodules('fft_cnr', on_error='raise'),
+    # The Matplotlib hook bundles only the backends named in matplotlib.use()
+    # calls (Agg, in dice/visualization/histograms.py). If pyplot resolves its
+    # backend while a QApplication is running and none has been set, it
+    # selects QtAgg, so bundle that backend as well.
+    'matplotlib.backends.backend_qtagg',
 ]
 
-# Hidden imports that PyInstaller may miss
-hiddenimports = [
-    # DICE core packages
-    'dice',
-    'dice.core',
-    'dice.core.diffusion',
-    'dice.core.noise',
-    'dice.core.profiles',
-    'dice.core.fitting',
-    'dice.analysis',
-    'dice.analysis.simulation',
-    'dice.analysis.statistics',
-    'dice.io',
-    'dice.io.parameters',
-    'dice.io.results',
-    'dice.io.data_loader',
-    'dice.models',
-    'dice.models.parameters',
-    'dice.models.profiles',
-    'dice.models.results',
-    'dice.utils',
-    'dice.utils.axes',
-    'dice.utils.converters',
-    'dice.utils.validators',
-    'dice.utils.legacy_compatibility',
-    'dice.visualization',
-    'dice.visualization.plots',
-    'dice.visualization.histograms',
-    'dice.cli',
-    'dice.cli.main',
-    'dice.cli.arguments',
-    # DICE GUI packages
-    'dice_gui',
-    'dice_gui.dice_gui',
-    'dice_gui.dice_interface',
-    'dice_gui.validators',
-    'dice_gui.validation_manager',
-    'dice_gui.styles',
-    'dice_gui.accessibility',
-    'dice_gui.proximity_widget',
-    'dice_gui.presets',
-    'dice_gui.collapsible_group',
-    # Scientific packages
-    'numpy',
-    'scipy',
-    'scipy.optimize',
-    'scipy.stats',
-    'scipy.special',
-    'pandas',
-    'statsmodels',
-    'statsmodels.api',
-    'matplotlib',
-    'matplotlib.pyplot',
-    'matplotlib.backends.backend_qtagg',
-    'seaborn',
-    'joblib',
-    # PyQt6 modules
-    'PyQt6',
-    'PyQt6.QtCore',
-    'PyQt6.QtGui',
-    'PyQt6.QtWidgets',
-    'PyQt6.sip',
+# Example parameter files, loaded by the GUI's example menu.
+datas = [
+    (str(root_path / 'data'), 'data'),
 ]
 
 a = Analysis(
     [str(root_path / 'dice_gui' / 'dice_gui.py')],
     pathex=[str(root_path)],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -144,28 +95,27 @@ a = Analysis(
         'pdb',
         'flask',
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
+# UPX is off: it is applied whenever a upx binary happens to be on PATH (the
+# Ubuntu runner image installs one), which would let an unpinned tool rewrite
+# the release binaries, and UPX-compressed Qt libraries are a known source of
+# crashes.
 if onefile:
     exe = EXE(
         pyz,
         a.scripts,
         a.binaries,
-        a.zipfiles,
         a.datas,
         [],
-        name=exe_name,
+        name=app_name,
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
-        upx_exclude=[],
+        upx=False,
         runtime_tmpdir=None,
         console=False,
         disable_windowed_traceback=False,
@@ -181,11 +131,11 @@ else:
         a.scripts,
         [],
         exclude_binaries=True,
-        name=exe_name,
+        name=app_name,
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=False,
         console=False,
         disable_windowed_traceback=False,
         argv_emulation=False,
@@ -197,15 +147,12 @@ else:
     coll = COLLECT(
         exe,
         a.binaries,
-        a.zipfiles,
         a.datas,
         strip=False,
-        upx=True,
-        upx_exclude=[],
+        upx=False,
         name=app_name,
     )
 
-# macOS app bundle
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe if onefile else coll,
