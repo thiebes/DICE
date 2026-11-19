@@ -68,7 +68,8 @@ for _required in ('dice.core.fitting', 'dice_gui.dice_gui'):
 
 hiddenimports = [
     *first_party_modules,
-    # Named only as a string in the lazy-import table of dice/core/__init__.py.
+    # dice.core re-exports fft_cnr lazily, by name, in its lazy-import table,
+    # so keep it bundled even if the direct imports of it change.
     *collect_submodules('fft_cnr', on_error='raise'),
     # The Matplotlib hook bundles only the backends named in matplotlib.use()
     # calls (Agg, in dice/visualization/histograms.py). If pyplot resolves its
