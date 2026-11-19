@@ -101,13 +101,13 @@ class TestSaveProfileData:
 
 
 class TestLoadTimeSeriesProfiles:
-    """A leading increasing column is read as the time axis."""
+    """Profiles load as rows (time x space); the first column is time only when the caller says so."""
 
     def test_time_column_split_from_profiles(self, tmp_path, quick_test_parameters, simulated_profiles):
         time_axis = quick_test_parameters['time series']
         series_file = tmp_path / 'series.csv'
         np.savetxt(series_file, np.column_stack([time_axis, simulated_profiles]), delimiter=',')
-        profiles, loaded_time = load_time_series_profiles(series_file)
+        profiles, loaded_time = load_time_series_profiles(series_file, time_column=True)
         np.testing.assert_array_equal(loaded_time, time_axis)
         np.testing.assert_array_equal(profiles, simulated_profiles)
 
@@ -115,9 +115,45 @@ class TestLoadTimeSeriesProfiles:
         time_axis = quick_test_parameters['time series']
         series_file = tmp_path / 'series_by_column.csv'
         np.savetxt(series_file, np.column_stack([time_axis, simulated_profiles]).T, delimiter=',')
-        profiles, loaded_time = load_time_series_profiles(series_file, transpose=True)
+        profiles, loaded_time = load_time_series_profiles(series_file, transpose=True, time_column=True)
         np.testing.assert_array_equal(loaded_time, time_axis)
         np.testing.assert_array_equal(profiles, simulated_profiles)
+
+    def test_increasing_first_pixel_is_not_taken_as_time(self, tmp_path, simulated_profiles):
+        # Frames ordered by their first pixel, so that column increases like a time axis would
+        frames = simulated_profiles[np.argsort(simulated_profiles[:, 0])]
+        assert np.all(np.diff(frames[:, 0]) > 0)
+        series_file = tmp_path / 'series.csv'
+        np.savetxt(series_file, frames, delimiter=',')
+        profiles, loaded_time = load_time_series_profiles(series_file)
+        assert loaded_time is None
+        np.testing.assert_array_equal(profiles, frames)
+
+    def test_one_row_file_is_one_profile(self):
+        profiles, loaded_time = load_time_series_profiles(EXAMPLE_PROFILE)
+        assert loaded_time is None
+        assert profiles.shape == (1, 41)
+        np.testing.assert_array_equal(profiles[0], load_profile_data(EXAMPLE_PROFILE))
+
+    def test_one_row_file_with_time(self, tmp_path):
+        series_file = tmp_path / 'one_frame.csv'
+        series_file.write_text("0.0," + EXAMPLE_PROFILE.read_text())
+        profiles, loaded_time = load_time_series_profiles(series_file, time_column=True)
+        np.testing.assert_array_equal(loaded_time, [0.0])
+        np.testing.assert_array_equal(profiles, [load_profile_data(EXAMPLE_PROFILE)])
+
+    def test_one_profile_per_column_file(self, tmp_path):
+        column_file = tmp_path / 'profile_by_column.csv'
+        column_file.write_text("\n".join(EXAMPLE_PROFILE.read_text().split(',')))
+        profiles, loaded_time = load_time_series_profiles(column_file, transpose=True)
+        assert loaded_time is None
+        np.testing.assert_array_equal(profiles, [load_profile_data(EXAMPLE_PROFILE)])
+
+    def test_time_column_without_profile_columns_raises_ioerror(self, tmp_path):
+        column_file = tmp_path / 'one_column.csv'
+        column_file.write_text("\n".join(EXAMPLE_PROFILE.read_text().split(',')))
+        with pytest.raises(IOError, match="time column needs at least one profile column"):
+            load_time_series_profiles(column_file, time_column=True)
 
     def test_malformed_file_raises_ioerror(self, tmp_path):
         bad_file = tmp_path / 'bad_series.csv'
