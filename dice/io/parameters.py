@@ -8,6 +8,7 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 """
 
 import ast
+import warnings
 import numpy as np
 from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
@@ -24,6 +25,10 @@ from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
     ParameterKey, LEGACY_OUTPUT_KEYS
 )
+
+# Keys of the proximity-level parameter, retired from the simulation schema;
+# still accepted in parameter files, with a warning.
+RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
 
 
 def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
@@ -329,6 +334,20 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
                        "'nominal diffusion coefficient' and 'nominal lifetime (tau)'.")
 
 
+def check_retired_parameters(parameters_dictionary: Dict[str, Any]) -> List[str]:
+    """Messages for keys a parameter file may still contain that no longer affect the simulation."""
+    return [
+        f"Parameter '{key}' no longer affects the simulation and is ignored. "
+        "Proximity analysis is now post-hoc: the summary reports the fraction of "
+        "estimates within 5%, 10%, 20%, and 50% of nominal, and other thresholds are "
+        "available from dice.analysis.statistics.analyze_simulation_results"
+        "(result, proximity_levels=[...]) or from the GUI's Analysis Settings tab "
+        "('Explore Accuracy Threshold')."
+        for key in RETIRED_PROXIMITY_KEYS
+        if key in parameters_dictionary
+    ]
+
+
 def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -> Dict[str, Any]:
     """
     Parse and validate simulation parameters.
@@ -358,6 +377,9 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Make a working copy - don't normalize yet to preserve original key format
     # The check_for_unique_key function handles both formats
     parameters_dictionary = dict(parameters_dictionary)
+
+    for message in check_retired_parameters(parameters_dictionary):
+        warnings.warn(message, stacklevel=2)
 
     # Check required keys (support both formats)
     required_keys_legacy = ['number of runs', 'spatial width', 'pixel width', 'mean_0', 'amplitude_0']
@@ -390,8 +412,6 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     
     if 'filename slug' not in parameters_dictionary:
         parameters_dictionary['filename slug'] = 'dice_simulation'
-    
-    # Don't set default proximity level - let CLI handle standard vs custom levels
     
     if 'retain profile data' not in parameters_dictionary:
         parameters_dictionary['retain profile data'] = 0

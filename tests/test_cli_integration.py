@@ -11,6 +11,7 @@ quick_test.txt with named values replaced.
 import ast
 import contextlib
 import importlib
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -226,3 +227,26 @@ class TestMultiprocessingFlag:
             assert main([str(params_file), '--quiet', '--no-plots', *cli_args]) == 0
         [call] = recorded_calls
         assert {key: call[key] for key in expected} == expected
+
+
+class TestRetiredProximityLevel:
+    """A file that still sets 'proximity level' warns once and runs exactly as without it."""
+
+    def test_warns_and_has_no_effect(self, tmp_path_factory):
+        seeded = ('--seed', '5', '--no-plots')
+        plain_dir, retired_dir = tmp_path_factory.mktemp('plain'), tmp_path_factory.mktemp('retired')
+        plain_file = write_quick_test_variant(plain_dir, 'proximity', {'number of runs': 6})
+        retired_file = write_quick_test_variant(
+            retired_dir, 'proximity', {'number of runs': 6, 'proximity level': 0.1})
+
+        plain = run_cli(plain_dir, plain_file, 'proximity', *seeded)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            retired = run_cli(retired_dir, retired_file, 'proximity', *seeded)
+
+        assert plain.exit_code == retired.exit_code == 0
+        proximity_warnings = [
+            w for w in caught if "'proximity level' no longer affects" in str(w.message)]
+        assert [w.category for w in proximity_warnings] == [UserWarning]
+        assert plain.csv_file.read_bytes() == retired.csv_file.read_bytes()
+        assert plain.read_summary() == retired.read_summary()

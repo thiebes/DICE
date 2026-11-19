@@ -509,5 +509,35 @@ class TestEstimateNoiseFromData:
             handle_noise_parameters(params)
 
 
+class TestRetiredProximityLevel:
+    """'proximity level' no longer affects a run; a file that sets it gets one warning."""
+
+    def _quick_test_params(self) -> dict:
+        import ast
+        return ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+
+    @pytest.mark.parametrize('key', ['proximity level', 'proximity_level'])
+    def test_warns_once_naming_key_and_replacement(self, key):
+        params = self._quick_test_params() | {key: 0.1}
+        with pytest.warns(UserWarning) as caught:
+            parameter_parser(params)
+        messages = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert len(messages) == 1
+        assert f"'{key}' no longer affects the simulation" in messages[0]
+        assert "analyze_simulation_results" in messages[0]
+        assert "Explore Accuracy Threshold" in messages[0]
+
+    def test_no_warning_without_key(self):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            parameter_parser(self._quick_test_params())
+
+    def test_check_returns_messages_only_for_retired_keys(self):
+        from dice.io.parameters import check_retired_parameters
+        assert check_retired_parameters(self._quick_test_params()) == []
+        assert len(check_retired_parameters({'proximity level': 0.1})) == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
