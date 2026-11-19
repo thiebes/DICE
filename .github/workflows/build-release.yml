@@ -249,4 +249,6 @@ jobs:
           cd release
           sha256sum DICE-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
-          gh release upload "$RELEASE_TAG" DICE-* SHA256SUMS.txt --repo "$GITHUB_REPOSITORY"
+          # --clobber lets a rerun of this job replace assets that a failed
+          # attempt uploaded; a rerun uploads the same run's build artifacts.
+          gh release upload "$RELEASE_TAG" DICE-* SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
