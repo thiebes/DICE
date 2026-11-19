@@ -214,14 +214,30 @@ class TestLoadExampleMenu:
         assert window.num_runs_spin.value() == expected["number of runs"]
         assert window.pixel_width_input.value() == expected["pixel width"]
 
-    # A wheel install or a standalone build has no data/examples directory
-    # beside dice_gui, so the Examples menu loads the embedded copies.
+    # A wheel install has no data/examples directory, so the Examples menu
+    # loads the embedded copies.
     @pytest.mark.parametrize("example_name", ["quick_test", "high_precision", "publication"])
     def test_embedded_copy_matches_the_bundled_file(self, example_name):
         assert EXAMPLE_PARAMETERS[example_name] == read_example(f"{example_name}.txt")
 
+    def test_standalone_build_loads_the_files_it_unpacked(self, window, dialogs, monkeypatch, tmp_path):
+        import sys
+
+        unpacked_examples = tmp_path / "data" / "examples"
+        unpacked_examples.mkdir(parents=True)
+        # One changed value shows which copy the menu read.
+        (unpacked_examples / "quick_test.txt").write_text(
+            (EXAMPLES_DIR / "quick_test.txt").read_text().replace("'number of runs': 100", "'number of runs': 123")
+        )
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+        window.example_menu.actions()[0].trigger()
+
+        assert window.num_runs_spin.value() == 123
+
     def test_example_without_the_bundled_files_sets_its_own_units(self, window, dialogs, monkeypatch, tmp_path):
-        monkeypatch.setattr(dice_gui_window, "__file__", str(tmp_path / "dice_gui" / "dice_gui.py"))
+        monkeypatch.setattr(dice_gui_window, "examples_directory", lambda: tmp_path / "data" / "examples")
         choose_global_units(window, monkeypatch, "nanometer", "picosecond")
 
         window.example_menu.actions()[0].trigger()

@@ -153,10 +153,9 @@ jobs:
           esac
           ls -l release
 
-      # Unpack the release asset, start it with the offscreen Qt platform, and
-      # require it to be running a minute later. A start-up exception ends
-      # the process on Linux and macOS.
-      - name: Smoke test
+      # The tests below run the release asset as a user unpacks it.
+      - name: Unpack
+        id: unpack
         if: runner.os != 'Windows'
         shell: bash
         env:
@@ -174,7 +173,75 @@ jobs:
             echo "::error::$app is missing from the release asset or is not executable"
             exit 1
           fi
-          "$app" > smoke.log 2>&1 &
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+      # The self-test simulates the bundled quick_test example serially and in
+      # the process pool that the application's parallel simulations use,
+      # with one seed. It opens no window, prints its report, and exits with
+      # status 0 only if the results are identical and every worker process
+      # it started has ended. It runs before any other start of the
+      # application, so a DICE process left afterwards is one of its workers.
+      - name: Self-test
+        if: runner.os != 'Windows'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          APP: ${{ steps.unpack.outputs.app }}
+        run: |
+          status=0
+          "$APP" --self-test || status=$?
+          # Allow a few seconds for ended processes to disappear.
+          for _ in 1 2 3 4 5; do
+            pgrep -x DICE > /dev/null || break
+            sleep 1
+          done
+          if pgrep -lx DICE; then
+            echo "::error::DICE processes were still running after the self-test"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The self-test failed with status $status"
+            exit 1
+          fi
+
+      # The same self-test on Windows. The windowed executable has no console
+      # of its own, so its report goes to redirected standard output.
+      - name: Self-test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          $proc = Start-Process -FilePath "release\$env:ASSET.exe" -ArgumentList '--self-test' `
+            -RedirectStandardOutput self-test-output.txt -RedirectStandardError self-test-errors.txt `
+            -PassThru -Wait
+          Get-Content self-test-output.txt, self-test-errors.txt
+          # Allow a few seconds for ended processes to disappear.
+          for ($i = 0; $i -lt 5 -and (Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue); $i++) {
+            Start-Sleep -Seconds 1
+          }
+          $remaining = @(Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue)
+          if ($remaining.Count -gt 0) {
+            $remaining | Stop-Process -Force
+            Write-Output "::error::$($remaining.Count) DICE processes were still running after the self-test"
+            exit 1
+          }
+          if ($proc.ExitCode -ne 0) {
+            Write-Output "::error::The self-test failed with exit code $($proc.ExitCode)"
+            exit 1
+          }
+
+      # Start the application with the offscreen Qt platform, and require it
+      # to be running a minute later. A start-up exception ends the process
+      # on Linux and macOS.
+      - name: Smoke test
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          APP: ${{ steps.unpack.outputs.app }}
+        run: |
+          "$APP" > smoke.log 2>&1 &
           pid=$!
           sleep 60
           if kill -0 "$pid" 2>/dev/null; then

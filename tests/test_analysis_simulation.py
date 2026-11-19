@@ -385,50 +385,171 @@ class TestSeededSimulation:
         assert {child.entropy for child in children} == {11}
 
 
-class TestStandaloneBuildRunsSerially:
-    """A standalone (frozen) build cannot start joblib workers, so it runs serially."""
+class TestProcessPoolBackend:
+    """The standard library's process pool, which a standalone build uses, gives the serial results."""
 
-    def _simulate(self, **options):
+    def _simulate(self, num_runs=7, noise_values=(0.02,), **options):
         return run_monte_carlo_simulation(
             parameters=get_legacy_simulation_params(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
-            noise_values=[0.02],
-            num_runs=4,
+            noise_values=list(noise_values),
+            num_runs=num_runs,
             seed=11,
             **options,
         )
 
     @staticmethod
-    def _slopes(result) -> np.ndarray:
-        return np.array([(r.ols_slope, r.wls_slope) for r in result.run_results])
+    def _estimates(result) -> np.ndarray:
+        return np.array([
+            (r.run_id, r.cnr_0_estimate, r.estimated_sigma2_0, r.ols_slope, r.wls_slope)
+            for r in result.run_results
+        ])
 
-    def test_support_follows_sys_frozen(self, monkeypatch):
-        import sys
-        from dice.utils.runtime import parallel_processing_supported
+    @pytest.fixture
+    def new_children(self):
+        """Child processes started during the test; joblib's reusable workers from earlier tests are not counted."""
+        import multiprocessing
 
-        monkeypatch.delattr(sys, 'frozen', raising=False)
-        assert parallel_processing_supported() is True
-        monkeypatch.setattr(sys, 'frozen', True, raising=False)
-        assert parallel_processing_supported() is False
+        earlier = set(multiprocessing.active_children())
+        return lambda: set(multiprocessing.active_children()) - earlier
 
-    def test_frozen_build_does_not_start_workers(self, monkeypatch):
-        import sys
-        import dice.analysis.simulation as simulation
+    class RecordingExecutor:
+        """Stands in for ProcessPoolExecutor: records how it was made and runs the tasks in-process."""
+        created: list = []
 
-        def no_workers(*args, **kwargs):
-            raise AssertionError("joblib.Parallel must not be used in a standalone build")
+        def __init__(self, max_workers, mp_context):
+            type(self).created.append((max_workers, mp_context.get_start_method()))
 
-        expected = self._slopes(self._simulate(multiprocessing=False))
-        monkeypatch.setattr(sys, 'frozen', True, raising=False)
-        monkeypatch.setattr(simulation, 'Parallel', no_workers)
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def map(self, function, iterable, chunksize=1):
+            return [function(item) for item in iterable]
+
+    def test_same_results_as_serial_with_progress_after_each_batch(self, new_children):
+        # Starts a pool of two worker processes, which costs a few seconds.
+        from dice.analysis.simulation import PROCESS_POOL_BACKEND, split_into_batches
+
+        serial = self._simulate(multiprocessing=False)
+        progress = []
+        pooled = self._simulate(
+            multiprocessing=True, n_jobs=2, parallel_backend=PROCESS_POOL_BACKEND,
+            progress_callback=lambda done, total: progress.append((done, total)),
+        )
+
+        np.testing.assert_array_equal(self._estimates(pooled), self._estimates(serial))
+        assert [r.run_id for r in pooled.run_results] == list(range(7))
+        assert progress == [(batch.stop, 7) for batch in split_into_batches(7, 2)]
+        assert len(progress) > 1
+        assert new_children() == set()
+
+    def test_stop_request_ends_the_simulation_and_its_workers(self, new_children):
+        # The GUI's Stop makes the progress callback raise InterruptedError.
+        from dice.analysis.simulation import PROCESS_POOL_BACKEND
+
         progress = []
 
-        result = self._simulate(
-            multiprocessing=True, progress_callback=lambda done, total: progress.append((done, total)))
+        def stop_after_first_batch(done, total):
+            progress.append((done, total))
+            raise InterruptedError("Simulation cancelled by user")
 
-        np.testing.assert_array_equal(self._slopes(result), expected)
-        assert progress[-1] == (4, 4)
+        with pytest.raises(InterruptedError):
+            self._simulate(
+                multiprocessing=True, n_jobs=2, parallel_backend=PROCESS_POOL_BACKEND,
+                progress_callback=stop_after_first_batch,
+            )
+
+        assert len(progress) == 1
+        assert new_children() == set()
+
+    def test_failed_run_raises_in_the_caller_and_ends_the_workers(self, new_children):
+        from dice.analysis.simulation import PROCESS_POOL_BACKEND
+
+        with pytest.raises(ValueError, match="noise_sigma"):
+            self._simulate(
+                noise_values=(-0.02,), multiprocessing=True, n_jobs=2,
+                parallel_backend=PROCESS_POOL_BACKEND,
+            )
+
+        assert new_children() == set()
+
+    @pytest.mark.parametrize('n_jobs', [1, 3, -1])
+    def test_workers_follow_n_jobs_up_to_the_run_count(self, monkeypatch, n_jobs):
+        import dice.analysis.simulation as simulation
+        from joblib import effective_n_jobs
+
+        monkeypatch.setattr(self.RecordingExecutor, 'created', [])
+        monkeypatch.setattr(simulation, 'ProcessPoolExecutor', self.RecordingExecutor)
+
+        pooled = self._simulate(
+            num_runs=5, multiprocessing=True, n_jobs=n_jobs,
+            parallel_backend=simulation.PROCESS_POOL_BACKEND,
+        )
+
+        assert self.RecordingExecutor.created == [(min(effective_n_jobs(n_jobs), 5), 'spawn')]
+        np.testing.assert_array_equal(
+            self._estimates(pooled), self._estimates(self._simulate(num_runs=5, multiprocessing=False)))
+
+    def test_windows_pool_is_capped_at_its_limit(self, monkeypatch):
+        import dice.analysis.simulation as simulation
+
+        monkeypatch.setattr(self.RecordingExecutor, 'created', [])
+        monkeypatch.setattr(simulation, 'ProcessPoolExecutor', self.RecordingExecutor)
+        monkeypatch.setattr(simulation.sys, 'platform', 'win32')
+        monkeypatch.setattr(simulation, 'run_single_simulation', lambda *arguments: arguments[0])
+
+        results = simulation.run_in_process_pool([(run_id,) for run_id in range(200)], worker_count=100)
+
+        assert self.RecordingExecutor.created == [(simulation.MAX_WINDOWS_POOL_WORKERS, 'spawn')]
+        assert results == list(range(200))
+
+    def test_standalone_build_runs_parallel_simulations_in_the_pool(self, monkeypatch):
+        import dice.analysis.simulation as simulation
+        from joblib import effective_n_jobs
+
+        def no_joblib(*args, **kwargs):
+            raise AssertionError("joblib.Parallel cannot start workers in a standalone build")
+
+        pool_calls = []
+
+        def recording_pool(run_parameters, worker_count, progress_callback=None):
+            pool_calls.append(worker_count)
+            return [simulation.run_single_simulation(*arguments) for arguments in run_parameters]
+
+        serial = self._simulate(multiprocessing=False)
+        monkeypatch.setattr(simulation, 'joblib_workers_supported', lambda: False)
+        monkeypatch.setattr(simulation, 'Parallel', no_joblib)
+        monkeypatch.setattr(simulation, 'run_in_process_pool', recording_pool)
+
+        pooled = self._simulate(multiprocessing=True, n_jobs=3)
+
+        assert simulation.default_parallel_backend() == simulation.PROCESS_POOL_BACKEND
+        assert pool_calls == [effective_n_jobs(3)]
+        np.testing.assert_array_equal(self._estimates(pooled), self._estimates(serial))
+
+    def test_regular_install_runs_parallel_simulations_with_joblib(self, monkeypatch):
+        import dice.analysis.simulation as simulation
+
+        monkeypatch.setattr(simulation, 'joblib_workers_supported', lambda: True)
+        assert simulation.default_parallel_backend() == simulation.JOBLIB_BACKEND
+
+    def test_serial_simulation_starts_no_pool(self, monkeypatch):
+        import dice.analysis.simulation as simulation
+
+        monkeypatch.setattr(self.RecordingExecutor, 'created', [])
+        monkeypatch.setattr(simulation, 'ProcessPoolExecutor', self.RecordingExecutor)
+
+        self._simulate(multiprocessing=False, parallel_backend=simulation.PROCESS_POOL_BACKEND)
+
+        assert self.RecordingExecutor.created == []
+
+    def test_unknown_backend_is_rejected(self):
+        with pytest.raises(ValueError, match="Unknown parallel backend 'threads'"):
+            self._simulate(multiprocessing=True, parallel_backend='threads')
 
 
 class TestWorkerCountReachesJoblib:

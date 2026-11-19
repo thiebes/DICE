@@ -39,11 +39,15 @@ if sys.platform == 'win32':
 else:
     icon_file = None
 
-# The entry script is dice_gui/dice_gui.py, not dice_gui/__main__.py (the
-# `dice-gui` console script): __main__.py starts joblib workers at launch to
-# warm them up, and in a frozen application a loky worker re-runs the entry
-# script instead of the worker code, so each launch would start further
-# copies of the application.
+# The entry script is dice_gui/standalone.py, not dice_gui/__main__.py (the
+# `dice-gui` console script). Parallel simulations in the frozen application
+# run in a standard-library process pool, whose workers start the executable
+# again; standalone.py calls multiprocessing.freeze_support() before it
+# imports Qt, so a worker runs its simulations and opens no window. It also
+# runs the headless self-test (`DICE --self-test`) that the release workflow
+# runs on each build. __main__.py would start joblib (loky) workers at launch
+# to warm them up, which a frozen application cannot do: a loky worker re-runs
+# the entry script instead of the worker code.
 
 # The project is built from the source tree, not installed, so put it on
 # sys.path before collect_submodules imports the packages in a subprocess.
@@ -59,7 +63,7 @@ first_party_modules = [
     *collect_submodules('dice', on_error='raise'),
     *collect_submodules('dice_gui', on_error='raise'),
 ]
-for _required in ('dice.core.fitting', 'dice_gui.dice_gui'):
+for _required in ('dice.core.fitting', 'dice_gui.dice_gui', 'dice_gui.standalone'):
     if _required not in first_party_modules:
         raise SystemExit(
             f"collect_submodules did not find {_required!r}; "
@@ -78,14 +82,17 @@ hiddenimports = [
     'matplotlib.backends.backend_qtagg',
 ]
 
-# Example parameter files for the GUI's example menu, which falls back to
-# embedded copies (dice_gui/example_parameters.py) when it cannot find them.
+# Example parameter files, which the application finds in sys._MEIPASS
+# (dice.utils.runtime.examples_directory): the GUI's example menu loads them
+# and the self-test simulates quick_test.txt. The menu falls back to embedded
+# copies (dice_gui/example_parameters.py) when it cannot find them, as in a
+# wheel installation.
 datas = [
     (str(root_path / 'data'), 'data'),
 ]
 
 a = Analysis(
-    [str(root_path / 'dice_gui' / 'dice_gui.py')],
+    [str(root_path / 'dice_gui' / 'standalone.py')],
     pathex=[str(root_path)],
     binaries=[],
     datas=datas,

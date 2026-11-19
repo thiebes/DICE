@@ -1,16 +1,20 @@
 """
-SimulationThread: real serial runs of the quick_test example, observed only
-through the thread's signals.
+SimulationThread: real runs of the quick_test example, serial or in the
+standalone build's process pool, observed only through the thread's signals.
 """
 
 from __future__ import annotations
 
+import multiprocessing
 import os
+from typing import Callable, NamedTuple
 
 import pandas as pd
 import pytest
+from joblib import effective_n_jobs
 from PyQt6.QtCore import Qt
 
+from dice.analysis.simulation import split_into_batches
 from dice.models.results import MonteCarloOutput
 from dice_gui.dice_interface import DiceInterface
 from dice_gui.simulation_thread import SimulationThread
@@ -74,6 +78,36 @@ class TestSuccessfulRun:
             assert frame[column].notna().sum() == 5, column
 
 
+class _ProcessPool(NamedTuple):
+    new_children: Callable[[], set]
+
+
+@pytest.fixture
+def process_pool(monkeypatch) -> _ProcessPool:
+    """Run parallel simulations in the standard library's process pool, as a standalone build does."""
+    import dice.analysis.simulation as simulation
+
+    monkeypatch.setattr(simulation, "joblib_workers_supported", lambda: False)
+    # joblib's reusable workers from earlier tests are not the pool's.
+    earlier = set(multiprocessing.active_children())
+    return _ProcessPool(new_children=lambda: set(multiprocessing.active_children()) - earlier)
+
+
+class TestProcessPoolRun:
+    """A parallel run in the standalone build's process pool, through the GUI thread."""
+
+    def test_finished_with_progress_after_each_batch(self, qtbot, process_pool):
+        parameters = {**quick_test_engine_parameters(number_of_runs=20), "multiprocessing": True}
+
+        _, log = _run_to_signal(qtbot, parameters, "finished")
+
+        assert log.errors == []
+        [(result, _)] = log.results
+        assert [run.run_id for run in result.run_results] == list(range(20))
+        assert log.iterations == [(batch.stop, 20) for batch in split_into_batches(20, effective_n_jobs(-1))]
+        assert process_pool.new_children() == set()
+
+
 class TestFailedRun:
 
     def test_unreadable_noise_file_emits_error(self, qtbot, work_dir):
@@ -115,6 +149,21 @@ class TestCancellation:
         assert log.results == []
         assert 1 <= len(log.iterations) < 300
 
+    def test_stop_request_ends_the_process_pool_workers(self, qtbot, process_pool):
+        parameters = {**quick_test_engine_parameters(number_of_runs=300), "multiprocessing": True}
+        thread = SimulationThread(DiceInterface(), parameters)
+        log = _SignalLog(thread)
+        thread.iteration_progress.connect(lambda current, total: thread.request_stop())
+
+        with qtbot.waitSignal(thread.cancelled, timeout=SIGNAL_TIMEOUT_MS):
+            thread.start()
+        thread.wait()
+
+        assert log.errors == []
+        assert log.results == []
+        assert 1 <= len(log.iterations) < len(split_into_batches(300, effective_n_jobs(-1)))
+        assert process_pool.new_children() == set()
+
     def test_stop_button_reports_a_stop_without_an_error_dialog(self, qtbot, window, dialogs):
         window.num_runs_spin.setValue(300)
         window.multiprocessing_check.setChecked(False)
@@ -130,3 +179,21 @@ class TestCancellation:
         assert not window.stop_button.isEnabled()
         assert window.progress_bar.isHidden()
         assert window.interface.last_result is None
+
+    def test_stop_button_lets_the_process_pool_end_its_workers(self, qtbot, window, dialogs, process_pool):
+        # Stop must not terminate the thread: a terminated parallel run leaves its workers running.
+        window.num_runs_spin.setValue(300)
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: "/" in window.status_label.text(), timeout=SIGNAL_TIMEOUT_MS)
+
+        qtbot.mouseClick(window.stop_button, Qt.MouseButton.LeftButton)
+        assert window.status_label.text() == "Stopping..."
+        assert not window.stop_button.isEnabled()
+        assert not window.run_button.isEnabled()
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+        assert dialogs.titles("critical") == []
+        assert window.status_label.text() == "Simulation stopped by user"
+        assert window.run_button.isEnabled()
+        assert window.interface.last_result is None
+        assert process_pool.new_children() == set()

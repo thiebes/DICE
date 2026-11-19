@@ -1,6 +1,6 @@
 # DICE Installation Guide
 
-DICE runs on Windows, macOS, and Linux and requires Python 3.11 or later. The recommended installation uses uv, which installs the dependency versions recorded in `uv.lock`. Installation with pip is also supported.
+DICE runs on Windows, macOS, and Linux and requires Python 3.11 or later. The recommended installation uses uv, which installs the dependency versions recorded in `uv.lock`. Installation with pip is also supported. If you only need the graphical user interface (GUI), you can instead download the [standalone application](#standalone-application), which needs no Python installation.
 
 ## Python
 
@@ -37,7 +37,7 @@ cd DICE
 uv sync
 ```
 
-`uv sync` creates a virtual environment in `.venv/` and installs DICE with its runtime dependencies, including the graphical user interface (GUI).
+`uv sync` creates a virtual environment in `.venv/` and installs DICE with its runtime dependencies, including the GUI.
 
 ### Run DICE
 
@@ -93,6 +93,120 @@ pip install .
 ```
 
 Run the last command from the `DICE` directory.
+
+## Standalone application
+
+Each DICE release on [GitHub](https://github.com/thiebes/DICE/releases) includes the GUI as a standalone application for Windows, macOS, and Linux. It contains its own copy of Python and of every dependency, so you download one file and start it. The files have no code signature, so Windows and macOS warn you before the first start.
+
+### Download
+
+From the Assets list of the release, download the file for your system and `SHA256SUMS.txt`. Each file name gives the version, the operating system, and the processor architecture:
+
+| System | File |
+| ------- | ------------- |
+| Windows, 64-bit Intel or AMD processor | `DICE-<version>-Windows-x86_64.exe` |
+| macOS, Apple silicon (M1 or later) | `DICE-<version>-macOS-arm64.zip` |
+| macOS, Intel processor | `DICE-<version>-macOS-x86_64.zip` |
+| Linux, 64-bit Intel or AMD processor | `DICE-<version>-Linux-x86_64.tar.gz` |
+
+For release 2.0.0, for example, the Windows file is `DICE-2.0.0-Windows-x86_64.exe`. The commands below use 2.0.0; replace it with the version you downloaded.
+
+The Linux application is built on Ubuntu 22.04. It should run on any distribution with the same or a newer GNU C Library (glibc 2.35 or later).
+
+### Check the download
+
+`SHA256SUMS.txt` lists the SHA-256 checksum of every file of the release. If the checksum of your file matches its line, your copy is identical to the file that the release build produced. Run the command for your system in the folder that contains both files.
+
+Windows (PowerShell):
+
+```powershell
+$file = "DICE-2.0.0-Windows-x86_64.exe"
+$line = Get-Content SHA256SUMS.txt | Where-Object { $_.EndsWith(" $file") }
+$expected = ($line -split " ")[0]
+$actual = (Get-FileHash $file -Algorithm SHA256).Hash
+if ($actual -eq $expected) { "OK: $file" } else { "MISMATCH: do not run $file" }
+```
+
+macOS (Terminal):
+
+```bash
+grep DICE-2.0.0-macOS-arm64.zip SHA256SUMS.txt | shasum -a 256 -c
+```
+
+Linux:
+
+```bash
+sha256sum -c --ignore-missing SHA256SUMS.txt
+```
+
+On macOS and Linux, a match prints the file name followed by `OK`. Any other result, such as `FAILED` or `MISMATCH`, means that the file is damaged or is not the released file. Delete it and download it again.
+
+### Start on Windows
+
+Double-click the `.exe` file. Because the file has no code signature, Microsoft Defender SmartScreen can show the message "Windows protected your PC". Select **More info**, check that the app name is the file you verified, and select **Run anyway**. Your browser can also warn about the download; choose the option that keeps the file.
+
+The application is a single file that unpacks itself into a temporary folder at every start, so the window takes several seconds to appear.
+
+### Start on macOS
+
+Double-click the zip file in Finder to unpack `DICE.app`. You can move the app to the Applications folder.
+
+macOS blocks the first start of a downloaded app that Apple has not notarized, with a message that it cannot verify the app or its developer. To allow DICE:
+
+- macOS 15 (Sequoia) and later: open DICE and close the message. Then open System Settings > Privacy & Security, scroll down to Security, select **Open Anyway** next to the message about DICE, and confirm with your password.
+- macOS 14 (Sonoma) and earlier: Control-click `DICE.app` in Finder, choose **Open**, and select **Open** in the dialog.
+
+You can also remove the quarantine attribute, which the browser adds to a downloaded file and which causes the check. Remove it from the zip file before you unpack it:
+
+```bash
+xattr -d com.apple.quarantine DICE-2.0.0-macOS-arm64.zip
+```
+
+If you have already unpacked the app, remove the attribute from the app instead:
+
+```bash
+xattr -dr com.apple.quarantine DICE.app
+```
+
+### Start on Linux
+
+Unpack the archive and start the application from a terminal:
+
+```bash
+tar -xzf DICE-2.0.0-Linux-x86_64.tar.gz
+./DICE
+```
+
+The archive contains one file, the executable `DICE`, and keeps its execute permission. If the application reports that Qt could not load the platform plugin "xcb", install the libraries listed under [The GUI does not start on Linux](#the-gui-does-not-start-on-linux).
+
+### Where results are saved
+
+The application saves results in an `output` folder inside its working directory. Started from File Explorer on Windows, that is the folder that contains the `.exe` file. Started from a terminal, it is the current folder of the terminal. The Simulation Setup tab shows the full path.
+
+On macOS, an app started from Finder runs in the system root folder (`/`), where DICE cannot create the `output` folder. Start DICE from Terminal in the folder where you want the results:
+
+```bash
+cd ~/Documents
+/Applications/DICE.app/Contents/MacOS/DICE
+```
+
+### Standalone application and Python installation compared
+
+The standalone application contains:
+
+- the GUI, with parallel processing on all processor cores (the Enable parallel processing option on the Simulation Setup tab)
+- the three examples of the Load Example menu (Quick Test, High Precision, Publication Quality)
+
+It does not contain:
+
+- the command-line interface (`dice`)
+- the Python package, so you cannot `import dice` in your own scripts
+- the CNR estimator web app
+- the parameter files and the example profile in `data/examples/` as files you can open
+
+For any of these, install DICE with Python as described above.
+
+A parallel simulation starts one worker process per processor core, and each worker is another copy of the application. Task Manager or Activity Monitor therefore shows several DICE processes during a simulation; they end when the simulation ends. Starting the workers takes a few seconds, so a short simulation can finish sooner with parallel processing turned off.
 
 ## Optional extras
 
@@ -196,8 +310,11 @@ uv sync
 
 With pip, run `pip install .` (or `pip install -e ".[dev]"`) again after `git pull`, with the environment active.
 
+For the standalone application, download the file of the new release and delete the old one.
+
 ## Uninstall
 
+- standalone application: delete the `.exe` file, `DICE.app`, or the `DICE` executable
 - pip installation: `pip uninstall dice`
 - uv or venv environment: delete the `.venv` directory inside `DICE`
 - conda environment: `conda env remove -n dice`
