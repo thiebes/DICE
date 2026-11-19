@@ -109,14 +109,19 @@ def fwhm_to_sigma2(fwhm: float) -> float:
 
 def calculate_pixel_size(spatial_width: float, pixel_count: int) -> float:
     """
-    Calculate the physical size of each pixel.
+    Calculate the physical size of each pixel (the spacing of the spatial axis).
+
+    The spatial axis places pixel_count points from -spatial_width/2 to
+    +spatial_width/2 with both end points included (see
+    dice.utils.axes.make_x_axis), so adjacent points are
+    spatial_width / (pixel_count - 1) apart.
 
     Parameters
     ----------
     spatial_width : float
-        Total spatial width of the observation window.
+        Total spatial width of the axis, from the first point to the last.
     pixel_count : int
-        Number of pixels across the spatial domain.
+        Number of pixels (points) on the axis.
 
     Returns
     -------
@@ -126,13 +131,16 @@ def calculate_pixel_size(spatial_width: float, pixel_count: int) -> float:
     Raises
     ------
     ValueError
-        If spatial_width <= 0 or pixel_count <= 0.
+        If spatial_width <= 0, pixel_count <= 0, or pixel_count == 1 (a
+        single point has no spacing).
     """
     if spatial_width <= 0:
         raise ValueError("Spatial width must be positive")
     if pixel_count <= 0:
         raise ValueError("Pixel count must be positive")
-    return spatial_width / pixel_count
+    if pixel_count == 1:
+        raise ValueError("Pixel count must be at least 2 to define a pixel size")
+    return spatial_width / (pixel_count - 1)
 
 
 def slope_to_diffusion_constant(slope: float, l_unit: str, t_unit: str) -> float:

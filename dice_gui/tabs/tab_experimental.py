@@ -176,7 +176,8 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Number of pixels (spatial sampling points) across the profile.\n\n"
         "Higher values provide better spatial resolution but increase computation time.\n\n"
         "Rule of thumb: At least 10-20 pixels per profile FWHM for accurate Gaussian fitting.\n"
-        "For initial FWHM=1 μm and width=10 μm: 100 pixels gives 0.1 μm/pixel resolution.\n\n"
+        "The axis includes both end points, so the pixel size is width / (pixels - 1).\n"
+        "For initial FWHM=1 μm and width=10 μm: 101 pixels gives 0.1 μm/pixel resolution.\n\n"
         "Typical values: 50-500 pixels\n"
         "Minimum practical: ~20-30 pixels"
     )

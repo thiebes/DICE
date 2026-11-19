@@ -95,7 +95,7 @@ class TestDefaultValues:
         assert window.noise_cnr_input.text() == "20"
         assert window.spatial_width_input.text() == "10.0"
         assert window.pixel_width_input.value() == 101
-        assert window.pixel_size_label.text() == f"Pixel Size: 0.09901 {length_abbreviation('micrometer')}/pixel"
+        assert window.pixel_size_label.text() == f"Pixel Size: 0.1 {length_abbreviation('micrometer')}/pixel"
         assert window.time_range_radio.isChecked()
         assert (window.time_start_input.text(), window.time_stop_input.text()) == ("0", "2")
         assert window.time_steps_input.value() == 10

@@ -87,10 +87,15 @@ class TestNoiseAndContrast:
 
 class TestSpatialSampling:
 
-    def test_pixel_size_is_width_over_pixel_count(self, qtbot, window):
+    def test_pixel_size_is_the_spacing_of_the_simulation_axis(self, qtbot, window):
         enter_text(qtbot, window.spatial_width_input, "5")
-        window.pixel_width_input.setValue(50)
+        window.pixel_width_input.setValue(51)
         assert window.pixel_size_label.text() == f"Pixel Size: 0.1 {MICROMETER}/pixel"
+
+    def test_single_pixel_shows_no_pixel_size(self, qtbot, window):
+        enter_text(qtbot, window.spatial_width_input, "5")
+        window.pixel_width_input.setValue(1)
+        assert window.pixel_size_label.text() == "Pixel Size: ---"
 
     def test_invalid_width_shows_no_pixel_size(self, qtbot, window):
         enter_text(qtbot, window.spatial_width_input, "-1")

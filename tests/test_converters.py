@@ -123,19 +123,33 @@ class TestPixelSizeConversion:
 
     def test_basic_calculation(self):
         """Test basic pixel size calculation."""
-        pixel_size = calculate_pixel_size(10.0, 100)
+        pixel_size = calculate_pixel_size(10.0, 101)
         assert np.isclose(pixel_size, 0.1, rtol=1e-10)
 
-        pixel_size = calculate_pixel_size(50.0, 500)
+        pixel_size = calculate_pixel_size(50.0, 501)
         assert np.isclose(pixel_size, 0.1, rtol=1e-10)
 
     def test_different_values(self):
         """Test with different input values."""
-        pixel_size = calculate_pixel_size(1.0, 10)
+        pixel_size = calculate_pixel_size(1.0, 11)
         assert np.isclose(pixel_size, 0.1, rtol=1e-10)
 
-        pixel_size = calculate_pixel_size(100.0, 1)
+        pixel_size = calculate_pixel_size(100.0, 2)
         assert np.isclose(pixel_size, 100.0, rtol=1e-10)
+
+    @pytest.mark.parametrize("spatial_width, pixel_count", [(5.0, 100), (10.0, 101), (2.0, 50), (3.7, 2)])
+    def test_matches_the_spacing_of_the_simulation_axis(self, spatial_width, pixel_count):
+        """The reported pixel size is the spacing of the axis the simulation uses."""
+        from dice.utils.axes import make_x_axis
+
+        spacing = np.diff(make_x_axis(spatial_width, pixel_count))
+
+        assert np.allclose(spacing, calculate_pixel_size(spatial_width, pixel_count), rtol=1e-12)
+
+    def test_single_pixel_has_no_size(self):
+        """A one-point axis has no spacing."""
+        with pytest.raises(ValueError, match="at least 2"):
+            calculate_pixel_size(10.0, 1)
 
     def test_invalid_spatial_width(self):
         """Test error handling for invalid spatial width."""

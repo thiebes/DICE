@@ -1025,9 +1025,10 @@ class DiceGUI(QMainWindow):
 
         spatial_unit = gui_params.get('spatial_width_unit', global_length)
         spatial_width = convert_length(gui_params['spatial_width'], spatial_unit, global_length)
-        pixel_size = spatial_width / gui_params['pixel_width']
+        pixel_size_result = calculate_pixel_size(str(spatial_width), gui_params['pixel_width'])
 
-        if sigma_0 < 2 * pixel_size:
+        if pixel_size_result and sigma_0 < 2 * pixel_size_result.value:
+            pixel_size = pixel_size_result.value
             l_abbr = length_abbreviation(global_length)
             messages.append(
                 f"\u26a0 Undersampled profile: \u03c3\u2080 = {sigma_0:.4g} {l_abbr} "
