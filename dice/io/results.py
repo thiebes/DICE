@@ -8,7 +8,7 @@ formats including CSV, text summaries, and structured data files.
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, TextIO
+from typing import Dict, Any, List, Optional, Tuple, Union, TextIO
 import json
 import csv
 
@@ -19,8 +19,31 @@ from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
 from ..utils.units import (
     convert_diffusion_coefficient, length_abbreviation, time_abbreviation,
-    diffusion_coefficient_label,
+    diffusion_coefficient_label, OUTPUT_DIFFUSION_LENGTH_UNIT_KEY, OUTPUT_DIFFUSION_TIME_UNIT_KEY,
 )
+
+
+def output_unit_preferences(parameters: Dict[str, Any]) -> OutputUnitPreferences:
+    """
+    Output units that a parameters dictionary sets.
+
+    Only the unit of the diffusion coefficients can be set, with the keys
+    'output_diffusion_length_unit' and 'output_diffusion_time_unit';
+    dice.utils.units.validate_output_units rejects the other output unit keys.
+    """
+    return OutputUnitPreferences(
+        diffusion_length=parameters.get(OUTPUT_DIFFUSION_LENGTH_UNIT_KEY),
+        diffusion_time=parameters.get(OUTPUT_DIFFUSION_TIME_UNIT_KEY),
+    )
+
+
+def summary_diffusion_units(
+    length_unit: str, time_unit: str, output_units: Optional[OutputUnitPreferences] = None,
+) -> Tuple[str, str]:
+    """Length and time units of the summary's diffusion coefficients: the output units, else the global units."""
+    if output_units is None:
+        return length_unit, time_unit
+    return output_units.diffusion_length or length_unit, output_units.diffusion_time or time_unit
 
 
 def print_and_append(filename: Union[str, Path], message: str, print_to_console: bool = True) -> None:
@@ -165,8 +188,19 @@ def write_summary_file(
     time_unit : str
         Unit of time.
     output_units : OutputUnitPreferences, optional
-        Preferred units for output display. When None, uses simulation units.
+        Unit of the diffusion coefficient values (its diffusion_length and
+        diffusion_time fields). When None, they are in the simulation units.
+        Lengths and times are always in the simulation units.
     """
+    # The unit of every diffusion coefficient value: the nominal value and the
+    # statistics of the estimates, except the unitless relative standard error.
+    d_length_unit, d_time_unit = summary_diffusion_units(length_unit, time_unit, output_units)
+    d_unit = f"{d_length_unit}^2/{d_time_unit}"
+
+    def in_d_unit(value: float) -> float:
+        """A diffusion coefficient in simulation units, converted to d_unit."""
+        return convert_diffusion_coefficient(value, length_unit, time_unit, d_length_unit, d_time_unit)
+
     with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
@@ -196,7 +230,7 @@ def write_summary_file(
         f.write(f"Nominal diffusion length:\n")
         f.write(f"    {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
         f.write(f"Nominal diffusion coefficient:\n")
-        f.write(f"    {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2/{time_unit}\n")
+        f.write(f"    {in_d_unit(results.parameters.physics.diffusion_coefficient):.5f} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
         f.write(f"    {results.parameters.physics.lifetime} {time_unit}\n")
         f.write("\n")
@@ -212,18 +246,18 @@ def write_summary_file(
                     metrics = analysis['accuracy'][spec.key]
                     f.write(f"  {spec.summary_name}:\n")
                     f.write(f"    Standard deviation:\n")
-                    f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
+                    f.write(f"        {in_d_unit(metrics.get('std', np.nan)):.5f} {d_unit}\n")
                     nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
                     if nominal_d and nominal_d != 0:
                         rse = metrics.get('std', 0) / nominal_d
                         f.write(f"    Relative standard error:\n")
                         f.write(f"        {rse:.3f}\n")
                     f.write(f"    Mean estimate:\n")
-                    f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
+                    f.write(f"        {in_d_unit(metrics.get('mean', np.nan)):.5f} {d_unit}\n")
                     f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
+                    f.write(f"        {in_d_unit(metrics.get('bias', np.nan)):.5f} {d_unit}\n")
                     f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
+                    f.write(f"        {in_d_unit(metrics.get('rmse', np.nan)):.5f} {d_unit}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")

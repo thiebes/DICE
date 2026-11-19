@@ -63,7 +63,7 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "from noisy measurements.\n\n"
         "Typical values: 10-1000 nm for organic semiconductors, "
         "100-10000 nm for inorganic materials.\n\n"
-        "Must be positive, except that it is zero when the lifetime is zero (no decay)."
+        "Must be positive. It is infinite (inf) when the lifetime is zero (no decay)."
     )
     main_window.diffusion_length_unit_combo = create_unit_combo('length')
     l_widget_layout.addWidget(main_window.diffusion_length_input)
@@ -308,6 +308,7 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
         return
 
     import math
+    from dice.core.diffusion import calculate_diffusion_length as core_diffusion_length
     from dice.utils.units import (
         convert_diffusion_coefficient, convert_time, convert_length,
     )
@@ -366,7 +367,8 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
                     main_window.lifetime_input.clear()
                     return
 
-                tau_si = (l_si ** 2) / d_si
+                # An infinite L means no decay, which a lifetime of 0 denotes.
+                tau_si = 0.0 if math.isinf(l_si) else (l_si ** 2) / d_si
                 tau_display = convert_time(tau_si, 'second', tau_unit)
                 main_window.lifetime_input.setText(f"{tau_display:.4g}")
 
@@ -420,7 +422,8 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
                     main_window.diffusion_length_input.clear()
                     return
 
-                l_si = math.sqrt(d_si * tau_si)
+                # A lifetime of 0 means no decay, so L is infinite and shows as "inf".
+                l_si = core_diffusion_length(d_si, tau_si)
                 l_display = convert_length(l_si, 'meter', l_unit)
                 main_window.diffusion_length_input.setText(f"{l_display:.4g}")
         except (ValueError, KeyError):

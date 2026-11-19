@@ -11,6 +11,14 @@ import os
 from dice.models.estimators import ESTIMATORS, SlopeFit, get_estimator
 from dice.models.results import RunResult, MonteCarloOutput
 
+# Results-CSV column of the nominal diffusion coefficient in simulation units.
+NOMINAL_D_COLUMN = 'nominal diffusion coeff'
+
+# Keys of last_parameters, after a results CSV is loaded, that hold the named
+# unit of the statistics of its estimates and the factor to that unit.
+CSV_D_UNIT_KEY = 'diffusion coefficient unit'
+CSV_D_SCALE_KEY = 'diffusion coefficient scale'
+
 
 class DiceInterface:
     """Interface for running DICE simulations from GUI."""
@@ -19,6 +27,31 @@ class DiceInterface:
         """Initialize the interface."""
         self.last_result = None
         self.last_parameters = None
+
+    def diffusion_coefficient_unit(self) -> tuple[float, Optional[str]]:
+        """
+        Factor from the stored D estimates to the unit they are reported in, and that unit's label.
+
+        After a run, the estimates are in the global units of its parameters,
+        and are reported in the unit of the summary file's diffusion
+        coefficients. A loaded results CSV does not name the global units, so
+        the unit is that of its labeled nominal column, or None when the CSV
+        has no such column.
+        """
+        from dice.io.results import output_unit_preferences, summary_diffusion_units
+        from dice.utils.units import (
+            convert_diffusion_coefficient, diffusion_coefficient_label,
+            global_length_unit, global_time_unit,
+        )
+
+        parameters = self.last_parameters or {}
+        if CSV_D_UNIT_KEY in parameters:
+            return parameters[CSV_D_SCALE_KEY], parameters[CSV_D_UNIT_KEY]
+        length_unit, time_unit = global_length_unit(parameters), global_time_unit(parameters)
+        d_length_unit, d_time_unit = summary_diffusion_units(
+            length_unit, time_unit, output_unit_preferences(parameters))
+        scale = convert_diffusion_coefficient(1.0, length_unit, time_unit, d_length_unit, d_time_unit)
+        return scale, diffusion_coefficient_label(d_length_unit, d_time_unit)
 
     def build_parameters_dict(self, gui_params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -137,7 +170,9 @@ class DiceInterface:
             from dice.io.parameters import parameter_parser, validate_parameters
             from dice.analysis.simulation import run_monte_carlo_simulation
             from dice.analysis.statistics import analyze_simulation_results
-            from dice.io.results import export_collated_results, write_summary_file
+            from dice.io.results import (
+                export_collated_results, output_unit_preferences, write_summary_file,
+            )
             from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
             from pathlib import Path
@@ -190,18 +225,20 @@ class DiceInterface:
             # the exporters label and convert from these.
             length_unit = global_length_unit(processed_params)
             time_unit = global_time_unit(processed_params)
+            output_units = output_unit_preferences(processed_params)
 
             # Export results to CSV
             csv_file = output_dir / f"{slug}.csv"
             export_collated_results(
-                result, str(csv_file), length_unit=length_unit, time_unit=time_unit
+                result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
+                output_units=output_units,
             )
 
             # Write summary file
             summary_file = output_dir / f"{slug}_summary.txt"
             write_summary_file(
                 result, str(summary_file), processed_params, analysis,
-                length_unit=length_unit, time_unit=time_unit,
+                length_unit=length_unit, time_unit=time_unit, output_units=output_units,
             )
 
             # Create accuracy histogram of the WLS estimates
@@ -404,7 +441,7 @@ class DiceInterface:
             slope_col = _find_csv_column(f'{spec.csv_label} diffusion slope')
             method_name = spec.short_name
 
-            nom_col = _find_csv_column('nominal diffusion coeff')
+            nom_col = _find_csv_column(NOMINAL_D_COLUMN)
 
             # Validate required columns exist
             if slope_col is None:
@@ -426,6 +463,20 @@ class DiceInterface:
 
             # Get nominal diffusion coefficient (should be same for all runs)
             d_nominal = df[nom_col].iloc[0]
+
+            # The slopes and the unlabeled nominal column are in the run's
+            # simulation units, which the CSV does not name. The labeled nominal
+            # column, e.g. 'nominal diffusion coeff [cm²/s]', gives the factor
+            # to a named unit for reporting statistics of the estimates.
+            labeled_nom_col = next(
+                (c for c in df.columns if c.startswith(f'{NOMINAL_D_COLUMN} [') and c.endswith(']')),
+                None,
+            )
+            if labeled_nom_col is not None and d_nominal != 0:
+                d_unit = labeled_nom_col[len(f'{NOMINAL_D_COLUMN} ['):-1]
+                d_scale = float(df[labeled_nom_col].iloc[0] / d_nominal)
+            else:
+                d_unit, d_scale = None, 1.0
 
             # Calculate diffusion estimates (D = slope/2)
             d_estimates = slopes / 2
@@ -491,10 +542,12 @@ class DiceInterface:
                 estimator_keys=tuple(stored_slopes),
             )
 
-            # Store parameters for regeneration
+            # Store parameters for regeneration, and the unit for statistics
             self.last_parameters = {
                 'nominal diffusion coefficient': d_nominal,
-                'filename slug': csv_path.stem
+                'filename slug': csv_path.stem,
+                CSV_D_UNIT_KEY: d_unit,
+                CSV_D_SCALE_KEY: d_scale,
             }
 
         except ImportError as e:

@@ -8,9 +8,10 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 """
 
 import ast
+import os
 import warnings
 import numpy as np
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Sequence, Union
 from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
@@ -18,9 +19,11 @@ from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.validators import validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
+    validate_output_units,
 )
 from fft_cnr import fft_cnr
-from ..core.noise import Seed, make_noise_distribution
+from ..core.diffusion import calculate_diffusion_length
+from ..core.noise import MIN_CNR_PEAK_FWHM, Seed, make_noise_distribution, peak_fwhm_samples
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
@@ -30,6 +33,40 @@ from ..models.parameter_keys import (
 # Keys of the proximity-level parameter, retired from the simulation schema;
 # still accepted in parameter files, with a warning.
 RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
+
+# Keys whose value is the path of the measured profile for the noise estimate.
+NOISE_DATA_KEYS = ('estimate noise from data', 'estimate_noise_from_data')
+
+
+def resolve_noise_data_path(
+    parameters_dictionary: Dict[str, Any], base_dir: Union[str, Path]
+) -> Dict[str, Any]:
+    """
+    Resolve a relative measured-profile path against the folder of its parameters file.
+
+    A parameters file names the profile for 'estimate noise from data'
+    relative to its own folder, so that it gives the same run from any working
+    directory. An absolute path, or a value that is not a path string, is left
+    unchanged.
+
+    Parameters
+    ----------
+    parameters_dictionary : dict
+        Parameters as read from the file.
+    base_dir : str or Path
+        Folder of the parameters file.
+
+    Returns
+    -------
+    dict
+        Copy of the parameters with the path made absolute.
+    """
+    resolved = dict(parameters_dictionary)
+    for key in NOISE_DATA_KEYS:
+        path = resolved.get(key)
+        if isinstance(path, str) and path.strip() and not Path(path).is_absolute():
+            resolved[key] = os.path.abspath(Path(base_dir) / path)
+    return resolved
 
 
 def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
@@ -47,8 +84,9 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
     Returns
     -------
     dict
-        Parsed parameters dictionary.
-    
+        Parsed parameters dictionary. A relative 'estimate noise from data'
+        path is resolved against the folder of the file.
+
     Raises
     ------
     FileNotFoundError
@@ -65,6 +103,7 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
             # parser converts between representations (e.g., FWHM -> sigma^2).
             from ..utils.units import resolve_units
             parms_dict = resolve_units(parms_dict)
+            parms_dict = resolve_noise_data_path(parms_dict, Path(filename).parent)
             result = parameter_parser(parms_dict, seed=seed)
         return result
     except FileNotFoundError:
@@ -169,6 +208,36 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
             del parameters_dictionary[unique_time_key]
 
 
+def narrow_peak_warning(profile: Sequence[float], source: str) -> Optional[str]:
+    """
+    Warning for a measured profile whose peak is too narrow for fft-cnr to estimate its CNR well.
+
+    Parameters
+    ----------
+    profile : sequence of float
+        The measured profile, one value per pixel.
+    source : str
+        Where the profile came from (its file name), for the message.
+
+    Returns
+    -------
+    str or None
+        The message when the peak is narrower than MIN_CNR_PEAK_FWHM pixels
+        at half maximum, otherwise None.
+    """
+    width = peak_fwhm_samples(profile)
+    if not width < MIN_CNR_PEAK_FWHM:  # a nan width (no peak) is not narrow
+        return None
+    return (
+        f"The peak of the measured profile '{source}' is {width:.1f} pixels wide at half "
+        f"maximum. For peaks narrower than about {MIN_CNR_PEAK_FWHM:g} pixels, fft-cnr "
+        "overestimates the noise, so the estimated initial CNR is probably too low and the "
+        "simulated noise too high. In simulated Gaussian profiles with white noise, the "
+        "estimate was 14% to 27% too low for a peak 4.6 pixels wide, and within 2.4% of the "
+        "true CNR for peaks 9 to 14 pixels wide."
+    )
+
+
 def handle_noise_parameters(
     parameters_dictionary: Dict[str, Any], num_vals: int = 1, seed: Seed = None
 ) -> None:
@@ -224,6 +293,10 @@ def handle_noise_parameters(
                 )
             sigma_n = parameters_dictionary['amplitude_0'] / cnr_estimate
             parameters_dictionary['noise series'] = [sigma_n]
+            message = narrow_peak_warning(t0_profile_y, noise_filename)
+            if message:
+                # stacklevel 3 names the caller of parameter_parser, like the retired-key warning.
+                warnings.warn(message, stacklevel=3)
 
         elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):
             noise_range = parameters_dictionary[unique_noise_key]
@@ -313,7 +386,8 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
         if not isinstance(diff, (int, float)) or not isinstance(tau, (int, float)):
             raise ValueError("Both 'nominal diffusion coefficient' and 'nominal lifetime (tau)' must be numeric.")
 
-        parameters_dictionary['nominal diffusion length'] = np.sqrt(diff * tau)
+        # A lifetime of 0 means no decay, so the diffusion length is infinite.
+        parameters_dictionary['nominal diffusion length'] = calculate_diffusion_length(diff, tau)
         parameters_dictionary['nominal diffusion coefficient'] = diff
         parameters_dictionary['nominal lifetime (tau)'] = tau
 
@@ -484,11 +558,15 @@ def validate_parameters(params) -> None:
         # before the simulation runs rather than when the results are written.
         validate_length_unit(global_length_unit(params))
         validate_time_unit(global_time_unit(params))
+        validate_output_units(params)
 
         # The histogram is drawn after the simulation, so reject malformed
-        # limits here instead of losing the plot at the end of a long run.
+        # limits and an image type it cannot be written as here instead of
+        # losing the plot at the end of a long run.
         if params.get('image x_lim') is not None:
             validate_limits(params['image x_lim'], "'image x_lim'")
+        from ..visualization.histograms import validate_image_type
+        validate_image_type(params.get('image type', params.get('image_type', 'png')))
 
         return
     

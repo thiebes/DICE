@@ -780,9 +780,10 @@ class DiceGUI(QMainWindow):
             return False, result.error_message
 
         # Diffusion (all three fields linked; any two compute the third).
-        # L is 0 when tau is 0 (no decay); D must be positive because the
-        # accuracy analysis divides estimates by the nominal D.
-        result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length", allow_zero=True)
+        # L is infinite when tau is 0 (no decay); D must be positive because
+        # the accuracy analysis divides estimates by the nominal D.
+        result = validate_positive_float(
+            self.diffusion_length_input.text(), "Diffusion length", allow_zero=True, allow_inf=True)
         if not result:
             return False, result.error_message
         result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient")
@@ -1045,6 +1046,19 @@ class DiceGUI(QMainWindow):
                 f"for the MSD linear fit. Fewer points increase sensitivity to noise."
             )
 
+        # Check 4: Measured peak too narrow for fft-cnr to estimate its CNR well.
+        # The parser warns too, but a Python warning is not visible in the GUI.
+        if gui_params['noise_type'] == 'estimate':
+            import numpy as np
+            from dice.io.parameters import narrow_peak_warning
+            noise_file = gui_params['noise_data_file']
+            try:
+                message = narrow_peak_warning(np.loadtxt(noise_file, delimiter=','), noise_file)
+            except (OSError, ValueError):
+                message = None  # the run itself reports a file it cannot read
+            if message:
+                messages.append(f"\u26a0 Narrow measured peak: {message}")
+
         return messages
 
     def run_simulation(self):
@@ -1223,14 +1237,16 @@ class DiceGUI(QMainWindow):
         if nominal_d == 0:
             return
 
+        # The standard deviation and bias are reported in a named unit; the ratios are unitless.
+        d_scale, d_unit = self.interface.diffusion_coefficient_unit()
         metrics = {
-            'std': np.std(d_arr),
+            'std': np.std(d_arr) * d_scale,
             'relative_std_error': np.std(d_arr) / nominal_d,
-            'bias': np.mean(d_arr) - nominal_d,
+            'bias': (np.mean(d_arr) - nominal_d) * d_scale,
             'mean_relative_error': np.mean(d_arr) / nominal_d,
         }
 
-        populate_precision_summary(self, metrics)
+        populate_precision_summary(self, metrics, d_unit)
 
     def simulation_error(self, error_message: str):
         """Handle simulation error."""
@@ -1335,11 +1351,19 @@ class DiceGUI(QMainWindow):
         )
 
     def _read_parameter_file(self, file_path: str) -> dict:
-        """Parse a parameters.txt-format file into its dictionary."""
+        """Parse a parameters.txt-format file into its dictionary.
+
+        A relative 'estimate noise from data' path is resolved against the
+        file's folder, as the command-line interface resolves it.
+        """
         import ast
+        from dice.io.parameters import resolve_noise_data_path
 
         with open(file_path, 'r') as f:
-            return ast.literal_eval(f.read())
+            params = ast.literal_eval(f.read())
+        if not isinstance(params, dict):
+            return params
+        return resolve_noise_data_path(params, Path(file_path).parent)
 
     def load_example(self, example_name: str):
         """Load example parameters without making the bundled file the save target."""
@@ -1876,11 +1900,11 @@ class DiceGUI(QMainWindow):
         )
 
         # Register diffusion fields (all three always required; any two compute the third).
-        # L is 0 when tau is 0 (no decay); D must be positive because the
-        # accuracy analysis divides estimates by the nominal D.
+        # L is infinite when tau is 0 (no decay); D must be positive because
+        # the accuracy analysis divides estimates by the nominal D.
         self.validation_manager.register_field(
             "diffusion_length", self.diffusion_length_input,
-            lambda v: validate_positive_float(v, "Diffusion length", allow_zero=True),
+            lambda v: validate_positive_float(v, "Diffusion length", allow_zero=True, allow_inf=True),
         )
         self.validation_manager.register_field(
             "diffusion_coeff", self.diffusion_coeff_input,

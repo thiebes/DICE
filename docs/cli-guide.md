@@ -101,6 +101,8 @@ One row for each run. The main columns are:
 
 WLS stands for weighted least squares, OLS for ordinary least squares. In one dimension the slope of the variance against time equals 2D. If a fit fails in a run, the columns of that fit are empty in that row. The file is encoded in UTF-8.
 
+The parameters `output_diffusion_length_unit` and `output_diffusion_time_unit` replace cm²/s in the columns marked `[cm²/s]` with another unit, for example `[nm²/ps]` (see [Output units](parameters.md#output_diffusion_length_unit-and-output_diffusion_time_unit)).
+
 ### Summary file: `<slug>_summary.txt`
 
 A text report that contains:
@@ -108,6 +110,8 @@ A text report that contains:
 - the main simulation parameters: number of runs, spatial axis, time points, noise level, initial CNR, initial variance, and the nominal diffusion length, diffusion coefficient, and lifetime
 - for the WLS and the OLS fits: the standard deviation, relative standard error, mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
 - the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
+
+Each value with a unit is followed by that unit. The standard deviation, mean, bias, and RMSE are in the unit of the nominal diffusion coefficient, for example `micrometer^2/nanosecond`: the global units, or the output units that `output_diffusion_length_unit` and `output_diffusion_time_unit` set. The relative standard error and the fractions have no unit.
 
 ### Histogram: `<slug>_accuracy_histogram.png`
 

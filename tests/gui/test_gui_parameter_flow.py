@@ -212,7 +212,8 @@ class TestAlternativeInputModes:
         assert params["estimate noise from data"] == str(EXAMPLE_PROFILE_CSV)
         assert "noise value" not in params
         profile = np.loadtxt(EXAMPLE_PROFILE_CSV, delimiter=",").tolist()
-        parsed = parameter_parser(resolve_units(params))
+        with pytest.warns(UserWarning, match="4.6 pixels wide at half maximum"):
+            parsed = parameter_parser(resolve_units(params))
         # The noise is set so that the simulated initial CNR equals the measured one.
         expected_noise = parsed["amplitude_0"] / fft_cnr(profile).cnr
         assert parsed["noise series"] == [pytest.approx(expected_noise)]

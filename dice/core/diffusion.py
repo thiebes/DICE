@@ -49,19 +49,23 @@ def calculate_diffusion_length(diffusion_coeff: float, lifetime: float) -> float
     Calculate the characteristic diffusion length.
     
     The diffusion length is defined as: L_D = sqrt(D * tau)
-    
+
+    A lifetime of 0 means no decay (see kinetic_decay_intensities), so a
+    species that diffuses has no bound on how far it spreads.
+
     Parameters
     ----------
     diffusion_coeff : float
         Diffusion coefficient (D).
     lifetime : float
-        Excited state lifetime (tau).
-    
+        Excited state lifetime (tau); 0 means no decay.
+
     Returns
     -------
     float
-        Diffusion length.
-    
+        Diffusion length: inf when lifetime is 0 and diffusion_coeff is
+        positive, and 0 when diffusion_coeff is 0.
+
     Raises
     ------
     ValueError
@@ -69,7 +73,9 @@ def calculate_diffusion_length(diffusion_coeff: float, lifetime: float) -> float
     """
     diffusion_coeff = validate_numeric(diffusion_coeff, "diffusion_coeff", min_val=0)
     lifetime = validate_numeric(lifetime, "lifetime", min_val=0)
-    
+
+    if lifetime == 0 and diffusion_coeff > 0:
+        return np.inf
     return np.sqrt(diffusion_coeff * lifetime)
 
 

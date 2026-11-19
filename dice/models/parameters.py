@@ -482,8 +482,9 @@ class SimulationParameters:
     
     @property
     def diffusion_length(self) -> float:
-        """Calculate the diffusion length √(D*τ)."""
-        return np.sqrt(self.diffusion_coefficient * self.lifetime)
+        """Calculate the diffusion length √(D*τ); infinite for τ = 0 (no decay)."""
+        from ..core.diffusion import calculate_diffusion_length
+        return calculate_diffusion_length(self.diffusion_coefficient, self.lifetime)
     
     @classmethod
     def from_diffusion_length(cls, diffusion_length: float,

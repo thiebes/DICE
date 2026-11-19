@@ -18,7 +18,7 @@ from ..io.parameters import open_parameters, validate_parameters
 from ..analysis.simulation import run_monte_carlo_simulation
 from ..core.noise import Seed
 from ..analysis.statistics import analyze_simulation_results
-from ..io.results import export_collated_results, write_summary_file
+from ..io.results import export_collated_results, output_unit_preferences, write_summary_file
 from ..visualization.histograms import histogram_options, plot_accuracy_histogram
 from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.units import global_length_unit, global_time_unit
@@ -187,6 +187,7 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     """
     length_unit = global_length_unit(parameters)
     time_unit = global_time_unit(parameters)
+    output_units = output_unit_preferences(parameters)
 
     if not args.quiet:
         print("Saving results...")
@@ -209,7 +210,8 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
         csv_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}.csv"
         # The export function returns a DataFrame and writes CSV automatically
         df = export_collated_results(
-            result, str(csv_file), length_unit=length_unit, time_unit=time_unit
+            result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
+            output_units=output_units,
         )
         if not args.quiet:
             print(f"Results saved to: {csv_file}")
@@ -239,7 +241,7 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     summary_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}_summary.txt"
     write_summary_file(
         result, str(summary_file), parameters, analysis,
-        length_unit=length_unit, time_unit=time_unit,
+        length_unit=length_unit, time_unit=time_unit, output_units=output_units,
     )
     if not args.quiet:
         print(f"Summary saved to: {summary_file}")

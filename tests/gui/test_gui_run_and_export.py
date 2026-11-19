@@ -59,9 +59,10 @@ class TestRunFromTheWindow:
             work_dir / "output" / "quick_test" / "quick_test.csv", WLS_SLOPE_COLUMN
         )
         window = finished_window
-        assert window.precision_std_label.text() == f"{np.std(estimates):.5e}"
+        # The standard deviation and bias carry the run's diffusion coefficient unit.
+        assert window.precision_std_label.text() == f"{np.std(estimates):.5e} μm²/ns"
         assert window.precision_rse_label.text() == f"{np.std(estimates) / nominal:.3f}"
-        assert window.precision_bias_label.text() == f"{np.mean(estimates) - nominal:.5e}"
+        assert window.precision_bias_label.text() == f"{np.mean(estimates) - nominal:.5e} μm²/ns"
         assert window.precision_mean_ratio_label.text() == f"{np.mean(estimates) / nominal:.3f}"
         assert window.precision_placeholder.isHidden()
         assert window.explore_proximity_group.isEnabled()

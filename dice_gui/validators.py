@@ -53,8 +53,9 @@ def validate_positive_integer(value: str, param_name: str = "Value") -> Validati
         return ValidationResult(False, str(e))
 
 
-def validate_positive_float(value: str, param_name: str = "Value", allow_zero: bool = False) -> ValidationResult:
-    """Validate that a string represents a positive float."""
+def validate_positive_float(value: str, param_name: str = "Value", allow_zero: bool = False,
+                            allow_inf: bool = False) -> ValidationResult:
+    """Validate that a string represents a positive float ('inf' only with allow_inf)."""
     if not value or value.strip() == "":
         return ValidationResult(False, f"{param_name} is required")
 
@@ -65,7 +66,7 @@ def validate_positive_float(value: str, param_name: str = "Value", allow_zero: b
 
     try:
         min_val = 0.0 if allow_zero else None
-        validated = _validate_numeric(parsed, name=param_name, min_val=min_val)
+        validated = _validate_numeric(parsed, name=param_name, min_val=min_val, allow_inf=allow_inf)
         if not allow_zero and validated <= 0:
             return ValidationResult(False, f"{param_name} must be greater than 0")
         return ValidationResult(True, value=validated)

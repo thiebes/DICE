@@ -157,6 +157,54 @@ class TestGlobalUnitsReachOutputs:
         assert not (tmp_path / 'output').exists()
 
 
+class TestOutputDiffusionUnits:
+    """'output_diffusion_length_unit' and 'output_diffusion_time_unit' set the D unit of the CSV and summary."""
+
+    @pytest.fixture(scope='class')
+    def nm2_per_ps_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('output_units')
+        params_file = write_quick_test_variant(workdir, 'out_nm_ps', {
+            'number of runs': 6, 'output_diffusion_length_unit': 'nanometer',
+            'output_diffusion_time_unit': 'picosecond'})
+        return run_cli(workdir, params_file, 'out_nm_ps', '--no-plots', '--seed', '2')
+
+    def test_csv_columns_in_the_output_unit(self, nm2_per_ps_run):
+        assert nm2_per_ps_run.exit_code == 0
+        df = nm2_per_ps_run.read_csv()
+        assert list(df.columns) == [c.replace('cm²/s', 'nm²/ps') for c in CSV_COLUMNS]
+        # 0.01 micrometer^2/ns = 0.01 x 1e6 nm^2 / 1e3 ps = 10 nm^2/ps
+        assert df['nominal diffusion coeff [nm²/ps]'].to_numpy() == pytest.approx(10.0, rel=1e-12)
+        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+
+    def test_summary_diffusion_coefficients_agree_with_the_csv(self, nm2_per_ps_run):
+        df = nm2_per_ps_run.read_csv()
+        values = summary_label_to_values(nm2_per_ps_run.read_summary())
+        unit = 'nanometer^2/picosecond'
+        assert values['Nominal diffusion coefficient'] == [f"10.00000 {unit}"]
+        estimates = {'wls': df['weighted fit diffusion coeff [nm²/ps]'].to_numpy(),
+                     'ols': df['unweighted fit diffusion coeff [nm²/ps]'].to_numpy()}
+        assert values['Mean estimate'] == [f"{estimates[m].mean():.5f} {unit}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{estimates[m].std():.5f} {unit}" for m in ('wls', 'ols')]
+        # Lengths, times, and the unitless ratios stay as they were.
+        assert values['Nominal diffusion length'] == ['0.100 micrometer']
+        assert values['Relative standard error'] == [
+            f"{estimates[m].std() / 10.0:.3f}" for m in ('wls', 'ols')]
+
+    @pytest.mark.parametrize('overrides, message', [
+        ({'output_time_unit': 'picosecond'}, "'output_time_unit' is not supported"),
+        ({'output_diffusion_time_unit': 'second'},
+         "Give both 'output_diffusion_length_unit' and 'output_diffusion_time_unit', or neither."),
+        ({'output_diffusion_length_unit': 'centimeter', 'output_diffusion_time_unit': 'sec'},
+         "Unknown time unit 'sec' for 'output_diffusion_time_unit'"),
+    ])
+    def test_rejected_before_simulation(self, tmp_path, capsys, overrides, message):
+        params_file = write_quick_test_variant(tmp_path, 'bad_output_unit', overrides)
+        run = run_cli(tmp_path, params_file, 'bad_output_unit')
+        assert run.exit_code == 1
+        assert message in capsys.readouterr().out
+        assert not (tmp_path / 'output').exists()
+
+
 class TestSeedReproducibility:
     """--seed N reproduces the CSV exactly, serially or in parallel; no seed does not.
 
@@ -262,6 +310,10 @@ class TestDryRun:
         ({'noise value': 'loud'}, "Invalid noise value loud"),
         ({'number of runs': 0}, "Number of runs must be positive"),
         ({'length unit': 'um'}, "Unknown length unit 'um'"),
+        ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
+        ({'output_length_unit': 'nanometer'}, "'output_length_unit' is not supported"),
+        ({'output_diffusion_length_unit': 'furlong', 'output_diffusion_time_unit': 'second'},
+         "Unknown length unit 'furlong' for 'output_diffusion_length_unit'"),
     ]
 
     def test_valid_example_exits_zero_without_output(self, tmp_path, capsys):
@@ -333,6 +385,31 @@ class TestZeroNoiseRun:
         assert (run.read_csv()['nominal CNR'] == float('inf')).all()
 
 
+class TestZeroLifetimeRun:
+    """'nominal lifetime (tau)': 0 means no decay: every output reports an infinite diffusion length."""
+
+    def test_infinite_diffusion_length_in_every_output(self, tmp_path):
+        params_file = write_quick_test_variant(
+            tmp_path, 'no_decay',
+            {'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 0, 'number of runs': 4},
+            removed=('nominal diffusion length',))
+        run = run_cli(tmp_path, params_file, 'no_decay', '--export-format', 'both')
+        assert run.exit_code == 0
+
+        values = summary_label_to_values(run.read_summary())
+        assert values['Nominal diffusion length'] == ['inf micrometer']
+        assert values['Nominal lifetime'] == ['0 nanosecond']
+        df = run.read_csv()
+        assert (df['nominal diffusion length'] == np.inf).all()
+        assert (df['nominal lifetime'] == 0).all()
+        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+        exported = json.loads((run.output_dir / 'no_decay.json').read_text())
+        assert exported['parameters']['nominal diffusion length'] == np.inf
+        assert exported['analysis']['summary']['nominal_diffusion_length'] == np.inf
+        # Nothing downstream divides by the diffusion length: the histogram is drawn.
+        assert run.histogram_file.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
+
+
 CSV_COLUMNS = [
     'run number',
     'nominal diffusion coeff',
@@ -380,17 +457,17 @@ SUMMARY_SKELETON = [
     "-" * 30,
     "Diffusion Coefficient Estimate Statistics:",
     "  Weighted Least Squares:",
-    "    Standard deviation:", "        #",
+    "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
-    "    Mean estimate:", "        #",
-    "    Bias (mean - nominal):", "        #",
-    "    Root Mean Square Error:", "        #",
+    "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "  Ordinary (unweighted) Least Squares:",
-    "    Standard deviation:", "        #",
+    "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
-    "    Mean estimate:", "        #",
-    "    Bias (mean - nominal):", "        #",
-    "    Root Mean Square Error:", "        #",
+    "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "",
     "Precision at standard thresholds:",
     "  Fraction within ±5% of nominal:", "    WLS: #%    OLS: #%",
@@ -480,8 +557,15 @@ class TestQuickTestOutputSchema:
             'ols': df['unweighted fit diffusion slope'].to_numpy() / 2,
         }
         # WLS is listed before OLS under each statistic.
-        assert values['Mean estimate'] == [f"{d_estimates[m].mean():.5f}" for m in ('wls', 'ols')]
-        assert values['Standard deviation'] == [f"{d_estimates[m].std():.5f}" for m in ('wls', 'ols')]
+        d_unit = 'micrometer^2/nanosecond'
+        assert values['Mean estimate'] == [
+            f"{d_estimates[m].mean():.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [
+            f"{d_estimates[m].std():.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Bias (mean - nominal)'] == [
+            f"{d_estimates[m].mean() - 0.01:.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Root Mean Square Error'] == [
+            f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Relative standard error'] == [
             f"{d_estimates[m].std() / 0.01:.3f}" for m in ('wls', 'ols')]
         within_10 = {m: np.mean(np.abs(d / 0.01 - 1) <= 0.1) for m, d in d_estimates.items()}
@@ -575,6 +659,15 @@ class TestOutputOptions:
         assert len(ax.patches) == 11
         assert run.histogram_file.exists()
 
+    def test_unknown_image_type_rejected_before_simulation(self, tmp_path, capsys):
+        run = self._run(tmp_path, 'bitmap', overrides={'image type': 'bmp'})
+        assert run.exit_code == 1
+        out = capsys.readouterr().out
+        assert "Error: Unknown image type 'bmp'. Valid types: " in out
+        assert "png" in out.splitlines()[-1] and "svg" in out.splitlines()[-1]
+        assert "Starting DICE simulation" not in out
+        assert not (tmp_path / 'output').exists()
+
     def test_malformed_x_lim_rejected_before_simulation(self, tmp_path, capsys):
         run = self._run(tmp_path, 'bad_limits', overrides={'image x_lim': [1.5, 0.5]})
         assert run.exit_code == 1
@@ -613,11 +706,77 @@ class TestOutputOptions:
             tmp_path, 'estimated',
             {'number of runs': self.OPTION_RUNS, 'estimate noise from data': str(profile_file)},
             removed=('noise value',))
-        run = run_cli(tmp_path, params_file, 'estimated', '--no-plots')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            run = run_cli(tmp_path, params_file, 'estimated', '--no-plots')
         assert run.exit_code == 0
+        # The repository profile's peak is too narrow for fft-cnr, which the run reports.
+        assert [w.category for w in caught if 'pixels wide at half maximum' in str(w.message)] == [
+            UserWarning]
         values = summary_label_to_values(run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
         assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
+
+
+class TestRelativeNoiseDataPath:
+    """A parameters file names its measured profile relative to its own folder, not the working directory."""
+
+    def test_cli_from_another_directory(self, tmp_path):
+        import shutil
+        from fft_cnr import fft_cnr
+        params_dir, workdir = tmp_path / 'project', tmp_path / 'elsewhere'
+        (params_dir / 'data').mkdir(parents=True)
+        workdir.mkdir()
+        shutil.copy(EXAMPLES_DIR / 'example_profile.csv', params_dir / 'data' / 'measured.csv')
+        params_file = write_quick_test_variant(
+            params_dir, 'relative_noise',
+            {'number of runs': 4, 'estimate noise from data': 'data/measured.csv'},
+            removed=('noise value',))
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter('always')
+            run = run_cli(workdir, params_file, 'relative_noise', '--no-plots')
+
+        assert run.exit_code == 0
+        assert run.output_dir.parent.parent == workdir
+        file_cnr = fft_cnr(np.loadtxt(EXAMPLES_DIR / 'example_profile.csv', delimiter=',')).cnr
+        values = summary_label_to_values(run.read_summary())
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
+
+
+class TestNarrowPeakWarning:
+    """The CLI shows the warning for a measured profile too narrow for fft-cnr, on stderr."""
+
+    @staticmethod
+    def _dry_run(directory: Path, profile_file: Path) -> 'subprocess.CompletedProcess[str]':
+        import subprocess
+        import sys
+        params_file = write_quick_test_variant(
+            directory, 'estimated', {'estimate noise from data': str(profile_file)},
+            removed=('noise value',))
+        return subprocess.run(
+            [sys.executable, '-m', 'dice.cli.main', str(params_file), '--dry-run'],
+            cwd=directory, capture_output=True, text=True, encoding='utf-8', timeout=120,
+        )
+
+    def test_repository_profile_warns(self, tmp_path):
+        completed = self._dry_run(tmp_path, EXAMPLES_DIR / 'example_profile.csv')
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert "UserWarning: The peak of the measured profile" in completed.stderr
+        assert "is 4.6 pixels wide at half maximum" in completed.stderr
+        assert "loaded and validated" in completed.stdout
+
+    def test_wide_profile_does_not_warn(self, tmp_path):
+        from dice.core.profiles import gaussian
+        from dice.utils.converters import fwhm_to_sigma2
+        x = np.arange(101) - 50
+        rng = np.random.default_rng(5)
+        wide = 1000 * gaussian(x, 0.3, fwhm_to_sigma2(15.0), 1.0) + rng.normal(0, 50, x.size)
+        profile_file = tmp_path / 'wide_profile.csv'
+        np.savetxt(profile_file, wide.reshape(1, -1), delimiter=',', fmt='%.17g')
+        completed = self._dry_run(tmp_path, profile_file)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert "Warning" not in completed.stderr
 
 
 class TestNominalCnrUsesAmplitude:

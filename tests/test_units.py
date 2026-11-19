@@ -27,6 +27,7 @@ from dice.utils.units import (
     global_length_unit,
     global_time_unit,
     resolve_units,
+    validate_output_units,
 )
 
 
@@ -48,6 +49,58 @@ class TestValidation:
     def test_invalid_time_unit(self):
         with pytest.raises(ValueError, match="Unknown time unit"):
             validate_time_unit("fortnights")
+
+
+class TestValidationNamesTheKey:
+    """An output unit error names the key it was given for; a non-string is an unknown unit."""
+
+    def test_key_named_in_the_message(self):
+        with pytest.raises(ValueError, match="Unknown length unit 'furlong' for 'some_key'. Valid units: "):
+            validate_length_unit('furlong', 'some_key')
+        with pytest.raises(ValueError, match="Unknown time unit 'fortnight' for 'other_key'. Valid units: "):
+            validate_time_unit('fortnight', 'other_key')
+
+    @pytest.mark.parametrize('unit', [None, 5, ['micrometer']])
+    def test_non_string_is_unknown(self, unit):
+        with pytest.raises(ValueError, match="Unknown length unit"):
+            validate_length_unit(unit)
+        with pytest.raises(ValueError, match="Unknown time unit"):
+            validate_time_unit(unit)
+
+
+class TestValidateOutputUnits:
+    """Only the diffusion coefficient output unit is configurable, as a pair."""
+
+    def test_no_output_keys(self):
+        validate_output_units({'length unit': 'micrometer'})
+
+    def test_valid_pair(self):
+        validate_output_units({'output_diffusion_length_unit': 'centimeter',
+                               'output_diffusion_time_unit': 'second'})
+
+    @pytest.mark.parametrize('present', ['output_diffusion_length_unit', 'output_diffusion_time_unit'])
+    def test_one_of_the_pair_rejected(self, present):
+        with pytest.raises(ValueError, match="Give both 'output_diffusion_length_unit' and "
+                                             "'output_diffusion_time_unit', or neither."):
+            validate_output_units({present: 'second' if 'time' in present else 'centimeter'})
+
+    @pytest.mark.parametrize('pair, message', [
+        (('furlong', 'second'), "Unknown length unit 'furlong' for 'output_diffusion_length_unit'"),
+        (('centimeter', 'fortnight'), "Unknown time unit 'fortnight' for 'output_diffusion_time_unit'"),
+        (('cm', 's'), "Unknown length unit 'cm' for 'output_diffusion_length_unit'"),
+    ])
+    def test_unknown_unit_names_the_key(self, pair, message):
+        with pytest.raises(ValueError, match=message):
+            validate_output_units({'output_diffusion_length_unit': pair[0],
+                                   'output_diffusion_time_unit': pair[1]})
+
+    @pytest.mark.parametrize('key', ['output_length_unit', 'output_time_unit'])
+    def test_unsupported_key_rejected_with_the_alternative(self, key):
+        with pytest.raises(ValueError) as error:
+            validate_output_units({key: 'nanometer'})
+        assert str(error.value).startswith(f"'{key}' is not supported: the summary and results files "
+                                           "report lengths and times in the global 'length unit'")
+        assert "'output_diffusion_length_unit' and 'output_diffusion_time_unit'" in str(error.value)
 
 
 class TestConvertLength:

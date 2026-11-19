@@ -38,6 +38,39 @@ _HISTOGRAM_OPTION_KEYS = {
 }
 
 
+def supported_image_types() -> List[str]:
+    """Image types the histogram can be written as: the formats of matplotlib's savefig."""
+    from matplotlib.backend_bases import FigureCanvasBase
+    return sorted(FigureCanvasBase.get_supported_filetypes())
+
+
+def validate_image_type(image_type: Any) -> str:
+    """
+    Check that the histogram can be written as this image type.
+
+    Parameters
+    ----------
+    image_type : str
+        The 'image type' parameter, for example 'png'; case does not matter.
+
+    Returns
+    -------
+    str
+        The image type, unchanged.
+
+    Raises
+    ------
+    ValueError
+        If matplotlib cannot write the type; the message lists the types it can write.
+    """
+    supported = supported_image_types()
+    if not isinstance(image_type, str) or image_type.lower() not in supported:
+        raise ValueError(
+            f"Unknown image type '{image_type}'. Valid types: {', '.join(supported)}"
+        )
+    return image_type
+
+
 def histogram_options(parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build the plot_accuracy_histogram keyword arguments from a parameters dictionary.

@@ -12,11 +12,12 @@ from __future__ import annotations
 import shutil
 
 import numpy as np
+import pandas as pd
 import pytest
 from PyQt6.QtWidgets import QMessageBox
 
 from gui_support import (
-    EXAMPLE_PROFILE_CSV, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
+    EXAMPLE_PROFILE_CSV, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
     d_estimates_from_csv, fit_method_radio, fraction_within, trigger_menu_action,
 )
 
@@ -34,11 +35,18 @@ def _summary_labels(window) -> list[str]:
     ]
 
 
-def _expected_summary(estimates: np.ndarray, nominal: float) -> list[str]:
+# The quick_test example runs in micrometers and nanoseconds.
+RUN_D_UNIT = "μm²/ns"
+
+
+def _expected_summary(
+    estimates: np.ndarray, nominal: float, d_unit: str = RUN_D_UNIT, scale: float = 1.0,
+) -> list[str]:
+    """The four labels; the standard deviation and bias are diffusion coefficients in d_unit."""
     return [
-        f"{np.std(estimates):.5e}",
+        f"{np.std(estimates) * scale:.5e} {d_unit}",
         f"{np.std(estimates) / nominal:.3f}",
-        f"{np.mean(estimates) - nominal:.5e}",
+        f"{(np.mean(estimates) - nominal) * scale:.5e} {d_unit}",
         f"{np.mean(estimates) / nominal:.3f}",
     ]
 
@@ -173,7 +181,12 @@ class TestLoadResults:
         assert window.status_bar.currentMessage() == "Loaded: earlier_run.csv"
         assert (work_dir / "earlier_run_accuracy_histogram.png").is_file()
         estimates, nominal = d_estimates_from_csv(loaded_csv, WLS_SLOPE_COLUMN)
-        assert _summary_labels(window) == _expected_summary(estimates, nominal)
+        # The CSV does not name the simulation units, so the statistics take the
+        # unit of its labeled nominal column: 1 micrometer^2/ns is 10 cm^2/s.
+        frame = pd.read_csv(loaded_csv)
+        scale = frame["nominal diffusion coeff [cm²/s]"].iloc[0] / frame[NOMINAL_D_COLUMN].iloc[0]
+        assert scale == pytest.approx(10, rel=1e-12)
+        assert _summary_labels(window) == _expected_summary(estimates, nominal, "cm²/s", scale)
         assert window.explore_proximity_group.isEnabled()
 
     def test_csv_without_results_columns_is_reported(self, window, dialogs, work_dir):

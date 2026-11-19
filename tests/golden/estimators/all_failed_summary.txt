@@ -31,26 +31,26 @@ Analysis Results:
 Diffusion Coefficient Estimate Statistics:
   Weighted Least Squares:
     Standard deviation:
-        nan
+        nan micrometer^2/nanosecond
     Relative standard error:
         nan
     Mean estimate:
-        nan
+        nan micrometer^2/nanosecond
     Bias (mean - nominal):
-        nan
+        nan micrometer^2/nanosecond
     Root Mean Square Error:
-        nan
+        nan micrometer^2/nanosecond
   Ordinary (unweighted) Least Squares:
     Standard deviation:
-        nan
+        nan micrometer^2/nanosecond
     Relative standard error:
         nan
     Mean estimate:
-        nan
+        nan micrometer^2/nanosecond
     Bias (mean - nominal):
-        nan
+        nan micrometer^2/nanosecond
     Root Mean Square Error:
-        nan
+        nan micrometer^2/nanosecond
 
 Precision at standard thresholds:
   Fraction within ±5% of nominal:

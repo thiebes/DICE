@@ -84,7 +84,7 @@ PARAMETER_DIMENSIONS: Dict[str, Dimension] = {
 }
 
 
-def validate_length_unit(unit: str) -> None:
+def validate_length_unit(unit: str, key: Optional[str] = None) -> None:
     """
     Validate that a string is a recognized length unit.
 
@@ -92,20 +92,23 @@ def validate_length_unit(unit: str) -> None:
     ----------
     unit : str
         Unit name to validate.
+    key : str, optional
+        Parameter key the unit was given for, named in the error message.
 
     Raises
     ------
     ValueError
         If the unit is not in VALID_LENGTH_UNITS.
     """
-    if unit not in VALID_LENGTH_UNITS:
+    if not isinstance(unit, str) or unit not in VALID_LENGTH_UNITS:
         valid = ', '.join(sorted(VALID_LENGTH_UNITS.keys()))
+        for_key = f" for '{key}'" if key else ""
         raise ValueError(
-            f"Unknown length unit '{unit}'. Valid units: {valid}"
+            f"Unknown length unit '{unit}'{for_key}. Valid units: {valid}"
         )
 
 
-def validate_time_unit(unit: str) -> None:
+def validate_time_unit(unit: str, key: Optional[str] = None) -> None:
     """
     Validate that a string is a recognized time unit.
 
@@ -113,16 +116,19 @@ def validate_time_unit(unit: str) -> None:
     ----------
     unit : str
         Unit name to validate.
+    key : str, optional
+        Parameter key the unit was given for, named in the error message.
 
     Raises
     ------
     ValueError
         If the unit is not in VALID_TIME_UNITS.
     """
-    if unit not in VALID_TIME_UNITS:
+    if not isinstance(unit, str) or unit not in VALID_TIME_UNITS:
         valid = ', '.join(sorted(VALID_TIME_UNITS.keys()))
+        for_key = f" for '{key}'" if key else ""
         raise ValueError(
-            f"Unknown time unit '{unit}'. Valid units: {valid}"
+            f"Unknown time unit '{unit}'{for_key}. Valid units: {valid}"
         )
 
 
@@ -324,6 +330,51 @@ def global_length_unit(parameters: Dict[str, Any]) -> str:
 def global_time_unit(parameters: Dict[str, Any]) -> str:
     """Global simulation time unit of a parameters dictionary (default 'nanosecond')."""
     return parameters.get('time_unit', parameters.get('time unit', 'nanosecond'))
+
+
+# Keys that set the unit of the diffusion coefficients in the output files.
+OUTPUT_DIFFUSION_LENGTH_UNIT_KEY = 'output_diffusion_length_unit'
+OUTPUT_DIFFUSION_TIME_UNIT_KEY = 'output_diffusion_time_unit'
+
+# Output unit keys no output file uses: the files report lengths and times in
+# the global units, and their unlabeled results-file columns must stay so.
+UNSUPPORTED_OUTPUT_UNIT_KEYS = ('output_length_unit', 'output_time_unit')
+
+
+def validate_output_units(parameters: Dict[str, Any]) -> None:
+    """
+    Check the output unit keys of a parameters dictionary before a simulation.
+
+    Parameters
+    ----------
+    parameters : dict
+        Parameters dictionary.
+
+    Raises
+    ------
+    ValueError
+        If it has an output unit key that no output uses, only one of the two
+        diffusion coefficient output unit keys, or an unknown unit name.
+    """
+    for key in UNSUPPORTED_OUTPUT_UNIT_KEYS:
+        if key in parameters:
+            raise ValueError(
+                f"'{key}' is not supported: the summary and results files report lengths "
+                "and times in the global 'length unit' and 'time unit'. To choose the unit "
+                f"of the diffusion coefficients, use '{OUTPUT_DIFFUSION_LENGTH_UNIT_KEY}' "
+                f"and '{OUTPUT_DIFFUSION_TIME_UNIT_KEY}'."
+            )
+
+    length = parameters.get(OUTPUT_DIFFUSION_LENGTH_UNIT_KEY)
+    time = parameters.get(OUTPUT_DIFFUSION_TIME_UNIT_KEY)
+    if (length is None) != (time is None):
+        raise ValueError(
+            f"Give both '{OUTPUT_DIFFUSION_LENGTH_UNIT_KEY}' and "
+            f"'{OUTPUT_DIFFUSION_TIME_UNIT_KEY}', or neither."
+        )
+    if length is not None:
+        validate_length_unit(length, OUTPUT_DIFFUSION_LENGTH_UNIT_KEY)
+        validate_time_unit(time, OUTPUT_DIFFUSION_TIME_UNIT_KEY)
 
 
 def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:

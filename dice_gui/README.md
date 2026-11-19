@@ -53,7 +53,7 @@ The main window has five tabs, a control panel at the bottom, a status bar, and 
 The analysis acts on the results of the last simulation. It does not change the simulation.
 
 - **Fit Method**: show results for the weighted least squares (WLS) or the ordinary least squares (OLS) fit of the mean squared displacement (MSD) against time.
-- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value.
+- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, which does not record the global units, they are in the unit of the file's `nominal diffusion coeff [...]` column, cm²/s by default.
 - **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, for example "within ±10%". A target diagram shows the threshold. You can change the threshold as often as you like without running the simulation again.
 
 ### Output Settings
@@ -91,7 +91,7 @@ The GUI checks each field as you type and shows an error message below a field w
 
 - Number of runs and number of pixels: positive integers
 - Diffusion coefficient, profile width, and spatial width: positive numbers
-- Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers (the diffusion length is zero when the lifetime is zero, which means no decay)
+- Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers. A lifetime of zero means no decay, and the diffusion length is then infinite and shows as `inf`.
 - Mean position: any number
 - Time range: numeric start and stop, with start less than stop
 - Time series: comma-separated finite numbers, without duplicates

@@ -2,14 +2,22 @@
 Tests for dice.core.noise module.
 """
 
+from pathlib import Path
+
 import pytest
 import numpy as np
 from fft_cnr import fft_cnr
 from dice.core.noise import (
+    MIN_CNR_PEAK_FWHM,
     add_noise,
     make_noise_distribution,
     estimate_noise_from_profile,
+    peak_fwhm_samples,
 )
+from dice.core.profiles import gaussian
+from dice.utils.converters import fwhm_to_sigma2
+
+EXAMPLE_PROFILE = Path(__file__).parent.parent / 'data' / 'examples' / 'example_profile.csv'
 
 
 class TestAddNoise:
@@ -259,3 +267,57 @@ class TestNominalCnr:
     def test_zero_noise_is_infinite(self):
         from dice.core.noise import nominal_cnr
         assert nominal_cnr(1.0, 0.0) == float('inf')
+
+
+class TestPeakFwhmSamples:
+    """Width of a measured peak in samples, for the narrow-peak warning on 'estimate noise from data'."""
+
+    @staticmethod
+    def _gaussian_samples(fwhm: float, n: int = 101) -> np.ndarray:
+        """DICE's own Gaussian, sampled once per pixel, slightly off the pixel grid."""
+        x = np.arange(n) - n // 2
+        return gaussian(x, 0.3, fwhm_to_sigma2(fwhm), 1.0)
+
+    def test_repository_profile_is_narrow(self):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        width = peak_fwhm_samples(measured)
+        assert width == pytest.approx(4.6, abs=0.1)
+        assert width < MIN_CNR_PEAK_FWHM
+
+    @pytest.mark.parametrize('fwhm', [4.6, 9.0, 14.0])
+    def test_noise_free_gaussian_width_is_exact(self, fwhm):
+        assert peak_fwhm_samples(self._gaussian_samples(fwhm)) == pytest.approx(fwhm, rel=1e-6)
+
+    def test_wide_noisy_peak_is_not_narrow(self):
+        """At CNR 5 a 15-pixel peak still reads wider than the threshold."""
+        rng = np.random.default_rng(7)
+        noisy = self._gaussian_samples(15.0) + rng.normal(0, 0.2, 101)
+        assert peak_fwhm_samples(noisy) == pytest.approx(15.0, rel=0.15)
+
+    def test_sign_and_baseline_do_not_change_the_width(self):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        width = peak_fwhm_samples(measured)
+        assert peak_fwhm_samples(-measured) == pytest.approx(width, rel=1e-9)
+        assert peak_fwhm_samples(measured + 500.0) == pytest.approx(width, rel=1e-9)
+
+    def test_profile_without_a_peak_has_no_width(self):
+        assert np.isnan(peak_fwhm_samples(np.full(41, 3.0)))
+
+    def test_too_few_samples_to_fit_falls_back_to_the_crossings(self):
+        # Four fit parameters, three samples: the half-maximum crossings are at 0.5 and 1.5.
+        assert peak_fwhm_samples([0.0, 1.0, 0.0]) == pytest.approx(1.0)
+
+    def test_failed_fit_falls_back_to_the_crossings(self, monkeypatch):
+        import scipy.optimize
+
+        def failing_fit(*args, **kwargs):
+            raise RuntimeError("Optimal parameters not found")
+
+        monkeypatch.setattr(scipy.optimize, 'curve_fit', failing_fit)
+        # Linear interpolation across the half-maximum points of a sampled
+        # Gaussian lands slightly outside them, so the crossing width is a little wide.
+        assert peak_fwhm_samples(self._gaussian_samples(9.0)) == pytest.approx(9.0, rel=0.02)
+
+    def test_two_dimensional_input_rejected(self):
+        with pytest.raises(ValueError):
+            peak_fwhm_samples(np.ones((2, 41)))

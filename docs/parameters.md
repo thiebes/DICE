@@ -42,7 +42,7 @@ The number of runs (Monte Carlo iterations). More runs give more precise statist
 
 ### `length unit` and `time unit`
 
-The global units of the simulation. All values with a length or time dimension are in these units, unless a per-parameter unit key (see below) gives another unit. The summary file and the results file report values in these units, except for the results-file columns marked `[cm²/s]`, which DICE converts to cm²/s.
+The global units of the simulation. All values with a length or time dimension are in these units, unless a per-parameter unit key (see below) gives another unit. The summary file and the results file report values in these units, except for the results-file columns marked `[cm²/s]`, which DICE converts to cm²/s. The output unit keys (see below) change the unit of the diffusion coefficients in both files.
 
 - **Length units:** meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
 - **Time units:** second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
@@ -85,6 +85,21 @@ The unit key for `mean_0` is `mu_0_unit`.
 
 DICE converts these values to 0.8 μm, 0.001 μm²/ns, and 0.5 ns.
 
+### `output_diffusion_length_unit` and `output_diffusion_time_unit`
+
+The unit of the diffusion coefficients in the output files, as a length unit and a time unit. Give both keys or neither.
+
+With the keys, the diffusion coefficients are in (length unit)² / (time unit) in both output files: in the results-file columns that are otherwise marked `[cm²/s]`, and in the summary file's nominal diffusion coefficient and the standard deviation, mean, bias, and RMSE of the estimates. Without the keys, the results file uses cm²/s and the summary file uses the global units.
+
+**Example:** to report the diffusion coefficients in cm²/s in both files:
+
+```python
+'output_diffusion_length_unit': 'centimeter',
+'output_diffusion_time_unit': 'second',
+```
+
+Other values with a length or time dimension stay in the global units. DICE rejects the keys `output_length_unit` and `output_time_unit` before the simulation. The GUI has no setting for the output units: it does not use these keys, and it leaves them out when it opens or saves a parameters file.
+
 ## Diffusion and lifetime
 
 Give **either** the diffusion length **or** both the diffusion coefficient and the lifetime. Do not give all three.
@@ -102,6 +117,8 @@ If you give only the diffusion length, DICE sets the lifetime to 1 time unit and
 The diffusion coefficient D and the excited state lifetime τ. DICE computes the diffusion length from them.
 
 **Units:** D in (length unit)² / (time unit); τ in time unit
+
+A lifetime of 0 means no decay: the profiles keep their integrated intensity at all time points. The diffusion length is then infinite, and the output files report it as `inf` (`Infinity` in a JSON file).
 
 ### Scaling examples
 
@@ -160,11 +177,13 @@ The standard deviation σ of the noise.
 
 ### `estimate noise from data`
 
-The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the current working directory.
+The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the folder that contains the parameters file, so the parameters file gives the same run from any working directory. The GUI resolves a relative path in the same way when it opens a parameters file.
 
 DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. It then sets the noise level so that the initial CNR of the simulated profiles equals that estimate. The amplitude and units of the measured profile do not matter. The [fft-cnr documentation](https://fft-cnr.readthedocs.io) describes the method and its limits.
 
 Use a profile whose peak is at least about 9 pixels wide at half maximum, with flat background on both sides. For narrower peaks fft-cnr overestimates the noise and the CNR comes out too low. In simulated Gaussian profiles with white noise, the estimate was within 2.4% of the true CNR for peaks 9 to 14 pixels wide, and 14% to 27% too low for a peak 4.6 pixels wide. Check the summary file's initial CNR against your own estimate for the measured data.
+
+DICE warns when the peak of the measured profile is narrower than 9 pixels at half maximum. It measures the width with a least-squares fit of a Gaussian on a constant baseline. The command-line interface prints the warning before the simulation, and the GUI shows it with the other parameter warnings when you click Run. The example profile `data/examples/example_profile.csv` has a peak 4.6 pixels wide, so it gives this warning.
 
 ### `noise range, reciprocal` and `noise range, reciprocal log`
 
@@ -185,6 +204,24 @@ Choose a width several times larger than the width of the profile at the last ti
 ### `pixel width`
 
 The number of points (pixels) on the spatial axis. The axis includes both end points, so the spacing between points is `spatial width` / (`pixel width` − 1).
+
+### Matching a real detector
+
+The points of the spatial axis are the pixel centers. For a detector line of N pixels at pitch p, the centers span p × (N − 1). To simulate that detector, set:
+
+- `pixel width` = N
+- `spatial width` = p × (N − 1)
+
+Do not set `spatial width` to N × p: the spacing between points is then N / (N − 1) times the pitch, about 1% too large for 100 pixels.
+
+**Example:** 100 pixels at a pitch of 0.05 μm:
+
+```python
+'pixel width': 100,
+'spatial width': 4.95,  # 0.05 x (100 - 1), in micrometers
+```
+
+The GUI shows the resulting pixel size, `spatial width` / (`pixel width` − 1), under the pixel count on the Experimental Conditions tab. With these settings it shows the pitch, 0.05 μm.
 
 ## Temporal axis
 
@@ -239,7 +276,7 @@ Optional parameters for the accuracy histogram.
 
 The file format of the plot.
 
-**Options:** `'png'`, `'jpg'`, `'svg'`, `'tif'`, `'pdf'`
+**Options:** any format that matplotlib can write, for example `'png'`, `'jpg'`, `'svg'`, `'tif'`, `'pdf'`, or `'eps'`. The case does not matter. DICE rejects another value before the simulation, with an error that lists the valid types. The GUI offers png, jpg, svg, and tif.
 
 **Default:** `'png'`
 
