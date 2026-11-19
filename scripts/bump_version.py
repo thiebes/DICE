@@ -205,6 +205,7 @@ def main():
         print(f"  4. Commit changes: git add -A && git commit -m \"Bump version to {args.version}\"")
         print(f"  5. Tag release: git tag -a v{args.version} -m \"Release v{args.version}\"")
         print("  6. Push: git push && git push --tags")
+        print(f"  7. Publish a GitHub release for v{args.version} to build and attach the executables")
     else:
         print("\nERROR: Some files could not be updated")
         sys.exit(1)

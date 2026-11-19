@@ -66,6 +66,8 @@ def test_next_steps_show_the_version_and_the_lockfile_step(repo_copy: Path) -> N
     assert "{args.version}" not in result.stdout
     assert "git tag -a v9.8.7" in result.stdout
     assert "uv lock" in result.stdout
+    # The release workflow runs on a published release, not on a pushed tag.
+    assert "Publish a GitHub release for v9.8.7" in result.stdout
 
 
 def test_missing_version_field_fails(repo_copy: Path) -> None:
