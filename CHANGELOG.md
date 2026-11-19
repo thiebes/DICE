@@ -59,7 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [fft-cnr](https://pypi.org/project/fft-cnr/) package, version 0.4.1 or
   later, in place of the built-in implementation. The change applies to the
   `estimated CNR` column of the results file, to `estimate noise from data`,
-  and to the web app. The reported CNR values shift slightly.
+  and to the web app. On simulated initial profiles from the four example
+  files (CNR 50, 4000 profiles each), the estimates are 0.5% to 2.3% lower
+  than in 1.2.0 and closer to the nominal CNR: 0.3% to 1.0% high, against
+  1.1% to 2.7% high in 1.2.0. At CNR 1 to 3 they are 17% to 39% lower: 10%
+  to 55% high, against 34% to 160% high in 1.2.0. For a peak only a few
+  pixels wide, fft-cnr overestimates the noise, so the CNR comes out too low.
+  The measured profile `data/examples/example_profile.csv`, whose peak is
+  4.6 pixels wide at half maximum, gives a CNR of 8.9, where 1.2.0 gave 176.
 - The summary file lists the dispersion statistics of the estimates first,
   followed by the fractions within the standard proximity levels.
 - The accuracy histogram shows the probability of each bin on the y-axis,

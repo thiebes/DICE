@@ -10,8 +10,9 @@
     <hr />
 
     <p>You do not need to subtract the background or normalize the profile. The estimate does not change when the values are multiplied by a constant or shifted by a constant. For a reliable estimate:</p>
-    <ol><li>enter at least 16 values, and</li>
-    <li>include the flat background on both sides of the peak. The baseline is estimated from the outer quarter of the profile on each side.</li></ol>
+    <ol><li>enter at least 16 values,</li>
+    <li>include the flat background on both sides of the peak. The baseline is estimated from the outer quarter of the profile on each side, and</li>
+    <li>use a profile whose peak is at least about 9 values wide at half its height. For narrower peaks the noise is overestimated and the CNR comes out too low.</li></ol>
 
     <p><img src="/static/favicon-16x16.png" /> Enter your noisy Gaussian profile as a list of comma-separated values here: <br />
     <input type="text" name="values">

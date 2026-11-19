@@ -162,7 +162,9 @@ The standard deviation σ of the noise.
 
 The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the current working directory.
 
-DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. It then sets the noise level so that the initial CNR of the simulated profiles equals that estimate. The amplitude and units of the measured profile do not matter. The estimate can differ slightly between versions of fft-cnr; see the [fft-cnr documentation](https://fft-cnr.readthedocs.io) for the method.
+DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. It then sets the noise level so that the initial CNR of the simulated profiles equals that estimate. The amplitude and units of the measured profile do not matter. The [fft-cnr documentation](https://fft-cnr.readthedocs.io) describes the method and its limits.
+
+Use a profile whose peak is at least about 9 pixels wide at half maximum, with flat background on both sides. For narrower peaks fft-cnr overestimates the noise and the CNR comes out too low. In simulated Gaussian profiles with white noise, the estimate was within 2.4% of the true CNR for peaks 9 to 14 pixels wide, and 14% to 27% too low for a peak 4.6 pixels wide. Check the summary file's initial CNR against your own estimate for the measured data.
 
 ### `noise range, reciprocal` and `noise range, reciprocal log`
 
