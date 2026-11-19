@@ -11,11 +11,14 @@ quick_test.txt with named values replaced.
 import ast
 import contextlib
 import importlib
+import json
+import re
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -328,3 +331,228 @@ class TestZeroNoiseRun:
         assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in summary
         assert summary.endswith("Simulation completed successfully.\n")
         assert (run.read_csv()['nominal CNR'] == float('inf')).all()
+
+
+CSV_COLUMNS = [
+    'run number',
+    'nominal diffusion coeff',
+    'nominal lifetime',
+    'nominal diffusion length',
+    'nominal CNR',
+    'estimated CNR',
+    'nominal sigma^2_0',
+    'estimated sigma^2_0',
+    'unweighted fit diffusion slope',
+    'unweighted fit diffusion slope stderr',
+    'unweighted fit intercept',
+    'unweighted fit intercept stderr',
+    'unweighted fit diffusion coeff [cm²/s]',
+    'unweighted fit diffusion stderr [cm²/s]',
+    'weighted fit diffusion slope',
+    'weighted fit diffusion slope stderr',
+    'weighted fit intercept',
+    'weighted fit intercept stderr',
+    'weighted fit diffusion coeff [cm²/s]',
+    'weighted fit diffusion stderr [cm²/s]',
+    'nominal diffusion coeff [cm²/s]',
+]
+
+# The summary for quick_test.txt with every number on a value line replaced by '#'.
+SUMMARY_SKELETON = [
+    "DICE Simulation Summary",
+    "=" * 50,
+    "",
+    "Simulation Parameters:",
+    "-" * 30,
+    "Number of runs:", "    #",
+    "Spatial width:", "    # micrometer",
+    "Pixel width:", "    # pixels",
+    "Time frames:", "    # frames",
+    "Time range:", "    # to # nanosecond",
+    "Noise standard deviation values:", "    [#]",
+    "Initial CNR (Contrast-to-Noise Ratio):", "    #",
+    "Initial profile squared width (sigma^2):", "    # micrometer^2",
+    "Nominal diffusion length:", "    # micrometer",
+    "Nominal diffusion coefficient:", "    # micrometer^2/nanosecond",
+    "Nominal lifetime:", "    # nanosecond",
+    "",
+    "Analysis Results:",
+    "-" * 30,
+    "Diffusion Coefficient Estimate Statistics:",
+    "  Weighted Least Squares:",
+    "    Standard deviation:", "        #",
+    "    Relative standard error:", "        #",
+    "    Mean estimate:", "        #",
+    "    Bias (mean - nominal):", "        #",
+    "    Root Mean Square Error:", "        #",
+    "  Ordinary (unweighted) Least Squares:",
+    "    Standard deviation:", "        #",
+    "    Relative standard error:", "        #",
+    "    Mean estimate:", "        #",
+    "    Bias (mean - nominal):", "        #",
+    "    Root Mean Square Error:", "        #",
+    "",
+    "Precision at standard thresholds:",
+    "  Fraction within ±5% of nominal:", "    WLS: #%    OLS: #%",
+    "  Fraction within ±10% of nominal:", "    WLS: #%    OLS: #%",
+    "  Fraction within ±20% of nominal:", "    WLS: #%    OLS: #%",
+    "  Fraction within ±50% of nominal:", "    WLS: #%    OLS: #%",
+    "",
+    "Simulation completed successfully.",
+]
+
+SUMMARY_NUMBER = re.compile(r"(?<![\^\w.])-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?|\binf\b|\bnan\b")
+
+
+def summary_skeleton(summary: str) -> list[str]:
+    """Summary lines with the numbers on value lines (indented lines after a label) masked."""
+    skeleton, previous = [], ""
+    for line in summary.splitlines():
+        is_value_line = previous.endswith(":") and line.startswith("    ")
+        skeleton.append(SUMMARY_NUMBER.sub("#", line) if is_value_line else line)
+        previous = line
+    return skeleton
+
+
+def summary_label_to_values(summary: str) -> dict[str, list[str]]:
+    """Each summary label mapped to the value lines under it, in file order."""
+    label_to_values: dict[str, list[str]] = {}
+    previous = ""
+    for line in summary.splitlines():
+        if previous.endswith(":") and line.startswith("    "):
+            label_to_values.setdefault(previous.strip().rstrip(":"), []).append(line.strip())
+        previous = line
+    return label_to_values
+
+
+class TestQuickTestOutputSchema:
+    """Pins the output files, CSV columns, and summary structure for data/examples/quick_test.txt.
+
+    Values are noisy, so the tests pin names and structure, check the inputs
+    that reach the outputs unchanged, and check that the summary statistics
+    agree with the CSV they summarize.
+    """
+
+    @pytest.fixture(scope='class')
+    def quick_test_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('quick_test')
+        run = run_cli(workdir, QUICK_TEST, 'quick_test', '--seed', '1')
+        assert run.exit_code == 0
+        return run
+
+    def test_output_files(self, quick_test_run):
+        assert sorted(p.name for p in quick_test_run.output_dir.iterdir()) == [
+            'quick_test.csv', 'quick_test_accuracy_histogram.png', 'quick_test_summary.txt']
+        assert quick_test_run.histogram_file.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
+
+    def test_csv_columns(self, quick_test_run):
+        assert list(quick_test_run.read_csv().columns) == CSV_COLUMNS
+
+    def test_csv_rows_carry_inputs(self, quick_test_run):
+        from dice.utils.converters import fwhm_to_sigma2
+        df = quick_test_run.read_csv()
+        assert df['run number'].tolist() == list(range(100))
+        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+        assert df['nominal lifetime'].to_numpy() == pytest.approx(1.0)
+        assert df['nominal diffusion length'].to_numpy() == pytest.approx(0.1)
+        assert df['nominal CNR'].to_numpy() == pytest.approx(50.0)
+        assert df['nominal sigma^2_0'].to_numpy() == pytest.approx(fwhm_to_sigma2(1.0))
+        assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
+        for prefix in ('weighted fit', 'unweighted fit'):
+            # 1 um^2/ns is 10 cm^2/s, and D is half the MSD slope.
+            assert df[f'{prefix} diffusion coeff [cm²/s]'].to_numpy() == pytest.approx(
+                df[f'{prefix} diffusion slope'].to_numpy() * 5, rel=1e-12)
+            assert df[f'{prefix} diffusion stderr [cm²/s]'].to_numpy() == pytest.approx(
+                df[f'{prefix} diffusion slope stderr'].to_numpy() * 5, rel=1e-12)
+        assert not df.isna().any().any()
+
+    def test_summary_skeleton(self, quick_test_run):
+        assert summary_skeleton(quick_test_run.read_summary()) == SUMMARY_SKELETON
+
+    def test_summary_agrees_with_csv(self, quick_test_run):
+        df = quick_test_run.read_csv()
+        values = summary_label_to_values(quick_test_run.read_summary())
+        assert values['Number of runs'] == ['100']
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
+        assert values['Noise standard deviation values'] == ['[0.02]']
+        d_estimates = {
+            'wls': df['weighted fit diffusion slope'].to_numpy() / 2,
+            'ols': df['unweighted fit diffusion slope'].to_numpy() / 2,
+        }
+        # WLS is listed before OLS under each statistic.
+        assert values['Mean estimate'] == [f"{d_estimates[m].mean():.5f}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{d_estimates[m].std():.5f}" for m in ('wls', 'ols')]
+        assert values['Relative standard error'] == [
+            f"{d_estimates[m].std() / 0.01:.3f}" for m in ('wls', 'ols')]
+        within_10 = {m: np.mean(np.abs(d / 0.01 - 1) <= 0.1) for m, d in d_estimates.items()}
+        assert values['Fraction within ±10% of nominal'] == [
+            f"WLS: {within_10['wls']:.2%}    OLS: {within_10['ols']:.2%}"]
+
+
+class TestOutputOptions:
+    """Export format, output directory, plot format, and their prerequisites."""
+
+    OPTION_RUNS = 4
+
+    def _run(self, workdir: Path, slug: str, *cli_args: str, overrides=None) -> CliRun:
+        params_file = write_quick_test_variant(
+            workdir, slug, {'number of runs': self.OPTION_RUNS} | (overrides or {}))
+        return run_cli(workdir, params_file, slug, *cli_args)
+
+    def test_json_and_csv_export(self, tmp_path):
+        run = self._run(tmp_path, 'both', '--export-format', 'both', '--no-plots')
+        assert run.exit_code == 0
+        assert sorted(p.name for p in run.output_dir.iterdir()) == [
+            'both.csv', 'both.json', 'both_summary.txt']
+        exported = json.loads((run.output_dir / 'both.json').read_text())
+        assert set(exported) == {'analysis', 'parameters', 'summary'}
+        assert exported['summary'] == {'total_runs': self.OPTION_RUNS, 'noise_values': [0.02]}
+        assert set(exported['analysis']) == {
+            'summary', 'precision', 'accuracy', 'noise_analysis', 'statistics'}
+        assert set(exported['analysis']['precision']) == {'5%', '10%', '20%', '50%'}
+        assert set(exported['analysis']['accuracy']) == {'ols', 'wls'}
+        assert exported['parameters']['filename slug'] == 'both'
+
+    def test_json_only_export_writes_no_csv(self, tmp_path):
+        run = self._run(tmp_path, 'json_only', '--export-format', 'json', '--no-plots')
+        assert run.exit_code == 0
+        assert sorted(p.name for p in run.output_dir.iterdir()) == [
+            'json_only.json', 'json_only_summary.txt']
+
+    def test_output_dir_created(self, tmp_path):
+        target = tmp_path / 'nested' / 'results'
+        params_file = write_quick_test_variant(tmp_path, 'elsewhere', {'number of runs': self.OPTION_RUNS})
+        with contextlib.chdir(tmp_path):
+            assert main([str(params_file), *SERIAL_QUIET, '--output-dir', str(target), '--no-plots']) == 0
+        assert sorted(p.name for p in target.iterdir()) == ['elsewhere.csv', 'elsewhere_summary.txt']
+        assert not (tmp_path / 'output').exists()
+
+    def test_output_dir_that_is_a_file_rejected(self, tmp_path, capsys):
+        blocker = tmp_path / 'not_a_directory'
+        blocker.write_text('')
+        params_file = write_quick_test_variant(tmp_path, 'blocked', {'number of runs': self.OPTION_RUNS})
+        with pytest.raises(SystemExit) as exit_info:
+            main([str(params_file), *SERIAL_QUIET, '--output-dir', str(blocker)])
+        assert exit_info.value.code == 2
+        assert "exists but is not a directory" in capsys.readouterr().err
+
+    def test_image_type_sets_histogram_format(self, tmp_path):
+        run = self._run(tmp_path, 'vector', overrides={'image type': 'svg'})
+        assert run.exit_code == 0
+        histogram = run.output_dir / 'vector_accuracy_histogram.svg'
+        assert histogram.read_text(encoding='utf-8').lstrip().startswith('<?xml')
+        assert not run.histogram_file.exists()
+
+    def test_estimated_noise_reaches_summary(self, tmp_path):
+        from fft_cnr import fft_cnr
+        profile_file = EXAMPLES_DIR / 'example_profile.csv'
+        file_cnr = fft_cnr(np.loadtxt(profile_file, delimiter=',')).cnr
+        params_file = write_quick_test_variant(
+            tmp_path, 'estimated',
+            {'number of runs': self.OPTION_RUNS, 'estimate noise from data': str(profile_file)},
+            removed=('noise value',))
+        run = run_cli(tmp_path, params_file, 'estimated', '--no-plots')
+        assert run.exit_code == 0
+        values = summary_label_to_values(run.read_summary())
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
+        assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
