@@ -16,6 +16,7 @@ output format:
     python tests/test_output_characterization.py
 """
 
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -130,6 +131,25 @@ def test_analysis_keeps_estimators_whose_every_fit_failed():
         key: {'num_successful': 0, 'num_failed': 2, 'success_rate': 0.0}
         for key in ('ols', 'wls')
     }
+
+
+def test_analysis_reports_only_the_estimators_that_ran():
+    full = analyze_simulation_results(edge_case_output())
+    wls_only = analyze_simulation_results(
+        dataclasses.replace(edge_case_output(), estimator_keys=('wls',)))
+
+    assert list(wls_only['accuracy']) == list(wls_only['statistics']) == ['wls']
+    assert all(list(fractions) == ['wls'] for fractions in wls_only['precision'].values())
+    for name, entry in wls_only['noise_analysis'].items():
+        assert list(entry) == ['cnr', 'num_runs', 'wls_precision_10%', 'wls_bias']
+        assert entry == {key: full['noise_analysis'][name][key] for key in entry}
+    assert json.dumps(wls_only['accuracy']['wls']) == json.dumps(full['accuracy']['wls'])
+
+
+def test_analysis_rejects_an_unknown_estimator_key():
+    misspelled = dataclasses.replace(edge_case_output(), estimator_keys=('ols', 'wsl'))
+    with pytest.raises(KeyError, match="unknown estimator 'wsl'"):
+        analyze_simulation_results(misspelled)
 
 
 def test_csv_columns_follow_first_appearance(tmp_path):
