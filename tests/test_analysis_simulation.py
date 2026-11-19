@@ -385,6 +385,65 @@ class TestSeededSimulation:
         assert {child.entropy for child in children} == {11}
 
 
+class TestUnitAndAmplitudeInvariance:
+    """The same physical simulation with the same seed gives the same estimates in any unit and at any amplitude.
+
+    quick_test.txt (FWHM 1 micrometer, diffusion length 0.1 micrometer, CNR 50)
+    restated in another global length unit, or with amplitude_0 and the noise
+    scaled together so the CNR stays 50. Each run's D_est/D_nom, which has no
+    unit, must match the micrometer, amplitude-1 simulation.
+    """
+
+    RUNS = 4
+
+    @classmethod
+    def _accuracy(cls, length_unit: str, amplitude_0: float) -> dict:
+        import ast
+        from pathlib import Path
+        from dice.io.parameters import parameter_parser
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.utils.units import convert_length
+
+        quick_test = Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt'
+        params = ast.literal_eval(quick_test.read_text())
+        scale = convert_length(1.0, 'micrometer', length_unit)
+        params.update({
+            'length unit': length_unit,
+            'FWHM_0': params['FWHM_0'] * scale,
+            'spatial width': params['spatial width'] * scale,
+            'nominal diffusion length': params['nominal diffusion length'] * scale,
+            'amplitude_0': amplitude_0,
+            'noise value': params['noise value'] * amplitude_0,
+            'number of runs': cls.RUNS,
+        })
+        parsed = parameter_parser(params)
+        sim_params = create_parameters_from_legacy(
+            parsed, parsed['nominal diffusion coefficient'], parsed['nominal lifetime (tau)'],
+            parsed['nominal diffusion length'])
+        result = run_monte_carlo_simulation(
+            sim_params, parsed['x array'], parsed['time series'], parsed['noise series'],
+            num_runs=cls.RUNS, multiprocessing=False, seed=31)
+        nominal_d = sim_params.physics.diffusion_coefficient
+        return {key: result.d_estimates(key) / nominal_d for key in ('wls', 'ols')}
+
+    @pytest.mark.parametrize('length_unit, amplitude_0', [
+        ('nanometer', 1.0),
+        ('millimeter', 1.0),
+        ('centimeter', 1.0),
+        ('meter', 1.0),
+        ('micrometer', 1e-5),
+        ('micrometer', 1e-3),
+        ('micrometer', 1e3),
+        ('meter', 1e-5),
+    ])
+    def test_estimates_match_the_micrometer_simulation(self, length_unit, amplitude_0):
+        reference = self._accuracy('micrometer', 1.0)
+        restated = self._accuracy(length_unit, amplitude_0)
+        for key in ('wls', 'ols'):
+            assert len(reference[key]) == len(restated[key]) == self.RUNS, key
+            np.testing.assert_allclose(restated[key], reference[key], rtol=1e-6, err_msg=key)
+
+
 class TestProcessPoolBackend:
     """The standard library's process pool, which a standalone build uses, gives the serial results."""
 
