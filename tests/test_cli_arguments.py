@@ -269,11 +269,18 @@ class TestGetHelpText:
     def test_help_text(self):
         """Test that help text is generated correctly."""
         help_text = get_help_text()
-        
+
         assert isinstance(help_text, str)
         assert 'DICE' in help_text
         assert 'parameters_file' in help_text
         assert '--verbose' in help_text
+
+    def test_help_links_to_repository(self):
+        """The epilog points at the project's repository."""
+        help_text = get_help_text()
+
+        assert 'https://github.com/thiebes/DICE' in help_text
+        assert 'your-repo' not in help_text
 
 
 class TestHandleSpecialArguments:

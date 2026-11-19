@@ -400,3 +400,26 @@ class TestPrecisionCounts:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestNoiseAnalysisCnr:
+    """Per-noise CNR in the analysis is amplitude_0 / noise sigma, from a real simulation."""
+
+    def test_cnr_scales_with_amplitude(self):
+        from pathlib import Path
+        from dice.analysis.simulation import run_monte_carlo_simulation
+        from dice.io.parameters import open_parameters
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+        amplitude_0 = 2.0
+        sim_params = create_parameters_from_legacy(
+            params | {'amplitude_0': amplitude_0}, params['nominal diffusion coefficient'],
+            params['nominal lifetime (tau)'], params['nominal diffusion length'])
+        noise_values = [0.04, 0.08]
+        result = run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], noise_values,
+            num_runs=2, multiprocessing=False, seed=6)
+
+        noise_analysis = analyze_simulation_results(result)['noise_analysis']
+
+        for noise_sigma in noise_values:
+            assert noise_analysis[f'noise_{noise_sigma}']['cnr'] == pytest.approx(amplitude_0 / noise_sigma)

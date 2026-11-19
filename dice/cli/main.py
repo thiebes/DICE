@@ -16,10 +16,12 @@ import numpy as np
 from .arguments import parse_arguments, show_parameter_summary, handle_special_arguments
 from ..io.parameters import open_parameters, validate_parameters
 from ..analysis.simulation import run_monte_carlo_simulation
+from ..core.noise import Seed
 from ..analysis.statistics import analyze_simulation_results
 from ..io.results import export_collated_results, write_summary_file
 from ..visualization.histograms import plot_accuracy_histogram
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.units import global_length_unit, global_time_unit
 
 
 def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]) -> Path:
@@ -51,20 +53,6 @@ def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]
     return output_path
 
 
-def setup_random_seed(seed: Optional[int]) -> None:
-    """
-    Set up random seed for reproducibility.
-    
-    Parameters
-    ----------
-    seed : int, optional
-        Random seed value.
-    """
-    if seed is not None:
-        np.random.seed(seed)
-        print(f"Random seed set to: {seed}")
-
-
 def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     """
     Create a progress callback function for simulation updates.
@@ -94,17 +82,19 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     return progress_callback
 
 
-def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
+def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[str, Any]:
     """
     Execute the Monte Carlo simulation.
-    
+
     Parameters
     ----------
     parameters : dict
         Simulation parameters.
     args : Namespace
         Command-line arguments.
-    
+    seed : int or SeedSequence, optional
+        Root seed for the runs' noise; None draws fresh entropy.
+
     Returns
     -------
     dict
@@ -117,13 +107,10 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
     x_axis = parameters['x array']
     time_axis = parameters['time series']
     
-    # Setup multiprocessing
+    # --multiprocessing N: 0 runs serially, -1 uses all cores, N > 0 uses N workers.
     if args.multiprocessing is not None:
         use_parallel = args.multiprocessing != 0
-        if args.multiprocessing == -1:
-            n_jobs = -1  # Use all cores
-        else:
-            n_jobs = args.multiprocessing
+        n_jobs = args.multiprocessing if use_parallel else -1
     else:
         use_parallel = parameters.get('multiprocessing', 1) != 0
         n_jobs = -1
@@ -165,7 +152,9 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
         num_runs=parameters['number of runs'],
         multiprocessing=use_parallel,
         retain_profile_data=args.retain_profiles if hasattr(args, 'retain_profiles') else False,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        seed=seed,
+        n_jobs=n_jobs,
     )
     
     end_time = time.time()
@@ -192,9 +181,12 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     args : Namespace
         Command-line arguments.
     """
+    length_unit = global_length_unit(parameters)
+    time_unit = global_time_unit(parameters)
+
     if not args.quiet:
         print("Saving results...")
-    
+
     # Analyze results with standard proximity levels
     analysis = analyze_simulation_results(result)
     
@@ -212,7 +204,9 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     if export_format in ['csv', 'both']:
         csv_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}.csv"
         # The export function returns a DataFrame and writes CSV automatically
-        df = export_collated_results(result, str(csv_file))
+        df = export_collated_results(
+            result, str(csv_file), length_unit=length_unit, time_unit=time_unit
+        )
         if not args.quiet:
             print(f"Results saved to: {csv_file}")
     
@@ -239,7 +233,10 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     
     # Write summary  
     summary_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}_summary.txt"
-    write_summary_file(result, str(summary_file), parameters, analysis)
+    write_summary_file(
+        result, str(summary_file), parameters, analysis,
+        length_unit=length_unit, time_unit=time_unit,
+    )
     if not args.quiet:
         print(f"Summary saved to: {summary_file}")
 
@@ -332,28 +329,32 @@ def main(argv: Optional[list] = None) -> int:
     try:
         # Parse arguments
         args = parse_arguments(argv)
-        
-        # Handle special arguments
-        if handle_special_arguments(args):
-            return 0
-        
+
         # Show parameter summary if verbose
         if args.verbose and not args.quiet:
             show_parameter_summary(args)
         
-        # Setup random seed
-        setup_random_seed(args.seed)
-        
+        # One root seed, split into independent streams for the noise draw of
+        # the 'noise range' options and for the simulation runs.
+        noise_draw_seed, simulation_seed = (
+            np.random.SeedSequence(args.seed).spawn(2) if args.seed is not None else (None, None)
+        )
+
         # Load parameters
         if not args.quiet:
             print(f"Loading parameters from: {args.parameters_file}")
-        
-        parameters = open_parameters(args.parameters_file)
+
+        parameters = open_parameters(args.parameters_file, seed=noise_draw_seed)
         validate_parameters(parameters)
         
         if args.verbose and not args.quiet:
             print("Parameters loaded and validated")
-        
+
+        # A dry run ends here, after the same loading and validation as a real
+        # run and before any output directory, simulation, or file.
+        if handle_special_arguments(args):
+            return 0
+
         # Setup output directory
         output_dir = setup_output_directory(args.output_dir, parameters)
         
@@ -361,7 +362,7 @@ def main(argv: Optional[list] = None) -> int:
             print(f"Output directory: {output_dir}")
         
         # Run simulation
-        result = run_simulation(parameters, args)
+        result = run_simulation(parameters, args, seed=simulation_seed)
         
         # Save results
         save_results(result, parameters, output_dir, args)

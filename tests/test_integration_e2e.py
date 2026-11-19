@@ -237,3 +237,12 @@ class TestVersionConsistency:
         import dice
         assert hasattr(dice, '__author__')
         assert 'Thiebes' in dice.__author__
+
+    def test_metadata_matches_pyproject(self):
+        """Package version and licence agree with the distribution metadata."""
+        import tomllib
+        import dice
+        pyproject = Path(__file__).parent.parent / 'pyproject.toml'
+        project = tomllib.loads(pyproject.read_text(encoding='utf-8'))['project']
+        assert dice.__version__ == project['version']
+        assert dice.__license__ == project['license']['text'] == 'MIT'

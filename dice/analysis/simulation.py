@@ -7,12 +7,12 @@ simulations of diffusion measurements with noise.
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
 from fft_cnr import fft_cnr
-from ..core.noise import add_noise
+from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
@@ -22,6 +22,9 @@ from ..utils.legacy_compatibility import (
     convert_legacy_result_to_dict,
 )
 
+# Most batches a parallel simulation is split into; the progress callback reports after each.
+MAX_PROGRESS_BATCHES = 10
+
 
 def run_single_simulation(
     run_id: int,
@@ -29,7 +32,8 @@ def run_single_simulation(
     time_axis: np.ndarray,
     parameters: LegacySimulationParameters,
     noise_sigma: float,
-    retain_profile_data: bool = False
+    retain_profile_data: bool = False,
+    seed: Seed = None,
 ) -> RunResult:
     """
     Execute a single Monte Carlo simulation run.
@@ -51,7 +55,9 @@ def run_single_simulation(
         Standard deviation of noise to add.
     retain_profile_data : bool
         Whether to retain full profile data in results.
-    
+    seed : int or SeedSequence, optional
+        Seed for this run's noise; None draws fresh entropy.
+
     Returns
     -------
     RunResult
@@ -71,9 +77,9 @@ def run_single_simulation(
     
     # Add noise to the profiles
     noisy_result = add_noise(
-        nominal_profiles['y_values_t'], 
+        nominal_profiles['y_values_t'],
         noise_sigma=noise_sigma,
-        seed=None  # Random seed for each run
+        seed=seed,
     )
     noisy_profiles = noisy_result['y_values_t']
     
@@ -139,7 +145,9 @@ def run_monte_carlo_simulation(
     num_runs: int,
     multiprocessing: bool = True,
     retain_profile_data: bool = False,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    seed: Seed = None,
+    n_jobs: int = -1,
 ) -> MonteCarloOutput:
     """
     Run Monte Carlo simulation with multiple noise values.
@@ -162,16 +170,24 @@ def run_monte_carlo_simulation(
         Whether to retain full profile data.
     progress_callback : callable, optional
         Function to call with progress updates.
-    
+    seed : int or SeedSequence, optional
+        Root seed. Each run gets its own child stream, so a seeded simulation
+        gives identical results serially or in parallel. None draws fresh
+        entropy for every run.
+    n_jobs : int
+        Number of joblib workers when multiprocessing; -1 uses all cores.
+
     Returns
     -------
     MonteCarloOutput
         Aggregated simulation results.
     """
+    run_seeds = spawn_run_seeds(seed, len(noise_values) * num_runs)
+
     # Create parameter sets for all runs
     run_parameters = []
     run_id = 0
-    
+
     for noise_sigma in noise_values:
         for _ in range(num_runs):
             run_parameters.append((
@@ -180,7 +196,8 @@ def run_monte_carlo_simulation(
                 time_axis,
                 parameters,
                 noise_sigma,
-                retain_profile_data
+                retain_profile_data,
+                run_seeds[run_id],
             ))
             run_id += 1
     
@@ -188,29 +205,19 @@ def run_monte_carlo_simulation(
     
     # Run simulations
     if multiprocessing:
-        # Batch parallel execution to enable progress reporting.
-        # Each batch creates a joblib worker pool, trading some startup
-        # overhead for per-batch progress callbacks.
-        num_batches = min(10, total_runs)
-        batch_size = (total_runs + num_batches - 1) // num_batches  # Ceiling division
+        # Run in batches so the progress callback can report between them;
+        # joblib reuses its worker pool from one batch to the next.
         results = []
 
-        for batch_idx in range(num_batches):
-            start = batch_idx * batch_size
-            end = min(start + batch_size, total_runs)
-            batch_params = run_parameters[start:end]
-
-            if not batch_params:
-                break
-
-            batch_results = Parallel(n_jobs=-1)(
-                delayed(run_single_simulation)(*params)
-                for params in batch_params
+        for batch in split_into_batches(total_runs, effective_n_jobs(n_jobs)):
+            batch_results = Parallel(n_jobs=n_jobs)(
+                delayed(run_single_simulation)(*run_parameters[run_index])
+                for run_index in batch
             )
             results.extend(batch_results)
 
             if progress_callback:
-                progress_callback(end, total_runs)
+                progress_callback(batch.stop, total_runs)
     else:
         # Sequential execution with optional progress updates
         results = []
@@ -230,6 +237,41 @@ def run_monte_carlo_simulation(
     )
 
     return simulation_result
+
+
+def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:
+    """One independent child seed per run from a single root; all None when unseeded.
+
+    A SeedSequence argument is copied before spawning, so the caller's object
+    is not advanced and the same seed always yields the same children.
+    """
+    if seed is None:
+        return [None] * run_count
+    if isinstance(seed, np.random.SeedSequence):
+        root = np.random.SeedSequence(seed.entropy, spawn_key=seed.spawn_key, pool_size=seed.pool_size)
+    else:
+        root = np.random.SeedSequence(seed)
+    return root.spawn(run_count)
+
+
+def split_into_batches(run_count: int, worker_count: int) -> List[range]:
+    """Consecutive run-index ranges for progress reporting, each with at least one run per worker.
+
+    At most MAX_PROGRESS_BATCHES batches, with sizes that differ by at most one.
+    A batch smaller than the worker pool would leave workers idle and make
+    them start one batch at a time instead of together.
+    """
+    if run_count <= 0:
+        return []
+    batch_count = max(1, min(MAX_PROGRESS_BATCHES, run_count // max(1, worker_count)))
+    base_size, larger_batches = divmod(run_count, batch_count)
+    batches = []
+    start = 0
+    for batch_index in range(batch_count):
+        stop = start + base_size + (1 if batch_index < larger_batches else 0)
+        batches.append(range(start, stop))
+        start = stop
+    return batches
 
 
 def scan_runner_compatibility(

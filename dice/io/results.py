@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional, Union, TextIO
 import json
 import csv
 
+from ..core.noise import nominal_cnr
 from ..models.results import MonteCarloOutput, RunResult
 from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
@@ -37,7 +38,7 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
     if print_to_console:
         print(message)
     
-    with open(filename, 'a') as f:
+    with open(filename, 'a', encoding='utf-8') as f:
         f.write(message + '\n')
 
 
@@ -89,6 +90,8 @@ def export_collated_results(
             d_sim, length_unit, time_unit, out_l, out_t
         )
 
+    amplitude_0 = results.parameters.profile.amplitude_0
+
     # Create list of dictionaries for DataFrame
     data_rows = []
 
@@ -98,7 +101,7 @@ def export_collated_results(
             'nominal diffusion coeff': run.nominal_diffusion_coefficient,
             'nominal lifetime': run.nominal_lifetime,
             'nominal diffusion length': run.nominal_diffusion_length,
-            'nominal CNR': 1.0 / run.noise_sigma if run.noise_sigma > 0 else np.inf,
+            'nominal CNR': nominal_cnr(amplitude_0, run.noise_sigma),
             'estimated CNR': run.cnr_0_estimate,
             'nominal sigma^2_0': run.nominal_sigma2_0,
             'estimated sigma^2_0': run.estimated_sigma2_0,
@@ -171,7 +174,7 @@ def write_summary_file(
     output_units : OutputUnitPreferences, optional
         Preferred units for output display. When None, uses simulation units.
     """
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
         f.write("=" * 50 + "\n\n")
@@ -194,7 +197,7 @@ def write_summary_file(
         f.write(f"Noise standard deviation values:\n")
         f.write(f"    {results.noise_values}\n")
         f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
-        f.write(f"    {1.0/results.noise_values[0] if results.noise_values[0] > 0 else 'inf':.3f}\n")
+        f.write(f"    {nominal_cnr(results.parameters.profile.amplitude_0, results.noise_values[0]):.3f}\n")
         f.write(f"Initial profile squared width (sigma^2):\n")
         f.write(f"    {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
         f.write(f"Nominal diffusion length:\n")
@@ -387,7 +390,7 @@ def export_legacy_format(
     df = export_collated_results(results, csv_filename, length_unit, time_unit)
     
     # Write legacy summary format
-    with open(summary_filename, 'w') as f:
+    with open(summary_filename, 'w', encoding='utf-8') as f:
         f.write(f"Running {results.num_runs} simulations with the following parameters (rounded):\n")
         f.write("\n")
         
@@ -397,7 +400,7 @@ def export_legacy_format(
         f.write(f"Pixel width: {params.get('pixel width', 'N/A')} pixels\n")
         f.write(f"Number of time frames: {len(params.get('time series', []))} frames\n")
         f.write(f"Noise stdev: {results.noise_values[0]:.3f}\n")
-        f.write(f"Initial contrast-to-noise ratio (CNR): {1.0/results.noise_values[0]:.3f}\n")
+        f.write(f"Initial contrast-to-noise ratio (CNR): {nominal_cnr(results.parameters.profile.amplitude_0, results.noise_values[0]):.3f}\n")
         f.write(f"Initial profile sigma^2: {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
         f.write(f"Nominal diffusion length: {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
         f.write(f"Nominal diffusion coeff: {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2 per {time_unit}\n")

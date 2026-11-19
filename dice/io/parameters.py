@@ -8,22 +8,30 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 """
 
 import ast
+import warnings
 import numpy as np
 from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.units import (
+    global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
+)
 from fft_cnr import fft_cnr
-from ..core.noise import make_noise_distribution
+from ..core.noise import Seed, make_noise_distribution
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
     ParameterKey, LEGACY_OUTPUT_KEYS
 )
 
+# Keys of the proximity-level parameter, retired from the simulation schema;
+# still accepted in parameter files, with a warning.
+RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
 
-def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
+
+def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
     """
     Read simulation parameters from a file.
     
@@ -31,6 +39,9 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
     ----------
     filename : str or Path
         Path to the parameters file.
+    seed : int or SeedSequence, optional
+        Seed for the noise draw of the 'noise range' options; None draws
+        fresh entropy.
     
     Returns
     -------
@@ -53,7 +64,7 @@ def open_parameters(filename: Union[str, Path]) -> Dict[str, Any]:
             # parser converts between representations (e.g., FWHM -> sigma^2).
             from ..utils.units import resolve_units
             parms_dict = resolve_units(parms_dict)
-            result = parameter_parser(parms_dict)
+            result = parameter_parser(parms_dict, seed=seed)
         return result
     except FileNotFoundError:
         raise FileNotFoundError(f"The file {filename} was not found.")
@@ -157,7 +168,9 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
             del parameters_dictionary[unique_time_key]
 
 
-def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int = 1) -> None:
+def handle_noise_parameters(
+    parameters_dictionary: Dict[str, Any], num_vals: int = 1, seed: Seed = None
+) -> None:
     """
     Process noise-related parameters.
 
@@ -169,6 +182,8 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
         Dictionary containing noise parameters.
     num_vals : int
         Number of noise values to generate.
+    seed : int or SeedSequence, optional
+        Seed for the 'noise range' draws; None draws fresh entropy.
 
     Updates the dictionary with 'noise series' key.
     """
@@ -197,21 +212,30 @@ def handle_noise_parameters(parameters_dictionary: Dict[str, Any], num_vals: int
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
                 raise ValueError("Error reading CSV for noise estimation.") from e
-            sigma_n = fft_cnr(t0_profile_y).noise_rms
+            # The measured profile is in its own intensity units, so its noise_rms
+            # cannot be reused directly. The simulated profile has peak amplitude
+            # amplitude_0; its noise must reproduce the measured initial CNR.
+            cnr_estimate = fft_cnr(t0_profile_y).cnr
+            if not 0 < cnr_estimate < np.inf:
+                raise ValueError(
+                    f"Could not estimate a finite, positive CNR from {noise_filename!r} "
+                    f"(estimate: {cnr_estimate})."
+                )
+            sigma_n = parameters_dictionary['amplitude_0'] / cnr_estimate
             parameters_dictionary['noise series'] = [sigma_n]
 
         elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):
             noise_range = parameters_dictionary[unique_noise_key]
             validate_noise_range(noise_range)
             parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=True
+                noise_range[0], noise_range[1], num_vals, logarithmic=True, seed=seed
             )
 
         elif unique_noise_key in ('noise range, reciprocal', 'noise_range_reciprocal'):
             noise_range = parameters_dictionary[unique_noise_key]
             validate_noise_range(noise_range)
             parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=False
+                noise_range[0], noise_range[1], num_vals, logarithmic=False, seed=seed
             )
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
@@ -310,7 +334,21 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
                        "'nominal diffusion coefficient' and 'nominal lifetime (tau)'.")
 
 
-def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
+def check_retired_parameters(parameters_dictionary: Dict[str, Any]) -> List[str]:
+    """Messages for keys a parameter file may still contain that no longer affect the simulation."""
+    return [
+        f"Parameter '{key}' no longer affects the simulation and is ignored. "
+        "Proximity analysis is now post-hoc: the summary reports the fraction of "
+        "estimates within 5%, 10%, 20%, and 50% of nominal, and other thresholds are "
+        "available from dice.analysis.statistics.analyze_simulation_results"
+        "(result, proximity_levels=[...]) or from the GUI's Analysis Settings tab "
+        "('Explore Accuracy Threshold')."
+        for key in RETIRED_PROXIMITY_KEYS
+        if key in parameters_dictionary
+    ]
+
+
+def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -> Dict[str, Any]:
     """
     Parse and validate simulation parameters.
 
@@ -321,6 +359,8 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     ----------
     parameters_dictionary : dict
         Raw parameters dictionary (can use either legacy or canonical keys).
+    seed : int or SeedSequence, optional
+        Seed for the 'noise range' draws; None draws fresh entropy.
 
     Returns
     -------
@@ -337,6 +377,9 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     # Make a working copy - don't normalize yet to preserve original key format
     # The check_for_unique_key function handles both formats
     parameters_dictionary = dict(parameters_dictionary)
+
+    for message in check_retired_parameters(parameters_dictionary):
+        warnings.warn(message, stacklevel=2)
 
     # Check required keys (support both formats)
     required_keys_legacy = ['number of runs', 'spatial width', 'pixel width', 'mean_0', 'amplitude_0']
@@ -355,7 +398,7 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     handle_time_parameters(parameters_dictionary)
     
     # Process noise parameters
-    handle_noise_parameters(parameters_dictionary, num_vals=1)
+    handle_noise_parameters(parameters_dictionary, num_vals=1, seed=seed)
     
     # Process profile width
     parameters_dictionary['sigma^2_0'] = handle_profile_width_parameters(parameters_dictionary)
@@ -369,8 +412,6 @@ def parameter_parser(parameters_dictionary: Dict[str, Any]) -> Dict[str, Any]:
     
     if 'filename slug' not in parameters_dictionary:
         parameters_dictionary['filename slug'] = 'dice_simulation'
-    
-    # Don't set default proximity level - let CLI handle standard vs custom levels
     
     if 'retain profile data' not in parameters_dictionary:
         parameters_dictionary['retain profile data'] = 0
@@ -437,7 +478,12 @@ def validate_parameters(params) -> None:
         
         if params.get('pixel width', 0) <= 0:
             raise ValueError("Pixel width must be positive.")
-        
+
+        # Outputs convert from the global units, so reject an unknown unit
+        # before the simulation runs rather than when the results are written.
+        validate_length_unit(global_length_unit(params))
+        validate_time_unit(global_time_unit(params))
+
         return
     
     # Original validation for SimulationParameters object

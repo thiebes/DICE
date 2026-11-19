@@ -314,6 +314,102 @@ class TestRunMonteCarloSimulation:
         assert progress_calls[-1] == (3, 3)
 
 
+class TestSeededSimulation:
+    """A seed reproduces a simulation exactly; without one every run draws fresh entropy."""
+
+    def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3, **parallel_options):
+        return run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(),
+            x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]),
+            noise_values=list(noise_values),
+            num_runs=num_runs,
+            multiprocessing=parallel_options.pop('multiprocessing', False),
+            seed=seed,
+            **parallel_options,
+        )
+
+    @staticmethod
+    def _estimates(result) -> np.ndarray:
+        return np.array([
+            (r.cnr_0_estimate, r.estimated_sigma2_0, r.ols_slope, r.wls_slope)
+            for r in result.run_results
+        ])
+
+    def test_same_seed_identical(self):
+        np.testing.assert_array_equal(
+            self._estimates(self._simulate(11)), self._estimates(self._simulate(11)))
+
+    def test_different_seeds_differ(self):
+        assert not np.array_equal(
+            self._estimates(self._simulate(11)), self._estimates(self._simulate(12)))
+
+    def test_unseeded_simulations_differ(self):
+        assert not np.array_equal(
+            self._estimates(self._simulate(None)), self._estimates(self._simulate(None)))
+
+    def test_runs_draw_distinct_noise(self):
+        estimates = self._estimates(self._simulate(11, noise_values=(0.02,), num_runs=4))
+        assert len(np.unique(estimates[:, 0])) == 4
+
+    def test_seed_sequence_reused_without_advancing(self):
+        from numpy.random import SeedSequence
+        root = SeedSequence(11)
+        first, second = self._simulate(root), self._simulate(root)
+        np.testing.assert_array_equal(self._estimates(first), self._estimates(second))
+        np.testing.assert_array_equal(self._estimates(first), self._estimates(self._simulate(11)))
+
+    def test_same_seed_identical_for_any_worker_count(self):
+        # Starts joblib worker pools of two sizes, which costs tens of seconds.
+        from joblib import effective_n_jobs
+        run_counts = (3, effective_n_jobs(-1) + 3)  # below and above the full pool size
+        run_count_to_serial = {
+            num_runs: self._estimates(self._simulate(21, noise_values=(0.02,), num_runs=num_runs))
+            for num_runs in run_counts
+        }
+        for n_jobs in (1, 2, -1):
+            for num_runs, serial in run_count_to_serial.items():
+                progress_calls = []
+                parallel = self._simulate(
+                    21, noise_values=(0.02,), num_runs=num_runs, multiprocessing=True,
+                    n_jobs=n_jobs, progress_callback=lambda done, total: progress_calls.append((done, total)),
+                )
+                np.testing.assert_array_equal(self._estimates(parallel), serial)
+                assert [r.run_id for r in parallel.run_results] == list(range(num_runs))
+                assert progress_calls[-1] == (num_runs, num_runs)
+
+    def test_run_seeds_are_children_of_one_root(self):
+        from dice.analysis.simulation import spawn_run_seeds
+        assert spawn_run_seeds(None, 3) == [None, None, None]
+        children = spawn_run_seeds(11, 3)
+        assert [child.spawn_key for child in children] == [(0,), (1,), (2,)]
+        assert {child.entropy for child in children} == {11}
+
+
+class TestSplitIntoBatches:
+    """Parallel batches cover every run once and keep every worker busy."""
+
+    @pytest.mark.parametrize('worker_count', [1, 2, 8])
+    @pytest.mark.parametrize('run_count', [1, 7, 8, 9, 70, 71, 100])
+    def test_batches_cover_each_run_once(self, run_count, worker_count):
+        from dice.analysis.simulation import MAX_PROGRESS_BATCHES, split_into_batches
+        batches = split_into_batches(run_count, worker_count)
+        assert [i for batch in batches for i in batch] == list(range(run_count))
+        assert 1 <= len(batches) <= MAX_PROGRESS_BATCHES
+        sizes = [len(batch) for batch in batches]
+        assert max(sizes) - min(sizes) <= 1
+        assert min(sizes) >= min(run_count, worker_count)
+
+    def test_fewer_runs_than_workers_is_one_batch(self):
+        from dice.analysis.simulation import split_into_batches
+        assert split_into_batches(8, 8) == [range(0, 8)]
+        assert split_into_batches(3, 8) == [range(0, 3)]
+
+    def test_no_runs_no_batches(self):
+        from dice.analysis.simulation import split_into_batches
+        assert split_into_batches(0, 8) == []
+
+
 class TestScanRunnerCompatibility:
     """Test backward compatibility wrapper."""
     

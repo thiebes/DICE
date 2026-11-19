@@ -445,5 +445,99 @@ class TestMixedUnitParameters:
         assert 'sigma2_0' in result
 
 
+EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
+EXAMPLE_PROFILE = EXAMPLES_DIR / 'example_profile.csv'
+
+
+class TestEstimateNoiseFromData:
+    """'estimate noise from data' must set the noise so the simulated initial CNR
+    equals the CNR fft-cnr estimates from the measured profile."""
+
+    def _write_parameters(self, directory: Path, noise_file: Path, amplitude_0: float) -> Path:
+        import ast
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params['estimate noise from data'] = str(noise_file)
+        params['amplitude_0'] = amplitude_0
+        params_file = directory / 'estimate_noise.txt'
+        params_file.write_text(str(params))
+        return params_file
+
+    def _write_profile(self, directory: Path, profile: np.ndarray) -> Path:
+        profile_file = directory / 'profile.csv'
+        np.savetxt(profile_file, profile.reshape(1, -1), delimiter=',', fmt='%.17g')
+        return profile_file
+
+    @pytest.mark.parametrize('amplitude_0', [1.0, 2.5])
+    def test_simulated_cnr_equals_file_cnr(self, tmp_path, amplitude_0):
+        from fft_cnr import fft_cnr
+        file_estimate = fft_cnr(np.loadtxt(EXAMPLE_PROFILE, delimiter=','))
+
+        params = open_parameters(self._write_parameters(tmp_path, EXAMPLE_PROFILE, amplitude_0))
+
+        assert len(params['noise series']) == 1
+        noise_sigma = params['noise series'][0]
+        assert amplitude_0 / noise_sigma == pytest.approx(file_estimate.cnr, rel=1e-12)
+        # The file's noise_rms is in its own intensity units and must not leak through.
+        assert noise_sigma != pytest.approx(file_estimate.noise_rms)
+
+    def test_constant_profile_rejected(self, tmp_path):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        constant_file = self._write_profile(tmp_path, np.full_like(measured, measured[0]))
+        params_file = self._write_parameters(tmp_path, constant_file, 1.0)
+        with pytest.raises(ValueError, match="finite, positive CNR"):
+            open_parameters(params_file)
+
+    def test_short_profile_rejected(self, tmp_path):
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        short_file = self._write_profile(tmp_path, measured[:10])
+        params_file = self._write_parameters(tmp_path, short_file, 1.0)
+        with pytest.raises(ValueError, match="too short"):
+            open_parameters(params_file)
+
+    def test_non_numeric_profile_rejected(self, tmp_path):
+        text = EXAMPLE_PROFILE.read_text().replace('1530', 'peak', 1)
+        bad_file = tmp_path / 'non_numeric.csv'
+        bad_file.write_text(text)
+        params_file = self._write_parameters(tmp_path, bad_file, 1.0)
+        with pytest.raises(ValueError, match="Error reading CSV"):
+            open_parameters(params_file)
+
+    def test_missing_amplitude_rejected(self):
+        params = {'estimate noise from data': str(EXAMPLE_PROFILE)}
+        with pytest.raises(ValueError, match="amplitude_0"):
+            handle_noise_parameters(params)
+
+
+class TestRetiredProximityLevel:
+    """'proximity level' no longer affects a run; a file that sets it gets one warning."""
+
+    def _quick_test_params(self) -> dict:
+        import ast
+        return ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+
+    @pytest.mark.parametrize('key', ['proximity level', 'proximity_level'])
+    def test_warns_once_naming_key_and_replacement(self, key):
+        params = self._quick_test_params() | {key: 0.1}
+        with pytest.warns(UserWarning) as caught:
+            parameter_parser(params)
+        messages = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert len(messages) == 1
+        assert f"'{key}' no longer affects the simulation" in messages[0]
+        assert "analyze_simulation_results" in messages[0]
+        assert "Explore Accuracy Threshold" in messages[0]
+
+    def test_no_warning_without_key(self):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            parameter_parser(self._quick_test_params())
+
+    def test_check_returns_messages_only_for_retired_keys(self):
+        from dice.io.parameters import check_retired_parameters
+        assert check_retired_parameters(self._quick_test_params()) == []
+        assert len(check_retired_parameters({'proximity level': 0.1})) == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

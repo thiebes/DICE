@@ -234,7 +234,7 @@ def plot_diffusion_msd(
     xlabel: str = "Time",
     ylabel: str = "σ² - σ²₀",
     time_unit: str = "ns",
-    length_unit: str = "µm",
+    length_unit: str = "μm",
     filename: Optional[str] = None,
     **plot_kwargs
 ) -> plt.Figure:

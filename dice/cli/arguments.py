@@ -39,7 +39,7 @@ Examples:
   dice parameters.txt --dry-run          # Validate parameters without running
   dice --version                         # Show version information
   
-For more information, visit: https://github.com/your-repo/DICE
+For more information, visit: https://github.com/thiebes/DICE
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -67,7 +67,7 @@ For more information, visit: https://github.com/your-repo/DICE
     parser.add_argument(
         '--dry-run', '--check',
         action='store_true',
-        help='Validate parameters and show simulation plan without running'
+        help='Load and validate the parameters file, then exit without running or writing files'
     )
     
     parser.add_argument(
@@ -86,7 +86,8 @@ For more information, visit: https://github.com/your-repo/DICE
         '--multiprocessing',
         type=int,
         metavar='N',
-        help='Number of parallel processes to use (0 for single-threaded, -1 for all cores)'
+        help='Number of parallel worker processes (0 runs serially, -1 uses all cores; '
+             'default: the parameters file setting, with all cores)'
     )
     
     parser.add_argument(
@@ -297,18 +298,21 @@ def get_help_text() -> str:
 
 def handle_special_arguments(args: argparse.Namespace) -> bool:
     """
-    Handle special arguments that don't require full simulation run.
-    
+    Handle special arguments that end the run before the simulation.
+
+    The CLI calls this after the parameters file has been loaded and
+    validated, so a dry run checks the file exactly as a real run would.
+
     Parameters
     ----------
     args : argparse.Namespace
         Parsed arguments.
-    
+
     Returns
     -------
     bool
         True if a special argument was handled (should exit), False otherwise.
-    
+
     Examples
     --------
     >>> args = Namespace(dry_run=True, parameters_file='test.txt')
@@ -317,11 +321,9 @@ def handle_special_arguments(args: argparse.Namespace) -> bool:
     True
     """
     if args.dry_run:
-        print("Dry run mode: validating parameters only...")
-        # Parameter validation would happen here
-        print("✓ Parameters file is valid")
-        print("✓ Configuration looks good")
-        print("Simulation would run with these parameters.")
+        if not getattr(args, 'quiet', False):
+            print(f"Dry run: {args.parameters_file} loaded and validated. "
+                  "No simulation was run and no files were written.")
         return True
-    
+
     return False

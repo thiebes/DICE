@@ -247,3 +247,15 @@ class TestEstimateNoiseFromProfile:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestNominalCnr:
+    """Nominal CNR is amplitude over noise sigma, infinite without noise."""
+
+    def test_amplitude_over_noise(self):
+        from dice.core.noise import nominal_cnr
+        assert nominal_cnr(2.0, 0.04) == pytest.approx(50.0)
+        assert nominal_cnr(1.0, 0.02) == pytest.approx(50.0)
+
+    def test_zero_noise_is_infinite(self):
+        from dice.core.noise import nominal_cnr
+        assert nominal_cnr(1.0, 0.0) == float('inf')
