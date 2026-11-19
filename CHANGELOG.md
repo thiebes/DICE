@@ -39,7 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), and `high_precision.txt` (10000 runs).
 - Standalone GUI executables for Windows, macOS, and Linux, built with
-  PyInstaller when a GitHub release is published.
+  PyInstaller when a GitHub release is published. The standalone executables
+  run simulations on one CPU core; parallel processing requires an
+  installation with Python.
 - `CHANGELOG.md`, contributor guidelines, a code of conduct, issue templates,
   and user guides in `docs/` (installation, parameters, command-line
   interface, glossary).

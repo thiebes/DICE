@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from dice.utils.runtime import parallel_processing_supported
 from dice_gui.tabs.base import create_error_label
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
@@ -74,8 +75,17 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
 
     # Multiprocessing checkbox
     main_window.multiprocessing_check = QCheckBox("Enable parallel processing")
-    main_window.multiprocessing_check.setChecked(True)
-    main_window.multiprocessing_check.setToolTip("Use multiple CPU cores to speed up simulation")
+    if parallel_processing_supported():
+        main_window.multiprocessing_check.setChecked(True)
+        main_window.multiprocessing_check.setToolTip("Use multiple CPU cores to speed up simulation")
+    else:
+        main_window.multiprocessing_check.setChecked(False)
+        main_window.multiprocessing_check.setEnabled(False)
+        main_window.multiprocessing_check.setToolTip(
+            "Parallel processing is not available in the standalone application, "
+            "so simulations run on one CPU core.\n\n"
+            "To use multiple cores, install DICE with Python and start it with 'dice-gui' or 'dice'."
+        )
     multiprocessing_label = QLabel("&Multiprocessing:")
     add_keyboard_shortcut_to_label(multiprocessing_label, main_window.multiprocessing_check)
     performance_layout.addRow(multiprocessing_label, main_window.multiprocessing_check)

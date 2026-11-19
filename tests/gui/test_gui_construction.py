@@ -122,6 +122,39 @@ class TestDefaultValues:
         assert window.image_numbins_spin.value() == 35
 
 
+class TestStandaloneBuild:
+    """In a standalone (frozen) build the parallel-processing option is off and locked."""
+
+    @pytest.fixture
+    def frozen_window(self, qtbot, monkeypatch):
+        import sys
+        from dice_gui.dice_gui import DiceGUI
+
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        gui = DiceGUI()
+        qtbot.addWidget(gui)
+        return gui
+
+    def test_checkbox_is_off_disabled_and_explained(self, frozen_window):
+        checkbox = frozen_window.multiprocessing_check
+        assert not checkbox.isChecked()
+        assert not checkbox.isEnabled()
+        assert "not available in the standalone application" in checkbox.toolTip()
+
+    def test_loaded_file_cannot_turn_parallel_processing_on(self, frozen_window):
+        from pathlib import Path
+
+        example = Path(__file__).parent.parent.parent / "data" / "examples" / "parameters.txt"
+        frozen_window.load_parameters_from_file(str(example))
+
+        assert not frozen_window.multiprocessing_check.isChecked()
+        assert frozen_window.collect_parameters()["multiprocessing"] is False
+
+    def test_regular_install_keeps_the_option(self, window):
+        assert window.multiprocessing_check.isEnabled()
+        assert window.multiprocessing_check.isChecked()
+
+
 class TestAuxiliaryDialogs:
 
     def test_global_units_dialog_preselects_and_reports_units(self, qtbot):

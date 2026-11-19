@@ -386,6 +386,52 @@ class TestSeededSimulation:
         assert {child.entropy for child in children} == {11}
 
 
+class TestStandaloneBuildRunsSerially:
+    """A standalone (frozen) build cannot start joblib workers, so it runs serially."""
+
+    def _simulate(self, **options):
+        return run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(),
+            x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]),
+            noise_values=[0.02],
+            num_runs=4,
+            seed=11,
+            **options,
+        )
+
+    @staticmethod
+    def _slopes(result) -> np.ndarray:
+        return np.array([(r.ols_slope, r.wls_slope) for r in result.run_results])
+
+    def test_support_follows_sys_frozen(self, monkeypatch):
+        import sys
+        from dice.utils.runtime import parallel_processing_supported
+
+        monkeypatch.delattr(sys, 'frozen', raising=False)
+        assert parallel_processing_supported() is True
+        monkeypatch.setattr(sys, 'frozen', True, raising=False)
+        assert parallel_processing_supported() is False
+
+    def test_frozen_build_does_not_start_workers(self, monkeypatch):
+        import sys
+        import dice.analysis.simulation as simulation
+
+        def no_workers(*args, **kwargs):
+            raise AssertionError("joblib.Parallel must not be used in a standalone build")
+
+        expected = self._slopes(self._simulate(multiprocessing=False))
+        monkeypatch.setattr(sys, 'frozen', True, raising=False)
+        monkeypatch.setattr(simulation, 'Parallel', no_workers)
+        progress = []
+
+        result = self._simulate(
+            multiprocessing=True, progress_callback=lambda done, total: progress.append((done, total)))
+
+        np.testing.assert_array_equal(self._slopes(result), expected)
+        assert progress[-1] == (4, 4)
+
+
 class TestSplitIntoBatches:
     """Parallel batches cover every run once and keep every worker busy."""
 

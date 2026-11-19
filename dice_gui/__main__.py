@@ -73,9 +73,12 @@ def main():
         """Pre-import simulation dependencies in worker processes."""
         from dice.analysis.simulation import run_single_simulation  # noqa: F401
 
-    Parallel(n_jobs=-1)(
-        delayed(_warmup_worker)() for _ in range(os.cpu_count() or 1)
-    )
+    from dice.utils.runtime import parallel_processing_supported
+
+    if parallel_processing_supported():
+        Parallel(n_jobs=-1)(
+            delayed(_warmup_worker)() for _ in range(os.cpu_count() or 1)
+        )
 
     splash.set_progress(80, next(msg_iter))
     from dice_gui.dice_gui import DiceGUI

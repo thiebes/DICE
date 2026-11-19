@@ -16,6 +16,7 @@ from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
+from ..utils.runtime import parallel_processing_supported
 from ..utils.legacy_compatibility import (
     LegacySimulationParameters,
     create_parameters_from_legacy,
@@ -202,7 +203,11 @@ def run_monte_carlo_simulation(
             run_id += 1
     
     total_runs = len(run_parameters)
-    
+
+    # A standalone build cannot start worker processes, so it runs serially.
+    # The per-run seeds make the results the same either way.
+    multiprocessing = multiprocessing and parallel_processing_supported()
+
     # Run simulations
     if multiprocessing:
         # Run in batches so the progress callback can report between them;
