@@ -49,12 +49,14 @@ python scripts/bump_version.py 1.3.0 --no-confirm
 
 1. Run the script with the new version.
 2. Run `uv lock`, so that `uv.lock` records the new version of the `dice` package.
-3. In `CHANGELOG.md`, set the release date of the new version.
-4. Review the changes with `git diff`.
-5. Run the tests: `uv run pytest`.
-6. Commit the changes: `git add -A && git commit -m "Bump version to X.Y.Z"`.
-7. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`.
-8. Push the commit and the tag: `git push && git push --tags`.
+3. Regenerate `.github/build-constraints.txt` and `.github/pyinstaller-requirements.txt` with the commands in their headers.
+4. In `CHANGELOG.md`, set the release date of the new version.
+5. Review the changes with `git diff`.
+6. Run the tests: `uv run pytest`.
+7. Commit the changes: `git add -A && git commit -m "Bump version to X.Y.Z"`.
+8. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`.
+9. Push the commit and the tag: `git push && git push --tags`.
+10. On GitHub, publish a release for the tag. Publishing it, not pushing the tag, starts `.github/workflows/build-release.yml`, which builds the standalone executables and attaches them and `SHA256SUMS.txt` to the release.
 
 #### Version format
 

@@ -16,6 +16,10 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 5,
         'pixel width': 50,
         'time range': [0, 1, 5],
+        'multiprocessing': True,
+        'retain profile data': False,
+        'length unit': 'micrometer',
+        'time unit': 'nanosecond',
     },
     "high_precision": {
         'filename slug': 'high_precision',
@@ -28,6 +32,10 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 10,
         'pixel width': 200,
         'time range': [0, 2, 20],
+        'multiprocessing': True,
+        'retain profile data': False,
+        'length unit': 'micrometer',
+        'time unit': 'nanosecond',
     },
     "publication": {
         'filename slug': 'publication_example',
@@ -40,5 +48,9 @@ EXAMPLE_PARAMETERS = {
         'spatial width': 5,
         'pixel width': 100,
         'time range': [0, 1, 10],
+        'multiprocessing': True,
+        'retain profile data': False,
+        'length unit': 'micrometer',
+        'time unit': 'nanosecond',
     }
 }

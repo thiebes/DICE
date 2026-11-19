@@ -13,11 +13,13 @@ from PyQt6.QtWidgets import QMessageBox
 
 from dice.io.parameters import open_parameters, parameter_parser
 from dice.utils.units import resolve_units
+from dice_gui import dice_gui as dice_gui_window
 from dice_gui.dice_interface import DiceInterface
+from dice_gui.example_parameters import EXAMPLE_PARAMETERS
 from dice_gui.tabs.base import set_combo_value
 from gui_support import (
     EXAMPLE_PARAMETER_FILES, EXAMPLE_PROFILE_CSV, EXAMPLES_DIR,
-    enter_text, read_example, trigger_menu_action,
+    choose_global_units, enter_text, read_example, trigger_menu_action,
 )
 
 pytestmark = pytest.mark.gui
@@ -211,6 +213,24 @@ class TestLoadExampleMenu:
         assert window.filename_slug_input.text() == expected["filename slug"]
         assert window.num_runs_spin.value() == expected["number of runs"]
         assert window.pixel_width_input.value() == expected["pixel width"]
+
+    # A wheel install or a standalone build has no data/examples directory
+    # beside dice_gui, so the Examples menu loads the embedded copies.
+    @pytest.mark.parametrize("example_name", ["quick_test", "high_precision", "publication"])
+    def test_embedded_copy_matches_the_bundled_file(self, example_name):
+        assert EXAMPLE_PARAMETERS[example_name] == read_example(f"{example_name}.txt")
+
+    def test_example_without_the_bundled_files_sets_its_own_units(self, window, dialogs, monkeypatch, tmp_path):
+        monkeypatch.setattr(dice_gui_window, "__file__", str(tmp_path / "dice_gui" / "dice_gui.py"))
+        choose_global_units(window, monkeypatch, "nanometer", "picosecond")
+
+        window.example_menu.actions()[0].trigger()
+
+        expected = read_example("quick_test.txt")
+        assert (window.length_unit_combo.currentText(), window.time_unit_combo.currentText()) == (
+            expected["length unit"], expected["time unit"],
+        )
+        assert float(window.width_input.text()) == expected["FWHM_0"]
 
     def test_loaded_example_is_not_the_save_target(self, qtbot, window, dialogs):
         bundled = EXAMPLES_DIR / "quick_test.txt"

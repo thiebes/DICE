@@ -4,7 +4,7 @@ DICE runs on Windows, macOS, and Linux and requires Python 3.11 or later. The re
 
 ## Python
 
-DICE requires Python 3.11 or later. The test suite runs on Python 3.11 and 3.12, on Windows and Linux.
+DICE requires Python 3.11 or later. The test suite runs on Python 3.11 and 3.12, on Windows, macOS, and Linux.
 
 uv can download a suitable Python version for you. If you install with pip, install Python first, for example from [python.org](https://www.python.org/downloads/) or with conda.
 
