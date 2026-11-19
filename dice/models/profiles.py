@@ -272,7 +272,10 @@ class TimeSeriesProfile:
         for i, t in enumerate(self.time_axis):
             # Extract parameters if available
             amp = self.parameters.get('amplitude_t', [None] * len(self.time_axis))[i]
-            sig2 = self.parameters.get('sigma2_t', [None] * len(self.time_axis))[i]
+            # make_diffusion_decay names the variance 'sigma^2_t'.
+            sig2 = self.parameters.get(
+                'sigma2_t', self.parameters.get('sigma^2_t', [None] * len(self.time_axis))
+            )[i]
             mu = self.parameters.get('mu_t', [0.0] * len(self.time_axis))[i]
             
             profile = GaussianProfile(
