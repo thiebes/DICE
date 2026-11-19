@@ -5,7 +5,6 @@ The fixtures parse data/examples/quick_test.txt and run a short serial
 simulation, so the writers receive the same objects the CLI passes them.
 """
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -16,8 +15,6 @@ from dice.analysis.statistics import analyze_simulation_results
 from dice.io.parameters import open_parameters
 from dice.io.results import (
     export_collated_results,
-    export_legacy_format,
-    export_to_json,
     load_multiple_results,
     load_results_csv,
     print_and_append,
@@ -72,21 +69,6 @@ class TestTextOutputEncoding:
         text = summary_file.read_bytes().decode('utf-8')
         assert f"Fraction within {PLUS_MINUS}5% of nominal:" in text
 
-    def test_legacy_summary_file_is_utf8(self, tmp_path, quick_test_simulation,
-                                         quick_test_parameters):
-        summary_file = tmp_path / 'legacy_summary.txt'
-        legacy_analysis = {'% fits within proximity': {
-            '10%': {'unweighted fit': 50.0, 'weighted fit': 60.0},
-        }}
-        export_legacy_format(
-            quick_test_simulation,
-            {'parameters': quick_test_parameters, 'analysis': legacy_analysis},
-            tmp_path / 'legacy.csv',
-            summary_file,
-        )
-        text = summary_file.read_bytes().decode('utf-8')
-        assert f"D_estimate / D_nominal = 1 {PLUS_MINUS} 10%:" in text
-
     def test_print_and_append_is_utf8(self, tmp_path):
         log_file = tmp_path / 'log.txt'
         message = f"precision within {PLUS_MINUS}10% at 5 μm"
@@ -96,7 +78,7 @@ class TestTextOutputEncoding:
 
 
 class TestZeroNoise:
-    """A noise-free run has an infinite initial CNR, which the summaries report as 'inf'."""
+    """A noise-free run has an infinite initial CNR, which the summary reports as 'inf'."""
 
     def test_summary_reports_infinite_cnr(self, tmp_path, quick_test_simulation,
                                           quick_test_parameters, quick_test_analysis):
@@ -107,15 +89,6 @@ class TestZeroNoise:
         text = summary_file.read_text(encoding='utf-8')
         assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in text
         assert text.endswith("Simulation completed successfully.\n")
-
-    def test_legacy_summary_reports_infinite_cnr(self, tmp_path, quick_test_simulation,
-                                                 quick_test_parameters):
-        import dataclasses
-        noise_free = dataclasses.replace(quick_test_simulation, noise_values=[0.0])
-        summary_file = tmp_path / 'legacy_summary.txt'
-        export_legacy_format(noise_free, {'parameters': quick_test_parameters},
-                             tmp_path / 'legacy.csv', summary_file)
-        assert "Initial contrast-to-noise ratio (CNR): inf\n" in summary_file.read_text(encoding='utf-8')
 
 
 def simulate_quick_test(params: dict, time_axis, num_runs: int, **options) -> MonteCarloOutput:
@@ -207,64 +180,3 @@ class TestLoadMultipleResults:
         (tmp_path / 'empty.csv').write_text('')
         with pytest.raises(ValueError, match="No valid CSV files"):
             load_multiple_results(tmp_path)
-
-
-class TestExportToJson:
-    """JSON export schema, with and without retained profiles."""
-
-    RUN_KEYS = {'run_id', 'noise_sigma', 'cnr_0_estimate', 'estimated_sigma2_0',
-                'ols_slope', 'ols_slope_stderr', 'wls_slope', 'wls_slope_stderr'}
-
-    def test_schema(self, tmp_path, quick_test_simulation):
-        json_file = tmp_path / 'results.json'
-        export_to_json(quick_test_simulation, json_file)
-        exported = json.loads(json_file.read_text())
-        assert set(exported) == {'parameters', 'runs'}
-        assert set(exported['parameters']) == {
-            'num_runs', 'noise_values', 'diffusion_coefficient', 'lifetime',
-            'diffusion_length', 'sigma2_0', 'amplitude_0', 'mu_0'}
-        assert exported['parameters']['num_runs'] == FIXTURE_RUNS
-        assert [set(run) for run in exported['runs']] == [self.RUN_KEYS] * FIXTURE_RUNS
-
-    def test_retained_profiles_exported(self, tmp_path, quick_test_parameters):
-        time_axis = quick_test_parameters['time series']
-        retained = simulate_quick_test(quick_test_parameters, time_axis, num_runs=2,
-                                       retain_profile_data=True)
-        json_file = tmp_path / 'profiles.json'
-        export_to_json(retained, json_file, include_profile_data=True)
-        runs = json.loads(json_file.read_text())['runs']
-        expected_shape = (len(time_axis), len(quick_test_parameters['x array']))
-        for run, result in zip(runs, retained.run_results):
-            assert set(run) == self.RUN_KEYS | {'nominal_profiles', 'noisy_profiles'}
-            assert np.shape(run['noisy_profiles']) == expected_shape
-            np.testing.assert_allclose(run['noisy_profiles'], result.noisy_profiles)
-
-
-class TestLegacyExport:
-    """export_legacy_format writes the modern CSV and the legacy summary layout."""
-
-    def test_csv_and_summary(self, tmp_path, quick_test_simulation, quick_test_parameters):
-        csv_file, summary_file = tmp_path / 'legacy.csv', tmp_path / 'legacy_summary.txt'
-        export_legacy_format(quick_test_simulation, {'parameters': quick_test_parameters},
-                             csv_file, summary_file)
-        modern = export_collated_results(quick_test_simulation, tmp_path / 'modern.csv')
-        assert list(load_results_csv(csv_file).columns) == list(modern.columns)
-        text = summary_file.read_text(encoding='utf-8')
-        assert text.startswith(f"Running {FIXTURE_RUNS} simulations with the following parameters (rounded):\n")
-        assert "Initial contrast-to-noise ratio (CNR): 50.000\n" in text
-        assert text.endswith("Done!\n")
-
-    @pytest.mark.xfail(strict=True, reason=(
-        "Known defect since the proximity refactor: estimates_precision returns "
-        "{'% fits within proximity': {'weighted fit': pct, 'unweighted fit': pct}}, but "
-        "export_legacy_format now expects one nested dictionary per level and skips the flat one."))
-    def test_proximity_lines_from_estimates_precision(self, tmp_path, quick_test_simulation,
-                                                      quick_test_parameters):
-        from dice.analysis.statistics import estimates_precision
-        frame = export_collated_results(quick_test_simulation, tmp_path / 'results.csv')
-        analysis = estimates_precision(frame, 0.1)
-        summary_file = tmp_path / 'legacy_summary.txt'
-        export_legacy_format(quick_test_simulation,
-                             {'parameters': quick_test_parameters, 'analysis': analysis},
-                             tmp_path / 'legacy.csv', summary_file)
-        assert "-- Weighted fit:" in summary_file.read_text(encoding='utf-8')

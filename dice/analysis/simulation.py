@@ -6,7 +6,7 @@ simulations of diffusion measurements with noise.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any
 from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
@@ -18,11 +18,7 @@ from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import parallel_processing_supported
-from ..utils.legacy_compatibility import (
-    LegacySimulationParameters,
-    create_parameters_from_legacy,
-    convert_legacy_result_to_dict,
-)
+from ..utils.legacy_compatibility import LegacySimulationParameters
 
 # Most batches a parallel simulation is split into; the progress callback reports after each.
 MAX_PROGRESS_BATCHES = 10
@@ -269,65 +265,3 @@ def split_into_batches(run_count: int, worker_count: int) -> List[range]:
         batches.append(range(start, stop))
         start = stop
     return batches
-
-
-def scan_runner_compatibility(
-    indices: Dict,
-    parameters: Dict,
-    ld: float,
-    this_diff: float,
-    this_tau: float,
-    this_noise: float,
-    this_run: int,
-    retain_profile_data: bool
-) -> Dict:
-    """
-    Compatibility wrapper for legacy scan_runner function.
-    
-    This function maintains backward compatibility with the original
-    monolithic dice.py implementation.
-    
-    Parameters
-    ----------
-    indices : dict
-        Dictionary containing 'x axis' and 'time axis'.
-    parameters : dict
-        Dictionary with simulation parameters.
-    ld : float
-        Nominal diffusion length.
-    this_diff : float
-        Nominal diffusion coefficient.
-    this_tau : float
-        Nominal lifetime.
-    this_noise : float
-        Noise standard deviation.
-    this_run : int
-        Run identifier.
-    retain_profile_data : bool
-        Whether to retain profile data.
-    
-    Returns
-    -------
-    dict
-        Legacy-formatted result dictionary.
-    """
-    # Create parameters using legacy compatibility layer
-    sim_params = create_parameters_from_legacy(
-        parameters_dict=parameters,
-        diffusion_coefficient=this_diff,
-        lifetime=this_tau,
-        diffusion_length=ld
-    )
-    
-    # Run simulation
-    result = run_single_simulation(
-        run_id=this_run,
-        x_axis=indices['x axis'],
-        time_axis=indices['time axis'],
-        parameters=sim_params,
-        noise_sigma=this_noise,
-        retain_profile_data=retain_profile_data
-    )
-    
-    # Convert to legacy format using compatibility layer
-    return convert_legacy_result_to_dict(result, this_run, retain_profile_data)

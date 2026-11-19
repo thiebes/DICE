@@ -10,7 +10,6 @@ from dice.utils.legacy_compatibility import (
     LegacyPhysicsParameters,
     LegacySimulationParameters,
     create_parameters_from_legacy,
-    convert_legacy_result_to_dict,
     MockSimulationParameters,
 )
 
@@ -125,84 +124,6 @@ class TestCreateParametersFromLegacy:
                     lifetime=10.0,
                     diffusion_length=np.sqrt(5.0)
                 )
-
-
-class TestConvertLegacyResultToDict:
-    """Test legacy result conversion function."""
-    
-    def test_basic_conversion(self):
-        """Test basic result conversion."""
-        # Create a mock RunResult
-        class MockRunResult:
-            def __init__(self):
-                self.nominal_diffusion_coefficient = 0.5
-                self.nominal_lifetime = 10.0
-                self.nominal_diffusion_length = np.sqrt(5.0)
-                self.noise_sigma = 0.05
-                self.cnr_0_estimate = 20.0
-                self.nominal_sigma2_0 = 1.0
-                self.estimated_sigma2_0 = 1.05
-                self.ols_slope = 1.0
-                self.ols_slope_stderr = 0.1
-                self.ols_intercept = 0.0
-                self.ols_intercept_stderr = 0.01
-                self.wls_slope = 1.02
-                self.wls_slope_stderr = 0.08
-                self.wls_intercept = 0.01
-                self.wls_intercept_stderr = 0.008
-        
-        result = MockRunResult()
-        run_id = 5
-        
-        legacy_dict = convert_legacy_result_to_dict(result, run_id)
-        
-        # Check structure
-        assert f'run_{run_id}' in legacy_dict
-        run_data = legacy_dict[f'run_{run_id}']
-        
-        assert run_data['run'] == run_id
-        assert 'run parameters' in run_data
-        assert 'cnr_0 estimate' in run_data
-        assert 'nominal profiles' in run_data
-        assert 'noisy profile fits' in run_data
-        assert 'diffusion' in run_data
-        
-        # Check specific values
-        assert run_data['run parameters']['nominal diffusion coefficient'] == 0.5
-        assert run_data['cnr_0 estimate'] == 20.0
-        assert run_data['diffusion']['unweighted fit']['MSD_t slope estimate'] == 1.0
-        assert run_data['diffusion']['weighted fit']['MSD_t slope estimate'] == 1.02
-    
-    def test_conversion_with_none_values(self):
-        """Test conversion when some values are None."""
-        class MockRunResult:
-            def __init__(self):
-                self.nominal_diffusion_coefficient = 0.5
-                self.nominal_lifetime = 10.0
-                self.nominal_diffusion_length = np.sqrt(5.0)
-                self.noise_sigma = 0.05
-                self.cnr_0_estimate = 20.0
-                self.nominal_sigma2_0 = 1.0
-                self.estimated_sigma2_0 = None
-                self.ols_slope = None
-                self.ols_slope_stderr = None
-                self.ols_intercept = None
-                self.ols_intercept_stderr = None
-                self.wls_slope = None
-                self.wls_slope_stderr = None
-                self.wls_intercept = None
-                self.wls_intercept_stderr = None
-        
-        result = MockRunResult()
-        run_id = 3
-        
-        legacy_dict = convert_legacy_result_to_dict(result, run_id)
-        run_data = legacy_dict[f'run_{run_id}']
-        
-        # Check that None values become 'N/A'
-        assert run_data['diffusion']['unweighted fit']['MSD_t slope estimate'] == 'N/A'
-        assert run_data['diffusion']['weighted fit']['MSD_t slope estimate'] == 'N/A'
-        assert run_data['noisy profile fits']['sigma^2_t estimates'] == []
 
 
 class TestMockSimulationParameters:

@@ -1,15 +1,13 @@
 """
 Result export and file I/O for DICE simulations.
 
-This module provides functions for exporting simulation results to various
-formats including CSV, text summaries, and structured data files.
+This module provides functions for exporting simulation results to CSV
+files and text summaries, and for loading result CSV files.
 """
 
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union, TextIO
-import json
 import csv
 
 from ..core.noise import nominal_cnr
@@ -275,61 +273,6 @@ def write_summary_file(
         f.write("Simulation completed successfully.\n")
 
 
-def export_to_json(
-    results: MonteCarloOutput,
-    filename: Union[str, Path],
-    include_profile_data: bool = False
-) -> None:
-    """
-    Export results to JSON format.
-    
-    Parameters
-    ----------
-    results : MonteCarloOutput
-        Simulation results.
-    filename : str or Path
-        Output JSON filename.
-    include_profile_data : bool
-        Whether to include profile data.
-    """
-    # Convert results to dictionary
-    data = {
-        'parameters': {
-            'num_runs': results.num_runs,
-            'noise_values': results.noise_values,
-            'diffusion_coefficient': results.parameters.physics.diffusion_coefficient,
-            'lifetime': results.parameters.physics.lifetime,
-            'diffusion_length': results.parameters.physics.diffusion_length,
-            'sigma2_0': results.parameters.profile.sigma2_0,
-            'amplitude_0': results.parameters.profile.amplitude_0,
-            'mu_0': results.parameters.profile.mu_0,
-        },
-        'runs': []
-    }
-    
-    for run in results.run_results:
-        run_data = {
-            'run_id': run.run_id,
-            'noise_sigma': run.noise_sigma,
-            'cnr_0_estimate': run.cnr_0_estimate,
-            'estimated_sigma2_0': run.estimated_sigma2_0,
-            'ols_slope': run.ols_slope,
-            'ols_slope_stderr': run.ols_slope_stderr,
-            'wls_slope': run.wls_slope,
-            'wls_slope_stderr': run.wls_slope_stderr,
-        }
-        
-        if include_profile_data and hasattr(run, 'nominal_profiles'):
-            run_data['nominal_profiles'] = run.nominal_profiles.tolist() if isinstance(run.nominal_profiles, np.ndarray) else run.nominal_profiles
-            run_data['noisy_profiles'] = run.noisy_profiles.tolist() if isinstance(run.noisy_profiles, np.ndarray) else run.noisy_profiles
-        
-        data['runs'].append(run_data)
-    
-    # Write JSON file
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
-
-
 def load_results_csv(filename: Union[str, Path]) -> pd.DataFrame:
     """
     Load results from CSV file.
@@ -387,70 +330,3 @@ def load_multiple_results(
     
     # Concatenate all DataFrames
     return pd.concat(dfs, ignore_index=True)
-
-
-def export_legacy_format(
-    results: MonteCarloOutput,
-    result_dictionary: Dict[str, Any],
-    csv_filename: Union[str, Path],
-    summary_filename: Union[str, Path],
-    length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
-) -> None:
-    """
-    Export results in legacy DICE format for backward compatibility.
-    
-    Parameters
-    ----------
-    results : MonteCarloOutput
-        Modern format results.
-    result_dictionary : dict
-        Legacy format result dictionary.
-    csv_filename : str or Path
-        Output CSV filename.
-    summary_filename : str or Path
-        Output summary filename.
-    length_unit : str
-        Unit of length.
-    time_unit : str
-        Unit of time.
-    """
-    # Export CSV using the modern method
-    df = export_collated_results(results, csv_filename, length_unit, time_unit)
-    
-    # Write legacy summary format
-    with open(summary_filename, 'w', encoding='utf-8') as f:
-        f.write(f"Running {results.num_runs} simulations with the following parameters (rounded):\n")
-        f.write("\n")
-        
-        # Extract parameters from result_dictionary for legacy format
-        params = result_dictionary.get('parameters', {})
-        f.write(f"Spatial width: {params.get('spatial width', 'N/A')} {length_unit}\n")
-        f.write(f"Pixel width: {params.get('pixel width', 'N/A')} pixels\n")
-        f.write(f"Number of time frames: {len(params.get('time series', []))} frames\n")
-        f.write(f"Noise stdev: {results.noise_values[0]:.3f}\n")
-        f.write(f"Initial contrast-to-noise ratio (CNR): {nominal_cnr(results.parameters.profile.amplitude_0, results.noise_values[0]):.3f}\n")
-        f.write(f"Initial profile sigma^2: {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
-        f.write(f"Nominal diffusion length: {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
-        f.write(f"Nominal diffusion coeff: {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2 per {time_unit}\n")
-        f.write(f"Nominal lifetime: {results.parameters.physics.lifetime} {time_unit}\n")
-        f.write("\n")
-        
-        # Add analysis results if available
-        if 'analysis' in result_dictionary:
-            analysis = result_dictionary['analysis']
-            if '% fits within proximity' in analysis:
-                for level_pct, values in analysis['% fits within proximity'].items():
-                    if isinstance(values, dict):
-                        f.write(f"Portion of fits where D_estimate / D_nominal = 1 ± {level_pct}:\n")
-                        f.write(f"-- Unweighted fit: {values.get('unweighted fit', 0):.2f}\n")
-                        f.write(f"-- Weighted fit: {values.get('weighted fit', 0):.2f}\n")
-                f.write("\n")
-        
-        f.write("Simulation completed. Collating results.\n")
-        f.write("\n")
-        f.write("Exporting result data and histogram.\n")
-        f.write(f"-- Summary file: {summary_filename}\n")
-        f.write(f"-- Collated CSV file: {csv_filename}\n")
-        f.write("\n")
-        f.write("Done!\n")

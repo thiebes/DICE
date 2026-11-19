@@ -1,8 +1,8 @@
 """
 Legacy compatibility layer for DICE.
 
-This module provides adapters and converters for maintaining backward
-compatibility with the original monolithic dice.py implementation.
+This module provides adapters for maintaining backward compatibility
+with the original monolithic dice.py implementation.
 
 .. deprecated::
     All classes in this module are deprecated. Use the modern dataclasses
@@ -133,75 +133,6 @@ def create_parameters_from_legacy(
     )
     
     return LegacySimulationParameters(profile=profile, physics=physics)
-
-
-def convert_legacy_result_to_dict(result, run_id: int, 
-                                 retain_profile_data: bool = False) -> Dict:
-    """
-    Convert new RunResult to legacy dictionary format.
-    
-    Parameters
-    ----------
-    result : RunResult
-        Result from run_single_simulation.
-    run_id : int
-        Run identifier.
-    retain_profile_data : bool
-        Whether to include profile data in output.
-    
-    Returns
-    -------
-    dict
-        Legacy-formatted result dictionary.
-    
-    Notes
-    -----
-    This function maintains backward compatibility with the original
-    scan_runner output format. It will be deprecated once all code
-    is migrated to use the new RunResult format directly.
-    """
-    legacy_result = {
-        f'run_{run_id}': {
-            'run': run_id,
-            'run parameters': {
-                'nominal diffusion coefficient': result.nominal_diffusion_coefficient,
-                'nominal lifetime': result.nominal_lifetime,
-                'nominal diffusion length': result.nominal_diffusion_length,
-                'noise stdev': result.noise_sigma
-            },
-            'cnr_0 estimate': result.cnr_0_estimate,
-            'nominal profiles': {
-                'parameters_t': {
-                    'sigma^2_t': [result.nominal_sigma2_0]
-                }
-            },
-            'noisy profile fits': {
-                'sigma^2_t estimates': [result.estimated_sigma2_0] if result.estimated_sigma2_0 else []
-            },
-            'diffusion': {
-                'unweighted fit': {
-                    'MSD_t slope estimate': result.ols_slope or 'N/A',
-                    'MSD_t slope std error': result.ols_slope_stderr or 'N/A',
-                    'intercept estimate': result.ols_intercept or 'N/A',
-                    'intercept standard error': result.ols_intercept_stderr or 'N/A',
-                },
-                'weighted fit': {
-                    'MSD_t slope estimate': result.wls_slope or 'N/A',
-                    'MSD_t slope std error': result.wls_slope_stderr or 'N/A',
-                    'intercept estimate': result.wls_intercept or 'N/A',
-                    'intercept standard error': result.wls_intercept_stderr or 'N/A',
-                    'weights': result.weights if hasattr(result, 'weights') else 'N/A',
-                }
-            }
-        }
-    }
-    
-    # Add profile data if retained
-    if retain_profile_data and hasattr(result, 'nominal_profiles'):
-        legacy_result[f'run_{run_id}']['nominal profiles']['y_values_t'] = result.nominal_profiles
-        legacy_result[f'run_{run_id}']['noisy profiles'] = {'y_values_t': result.noisy_profiles}
-    
-    return legacy_result
 
 
 # Mock parameter classes for testing

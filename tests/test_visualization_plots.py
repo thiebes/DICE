@@ -11,7 +11,6 @@ from dice.visualization.plots import (
     get_color_definitions,
     plot_gaussian_profile,
     plot_profile_evolution,
-    plot_diffusion_msd,
     plot_cnr_dependence,
     close_figure,
     close_all_figures,
@@ -142,71 +141,6 @@ class TestPlotProfileEvolution:
         ax = fig.axes[0]
         assert ax.get_xlabel() == "Position (μm)"
         assert ax.get_ylabel() == "Photoluminescence"
-        
-        close_figure(fig)
-
-
-class TestPlotDiffusionMSD:
-    """Test diffusion MSD plotting."""
-    
-    def test_basic_msd_plot(self):
-        """Test basic MSD plotting."""
-        t = np.array([0, 1, 2, 3, 4])
-        sigma2 = np.array([1.0, 1.5, 2.0, 2.5, 3.0])
-        
-        fig = plot_diffusion_msd(t, sigma2)
-        
-        assert isinstance(fig, plt.Figure)
-        ax = fig.axes[0]
-        assert len(ax.lines) >= 1  # At least data points
-        
-        close_figure(fig)
-    
-    def test_msd_with_errors(self):
-        """Test MSD plotting with error bars."""
-        t = np.array([0, 1, 2, 3])
-        sigma2 = np.array([1.0, 1.2, 1.4, 1.6])
-        errors = np.array([0.1, 0.1, 0.1, 0.1])
-        
-        fig = plot_diffusion_msd(t, sigma2, sigma2_errors=errors)
-        
-        assert isinstance(fig, plt.Figure)
-        close_figure(fig)
-    
-    def test_msd_with_fits(self):
-        """Test MSD plotting with OLS and WLS fits."""
-        t = np.array([0, 1, 2, 3, 4])
-        sigma2 = 1.0 + 0.5 * t + 0.1 * np.random.randn(5)
-        
-        ols_fit = {'slope': 0.48, 'intercept': 0.02}
-        wls_fit = {'slope': 0.52, 'intercept': -0.01}
-        
-        fig = plot_diffusion_msd(
-            t, sigma2,
-            ols_fit=ols_fit,
-            wls_fit=wls_fit
-        )
-        
-        assert isinstance(fig, plt.Figure)
-        ax = fig.axes[0]
-        assert len(ax.lines) >= 3  # Data + 2 fits
-        
-        close_figure(fig)
-    
-    def test_msd_custom_units(self):
-        """Test MSD plotting with custom units."""
-        t = np.array([0, 2, 4])
-        sigma2 = np.array([0.5, 1.0, 1.5])
-        
-        fig = plot_diffusion_msd(
-            t, sigma2,
-            time_unit="ps",
-            length_unit="nm"
-        )
-        
-        ax = fig.axes[0]
-        assert "ps" in ax.get_xlabel()
-        assert "nm" in ax.get_ylabel()
         
         close_figure(fig)
 

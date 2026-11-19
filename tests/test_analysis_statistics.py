@@ -5,15 +5,11 @@ Tests for dice.analysis.statistics module.
 import pytest
 import warnings
 import numpy as np
-import pandas as pd
 from dice.analysis.statistics import (
     calculate_precision,
     calculate_accuracy_metrics,
-    estimates_precision,
     analyze_simulation_results,
-    precision_counts,
     calculate_confidence_intervals,
-    analyze_cnr_dependence,
 )
 from dice.models.results import RunResult, MonteCarloOutput
 
@@ -143,45 +139,6 @@ class TestCalculateAccuracyMetrics:
         assert np.isnan(metrics['mean'])
         assert np.isnan(metrics['median'])
         assert np.isnan(metrics['std'])
-
-
-class TestEstimatesPrecision:
-    """Test legacy precision function."""
-    
-    def test_dataframe_precision(self):
-        """Test precision calculation from DataFrame."""
-        df = pd.DataFrame({
-            # Using values clearly outside bounds: 0.89 < 0.9 and 1.11 > 1.1
-            'weighted fit diffusion coeff [cm^2/s]': [0.95, 1.05, 0.89, 1.11],
-            'unweighted fit diffusion coeff [cm^2/s]': [0.92, 1.08, 0.88, 1.12],
-            'nominal diffusion coeff [cm^2/s]': [1.0, 1.0, 1.0, 1.0]
-        })
-        
-        result = estimates_precision(df, proximity_level=0.1)
-        
-        assert '% fits within proximity' in result
-        # Now truly 2/4 values (0.95, 1.05) are within [0.9, 1.1]
-        assert result['% fits within proximity']['weighted fit'] == 50.0  # 2/4
-        # 2/4 values (0.92, 1.08) are within [0.9, 1.1]  
-        assert result['% fits within proximity']['unweighted fit'] == 50.0  # 2/4
-    
-    def test_empty_dataframe(self):
-        """Test with empty DataFrame."""
-        df = pd.DataFrame()
-        
-        with pytest.raises(ValueError, match="DataFrame is empty"):
-            estimates_precision(df, 0.1)
-    
-    def test_missing_columns(self):
-        """Test with missing columns."""
-        df = pd.DataFrame({
-            'nominal diffusion coeff [cm^2/s]': [1.0, 1.0]
-        })
-        
-        result = estimates_precision(df, 0.1)
-        
-        assert result['% fits within proximity']['weighted fit'] == 0.0
-        assert result['% fits within proximity']['unweighted fit'] == 0.0
 
 
 class TestAnalyzeMonteCarloOutputs:
@@ -323,79 +280,6 @@ class TestCalculateConfidenceIntervals:
         
         assert np.isnan(lower)
         assert np.isnan(upper)
-
-
-class TestAnalyzeCNRDependence:
-    """Test CNR dependence analysis."""
-    
-    def test_cnr_analysis(self):
-        """Test CNR dependence analysis."""
-        # Create DataFrame with different CNR values
-        data = []
-        for cnr in [10, 20, 50, 100]:
-            for _ in range(10):
-                noise = 1.0 / cnr
-                data.append({
-                    'nominal CNR': cnr,
-                    'weighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, noise),
-                    'nominal diffusion coeff [cm^2/s]': 1.0
-                })
-        
-        df = pd.DataFrame(data)
-        
-        analysis = analyze_cnr_dependence(df)
-        
-        assert 10.0 in analysis
-        assert 20.0 in analysis
-        assert 50.0 in analysis
-        assert 100.0 in analysis
-        
-        # Higher CNR should have better precision
-        assert analysis[100.0]['precision_10%'] > analysis[10.0]['precision_10%']
-        
-        # Check structure
-        for cnr_val in [10.0, 20.0, 50.0, 100.0]:
-            assert 'num_runs' in analysis[cnr_val]
-            assert 'mean_ratio' in analysis[cnr_val]
-            assert 'std_ratio' in analysis[cnr_val]
-            assert 'precision_10%' in analysis[cnr_val]
-            assert 'ci_95%_lower' in analysis[cnr_val]
-            assert 'ci_95%_upper' in analysis[cnr_val]
-
-
-class TestPrecisionCounts:
-    """Test precision counting by CNR bins."""
-    
-    def test_binned_precision(self):
-        """Test precision counting in CNR bins."""
-        # Create DataFrame with various CNR values
-        data = []
-        for cnr in np.linspace(5, 50, 20):
-            data.append({
-                'nominal CNR': cnr,
-                'weighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, 0.1/cnr),
-                'unweighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, 0.15/cnr),
-                'nominal diffusion coeff [cm^2/s]': 1.0
-            })
-        
-        df = pd.DataFrame(data)
-        cnr_bins = np.array([0, 10, 20, 30, 40, 50])
-        proximity_levels = [0.1, 0.2]
-        
-        results = precision_counts(df, cnr_bins, proximity_levels)
-        
-        assert 'proximity_10%' in results
-        assert 'proximity_20%' in results
-        
-        # Check that bins are present
-        for prox_key in results:
-            bins_found = list(results[prox_key].keys())
-            assert len(bins_found) > 0
-            
-            for bin_key in bins_found:
-                assert 'count' in results[prox_key][bin_key]
-                assert 'ols_precision' in results[prox_key][bin_key]
-                assert 'wls_precision' in results[prox_key][bin_key]
 
 
 if __name__ == "__main__":
