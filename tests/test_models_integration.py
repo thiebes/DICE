@@ -157,6 +157,13 @@ class TestParameterValidation:
         with pytest.raises(ValueError, match=message):
             SimulationParameters(**(fields | overrides))
 
+    def test_zero_lifetime_has_infinite_diffusion_length(self, quick_test_parameters):
+        sim = SimulationParameters.from_legacy(quick_test_parameters)
+        fields = {name: getattr(sim, name) for name in (
+            'num_runs', 'gaussian', 'noise', 'spatial', 'temporal')}
+        no_decay = SimulationParameters(**fields, diffusion_coefficient=0.01, lifetime=0.0)
+        assert no_decay.diffusion_length == np.inf
+
 
 class TestGaussianProfileFromGenerator:
     """GaussianProfile agrees with the profiles make_diffusion_decay generates."""

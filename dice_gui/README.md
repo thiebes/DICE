@@ -91,7 +91,7 @@ The GUI checks each field as you type and shows an error message below a field w
 
 - Number of runs and number of pixels: positive integers
 - Diffusion coefficient, profile width, and spatial width: positive numbers
-- Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers (the diffusion length is zero when the lifetime is zero, which means no decay)
+- Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers. A lifetime of zero means no decay, and the diffusion length is then infinite and shows as `inf`.
 - Mean position: any number
 - Time range: numeric start and stop, with start less than stop
 - Time series: comma-separated finite numbers, without duplicates

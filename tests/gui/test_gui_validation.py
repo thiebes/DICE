@@ -143,8 +143,9 @@ class TestRunIsBlocked:
 class TestZeroDiffusionInputs:
     """
     Lifetime 0 means no decay, which the engine supports; the derived diffusion
-    length is then 0 and must not block the run. D = 0 has no accuracy ratio
-    (estimates are divided by D), so it must be rejected on the D field itself.
+    length is then infinite, shows as "inf", and must not block the run. D = 0
+    has no accuracy ratio (estimates are divided by D), so it must be rejected
+    on the D field itself.
     """
 
     def test_zero_lifetime_runs(self, qtbot, window, dialogs, work_dir):
@@ -152,13 +153,24 @@ class TestZeroDiffusionInputs:
         window.multiprocessing_check.setChecked(False)
         enter_text(qtbot, window.filename_slug_input, "no_decay")
         enter_text(qtbot, window.lifetime_input, "0")
-        assert float(window.diffusion_length_input.text()) == 0.0
+        assert window.diffusion_length_input.text() == "inf"
 
         run_and_wait(qtbot, window, dialogs)
 
         assert _visible_error(window, "diffusion_length") is None
         frame = pd.read_csv(work_dir / "output" / "no_decay" / "no_decay.csv")
         assert (frame["nominal lifetime"] == 0).all()
+        assert (frame["nominal diffusion length"] == float("inf")).all()
+        summary = (work_dir / "output" / "no_decay" / "no_decay_summary.txt").read_text(encoding="utf-8")
+        assert "Nominal diffusion length:\n    inf micrometer\n" in summary
+
+    def test_infinite_length_with_a_coefficient_gives_zero_lifetime(self, qtbot, window):
+        enter_text(qtbot, window.diffusion_coeff_input, "0.01")
+        enter_text(qtbot, window.diffusion_length_input, "inf")
+
+        assert window.lifetime_input.text() == "0"
+        assert _visible_error(window, "diffusion_length") is None
+        assert _visible_error(window, "lifetime") is None
 
     def test_zero_diffusion_coefficient_is_rejected_on_its_own_field(self, qtbot, window, dialogs):
         enter_text(qtbot, window.diffusion_coeff_input, "0")

@@ -185,6 +185,20 @@ class TestHandleDiffusionParameters:
         assert params['nominal diffusion coefficient'] == 4.0
         assert params['nominal lifetime (tau)'] == 1
     
+    def test_zero_lifetime_gives_infinite_length(self):
+        """A lifetime of 0 means no decay, so the diffusion length is unbounded."""
+        params = {'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 0}
+        handle_diffusion_parameters(params)
+        assert params['nominal diffusion length'] == np.inf
+        assert params['nominal diffusion coefficient'] == 0.01
+        assert params['nominal lifetime (tau)'] == 0
+
+    @pytest.mark.parametrize('diff, tau, name', [(-0.01, 1.0, 'diffusion_coeff'), (0.01, -1.0, 'lifetime')])
+    def test_negative_coefficient_or_lifetime_rejected(self, diff, tau, name):
+        params = {'nominal diffusion coefficient': diff, 'nominal lifetime (tau)': tau}
+        with pytest.raises(ValueError, match=f"{name} must be >= 0"):
+            handle_diffusion_parameters(params)
+
     def test_all_parameters_provided(self):
         """Test error when all parameters are provided."""
         params = {

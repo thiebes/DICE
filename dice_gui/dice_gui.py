@@ -780,9 +780,10 @@ class DiceGUI(QMainWindow):
             return False, result.error_message
 
         # Diffusion (all three fields linked; any two compute the third).
-        # L is 0 when tau is 0 (no decay); D must be positive because the
-        # accuracy analysis divides estimates by the nominal D.
-        result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length", allow_zero=True)
+        # L is infinite when tau is 0 (no decay); D must be positive because
+        # the accuracy analysis divides estimates by the nominal D.
+        result = validate_positive_float(
+            self.diffusion_length_input.text(), "Diffusion length", allow_zero=True, allow_inf=True)
         if not result:
             return False, result.error_message
         result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient")
@@ -1876,11 +1877,11 @@ class DiceGUI(QMainWindow):
         )
 
         # Register diffusion fields (all three always required; any two compute the third).
-        # L is 0 when tau is 0 (no decay); D must be positive because the
-        # accuracy analysis divides estimates by the nominal D.
+        # L is infinite when tau is 0 (no decay); D must be positive because
+        # the accuracy analysis divides estimates by the nominal D.
         self.validation_manager.register_field(
             "diffusion_length", self.diffusion_length_input,
-            lambda v: validate_positive_float(v, "Diffusion length", allow_zero=True),
+            lambda v: validate_positive_float(v, "Diffusion length", allow_zero=True, allow_inf=True),
         )
         self.validation_manager.register_field(
             "diffusion_coeff", self.diffusion_coeff_input,

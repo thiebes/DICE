@@ -73,10 +73,14 @@ class TestCalculateDiffusionLength:
         L_D = calculate_diffusion_length(0, 10)
         assert L_D == 0
     
-    def test_zero_lifetime(self):
-        """Test with zero lifetime."""
+    def test_zero_lifetime_is_infinite(self):
+        """A lifetime of 0 means no decay, so a diffusing species has no bound."""
         L_D = calculate_diffusion_length(10, 0)
-        assert L_D == 0
+        assert L_D == np.inf
+
+    def test_zero_diffusion_and_zero_lifetime(self):
+        """A species that does not move has no diffusion length, decaying or not."""
+        assert calculate_diffusion_length(0, 0) == 0
     
     def test_negative_values(self):
         """Test error for negative values."""

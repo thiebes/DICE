@@ -103,6 +103,8 @@ The diffusion coefficient D and the excited state lifetime τ. DICE computes the
 
 **Units:** D in (length unit)² / (time unit); τ in time unit
 
+A lifetime of 0 means no decay: the profiles keep their integrated intensity at all time points. The diffusion length is then infinite, and the output files report it as `inf` (`Infinity` in a JSON file).
+
 ### Scaling examples
 
 **Example 1:** for a diffusion length of 100 nm with the length unit `'micrometer'`:

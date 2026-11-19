@@ -333,6 +333,31 @@ class TestZeroNoiseRun:
         assert (run.read_csv()['nominal CNR'] == float('inf')).all()
 
 
+class TestZeroLifetimeRun:
+    """'nominal lifetime (tau)': 0 means no decay: every output reports an infinite diffusion length."""
+
+    def test_infinite_diffusion_length_in_every_output(self, tmp_path):
+        params_file = write_quick_test_variant(
+            tmp_path, 'no_decay',
+            {'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 0, 'number of runs': 4},
+            removed=('nominal diffusion length',))
+        run = run_cli(tmp_path, params_file, 'no_decay', '--export-format', 'both')
+        assert run.exit_code == 0
+
+        values = summary_label_to_values(run.read_summary())
+        assert values['Nominal diffusion length'] == ['inf micrometer']
+        assert values['Nominal lifetime'] == ['0 nanosecond']
+        df = run.read_csv()
+        assert (df['nominal diffusion length'] == np.inf).all()
+        assert (df['nominal lifetime'] == 0).all()
+        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+        exported = json.loads((run.output_dir / 'no_decay.json').read_text())
+        assert exported['parameters']['nominal diffusion length'] == np.inf
+        assert exported['analysis']['summary']['nominal_diffusion_length'] == np.inf
+        # Nothing downstream divides by the diffusion length: the histogram is drawn.
+        assert run.histogram_file.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
+
+
 CSV_COLUMNS = [
     'run number',
     'nominal diffusion coeff',

@@ -20,6 +20,7 @@ from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
 )
 from fft_cnr import fft_cnr
+from ..core.diffusion import calculate_diffusion_length
 from ..core.noise import Seed, make_noise_distribution
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
@@ -313,7 +314,8 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
         if not isinstance(diff, (int, float)) or not isinstance(tau, (int, float)):
             raise ValueError("Both 'nominal diffusion coefficient' and 'nominal lifetime (tau)' must be numeric.")
 
-        parameters_dictionary['nominal diffusion length'] = np.sqrt(diff * tau)
+        # A lifetime of 0 means no decay, so the diffusion length is infinite.
+        parameters_dictionary['nominal diffusion length'] = calculate_diffusion_length(diff, tau)
         parameters_dictionary['nominal diffusion coefficient'] = diff
         parameters_dictionary['nominal lifetime (tau)'] = tau
 
