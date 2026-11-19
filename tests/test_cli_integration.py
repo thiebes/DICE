@@ -556,3 +556,55 @@ class TestOutputOptions:
         values = summary_label_to_values(run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
         assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
+
+
+class TestNominalCnrUsesAmplitude:
+    """Nominal CNR is amplitude_0 / noise sigma in the CSV and the summary.
+
+    quick_test.txt is run as is (amplitude 1, noise 0.02) and with amplitude 2
+    and noise 0.04, which keeps the initial CNR at 50, the regime in which the
+    fft-cnr estimate was characterized for this 50-pixel profile. With the same
+    seed the second run's noisy profiles are exactly twice the first run's.
+    """
+
+    @pytest.fixture(scope='class')
+    def unit_amplitude_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('amplitude_1')
+        return run_cli(workdir, QUICK_TEST, 'quick_test', '--seed', '4', '--no-plots')
+
+    @pytest.fixture(scope='class')
+    def double_amplitude_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('amplitude_2')
+        params_file = write_quick_test_variant(
+            workdir, 'amplitude_2', {'amplitude_0': 2, 'noise value': 0.04})
+        return run_cli(workdir, params_file, 'amplitude_2', '--seed', '4', '--no-plots')
+
+    def test_nominal_cnr_is_amplitude_over_noise(self, double_amplitude_run):
+        assert double_amplitude_run.exit_code == 0
+        assert double_amplitude_run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(2 / 0.04)
+        values = summary_label_to_values(double_amplitude_run.read_summary())
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
+
+    def test_mean_estimated_cnr_agrees_with_nominal(self, double_amplitude_run):
+        # Tolerance: four standard errors of the mean of the run's own estimates,
+        # plus 1% of the nominal value for the estimator's bias on this profile.
+        # On 4000 simulated quick_test profiles at CNR 50, fft-cnr 0.4.1 read
+        # +0.47% high (standard error 0.21%), with a per-profile SD of 6.5, so
+        # 100 runs give a standard error near 0.65. Ignoring amplitude_0 would
+        # put the nominal value at 25, about 38 standard errors away.
+        df = double_amplitude_run.read_csv()
+        estimates, nominal = df['estimated CNR'].to_numpy(), df['nominal CNR'].iloc[0]
+        standard_error = estimates.std(ddof=1) / np.sqrt(estimates.size)
+        assert abs(estimates.mean() - nominal) <= 4 * standard_error + 0.01 * nominal
+
+    def test_unit_amplitude_unchanged(self, unit_amplitude_run, double_amplitude_run):
+        assert unit_amplitude_run.exit_code == 0
+        unit_df, double_df = unit_amplitude_run.read_csv(), double_amplitude_run.read_csv()
+        assert unit_df['nominal CNR'].to_numpy() == pytest.approx(1 / 0.02)
+        values = summary_label_to_values(unit_amplitude_run.read_summary())
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
+        # Scaling signal and noise together leaves every CNR, and every slope, unchanged.
+        assert double_df['estimated CNR'].to_numpy() == pytest.approx(
+            unit_df['estimated CNR'].to_numpy(), rel=1e-9)
+        assert double_df['weighted fit diffusion slope'].to_numpy() == pytest.approx(
+            unit_df['weighted fit diffusion slope'].to_numpy(), rel=1e-6)

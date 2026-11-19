@@ -55,6 +55,14 @@ def add_noise(nominal_profiles: np.ndarray, noise_sigma: float,
     return {'y_values_t': noisy_profiles}
 
 
+def nominal_cnr(amplitude: float, noise_sigma: float) -> float:
+    """Initial CNR of a profile of peak amplitude `amplitude` under white noise of SD `noise_sigma`.
+
+    CNR is amplitude / noise_sigma (docs/glossary.md); it is infinite for a noise-free profile.
+    """
+    return amplitude / noise_sigma if noise_sigma > 0 else float('inf')
+
+
 def make_noise_distribution(noise_low: float, noise_high: float, 
                           num: int, logarithmic: bool = False,
                           seed: Seed = None) -> List[float]:

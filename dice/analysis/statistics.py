@@ -8,6 +8,7 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union
+from ..core.noise import nominal_cnr
 from ..models.results import MonteCarloOutput
 
 
@@ -240,6 +241,7 @@ def analyze_simulation_results(
     # Analyze by noise level if multiple noise values
     noise_analysis = {}
     if len(result.noise_values) > 1:
+        amplitude_0 = result.parameters.profile.amplitude_0
         for noise_val in result.noise_values:
             # Filter runs for this noise value
             noise_runs = [r for r in result.run_results if r.noise_sigma == noise_val]
@@ -250,7 +252,7 @@ def analyze_simulation_results(
                                  if r.wls_slope is not None])
             
             noise_analysis[f'noise_{noise_val}'] = {
-                'cnr': 1.0 / noise_val if noise_val > 0 else np.inf,
+                'cnr': nominal_cnr(amplitude_0, noise_val),
                 'num_runs': len(noise_runs),
                 'ols_precision_10%': calculate_precision(noise_ols, nominal_d, 0.1),
                 'wls_precision_10%': calculate_precision(noise_wls, nominal_d, 0.1),
