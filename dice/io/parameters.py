@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
-from ..utils.validators import validate_limits
+from ..utils.validators import validate_integer, validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
     validate_output_units,
@@ -24,7 +24,7 @@ from ..utils.units import (
 from fft_cnr import fft_cnr
 from ..core.diffusion import calculate_diffusion_length
 from ..core.noise import MIN_CNR_PEAK_FWHM, Seed, make_noise_distribution, peak_fwhm_samples
-from ..models.parameters import SimulationParameters
+from ..models.parameters import NoiseRange, SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
     ParameterKey, LEGACY_OUTPUT_KEYS
@@ -36,6 +36,15 @@ RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
 
 # Keys whose value is the path of the measured profile for the noise estimate.
 NOISE_DATA_KEYS = ('estimate noise from data', 'estimate_noise_from_data')
+
+# Keys of a noise range, from which each run draws its own noise level, each
+# mapped to whether log10(1/sigma), rather than 1/sigma, is uniformly distributed.
+NOISE_RANGE_KEYS = {
+    'noise range, reciprocal': False,
+    'noise_range_reciprocal': False,
+    'noise range, reciprocal log': True,
+    'noise_range_reciprocal_log': True,
+}
 
 
 def resolve_noise_data_path(
@@ -78,8 +87,8 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
     filename : str or Path
         Path to the parameters file.
     seed : int or SeedSequence, optional
-        Seed for the noise draw of the 'noise range' options; None draws
-        fresh entropy.
+        Seed for the noise draws of the 'noise range' options, one for each
+        run; None draws fresh entropy.
     
     Returns
     -------
@@ -238,6 +247,48 @@ def narrow_peak_warning(profile: Sequence[float], source: str) -> Optional[str]:
     )
 
 
+def parse_noise_range(value: Any, logarithmic: bool) -> NoiseRange:
+    """
+    The NoiseRange that the value [low, high] of a 'noise range' parameter describes.
+
+    Parameters
+    ----------
+    value : list or tuple
+        The parameter value: two noise standard deviations, low < high.
+    logarithmic : bool
+        True for 'noise range, reciprocal log', False for 'noise range, reciprocal'.
+
+    Raises
+    ------
+    ValueError
+        If the value is not two numbers, or they are not positive and finite
+        with low < high.
+    """
+    if (not isinstance(value, (list, tuple)) or len(value) != 2
+            or not all(isinstance(bound, (int, float)) and not isinstance(bound, bool) for bound in value)):
+        raise ValueError(f"Invalid noise range {value}. Must be two numeric values.")
+    return NoiseRange(low=value[0], high=value[1], logarithmic=logarithmic)
+
+
+def noise_range_from_parameters(parameters_dictionary: Dict[str, Any]) -> Optional[NoiseRange]:
+    """
+    The range from which each run draws its noise level, or None for fixed noise.
+
+    Reads the 'noise range, reciprocal' or 'noise range, reciprocal log'
+    parameter, in legacy or canonical form, of a raw or a parsed parameters
+    dictionary.
+
+    Raises
+    ------
+    ValueError
+        If the range is malformed (parse_noise_range).
+    """
+    for key, logarithmic in NOISE_RANGE_KEYS.items():
+        if key in parameters_dictionary:
+            return parse_noise_range(parameters_dictionary[key], logarithmic)
+    return None
+
+
 def handle_noise_parameters(
     parameters_dictionary: Dict[str, Any], num_vals: int = 1, seed: Seed = None
 ) -> None:
@@ -251,11 +302,13 @@ def handle_noise_parameters(
     parameters_dictionary : dict
         Dictionary containing noise parameters.
     num_vals : int
-        Number of noise values to generate.
+        Number of noise values to draw from a 'noise range': the number of
+        runs, since each run draws its own.
     seed : int or SeedSequence, optional
         Seed for the 'noise range' draws; None draws fresh entropy.
 
-    Updates the dictionary with 'noise series' key.
+    Updates the dictionary with 'noise series' key: the one noise value of
+    every run, or for a 'noise range', num_vals values, one for each run.
     """
     unique_noise_key = check_for_unique_key(parameters_dictionary, [
         'noise range, reciprocal log', 'noise range, reciprocal',
@@ -263,10 +316,6 @@ def handle_noise_parameters(
         'noise_range_reciprocal_log', 'noise_range_reciprocal',
         'noise_value', 'estimate_noise_from_data'
     ])
-
-    def validate_noise_range(noise_range):
-        if len(noise_range) != 2 or not all(isinstance(value, (int, float)) for value in noise_range):
-            raise ValueError(f"Invalid noise range {noise_range}. Must be two numeric values.")
 
     try:
         if unique_noise_key in ('noise value', 'noise_value'):
@@ -298,18 +347,13 @@ def handle_noise_parameters(
                 # stacklevel 3 names the caller of parameter_parser, like the retired-key warning.
                 warnings.warn(message, stacklevel=3)
 
-        elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):
-            noise_range = parameters_dictionary[unique_noise_key]
-            validate_noise_range(noise_range)
+        elif unique_noise_key in NOISE_RANGE_KEYS:
+            noise_range = parse_noise_range(
+                parameters_dictionary[unique_noise_key], NOISE_RANGE_KEYS[unique_noise_key])
             parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=True, seed=seed
-            )
-
-        elif unique_noise_key in ('noise range, reciprocal', 'noise_range_reciprocal'):
-            noise_range = parameters_dictionary[unique_noise_key]
-            validate_noise_range(noise_range)
-            parameters_dictionary['noise series'] = make_noise_distribution(
-                noise_range[0], noise_range[1], num_vals, logarithmic=False, seed=seed
+                noise_range.low, noise_range.high,
+                validate_integer(num_vals, "'number of runs'", min_val=1),
+                logarithmic=noise_range.logarithmic, seed=seed,
             )
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
@@ -430,6 +474,10 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     Accepts both legacy (space-separated) and modern (snake_case) key names.
     Returns a dictionary with legacy keys for backward compatibility.
 
+    'noise series' holds the noise value of every run, or with a 'noise
+    range', one value drawn for each run; noise_range_from_parameters tells
+    the two apart.
+
     Parameters
     ----------
     parameters_dictionary : dict
@@ -472,8 +520,9 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Process time parameters
     handle_time_parameters(parameters_dictionary)
     
-    # Process noise parameters
-    handle_noise_parameters(parameters_dictionary, num_vals=1, seed=seed)
+    # Process noise parameters; a noise range draws one value for each run
+    number_of_runs = parameters_dictionary.get('number of runs', parameters_dictionary.get('number_of_runs'))
+    handle_noise_parameters(parameters_dictionary, num_vals=number_of_runs, seed=seed)
     
     # Process profile width
     parameters_dictionary['sigma^2_0'] = handle_profile_width_parameters(parameters_dictionary)
