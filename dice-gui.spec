@@ -33,10 +33,11 @@ with open(root_path / 'dice' / '__init__.py') as _f:
     _version_match = re.search(r"__version__\s*=\s*['\"](.+?)['\"]", _f.read())
     app_version = _version_match.group(1) if _version_match else '0.0.0'
 
-if sys.platform == 'darwin':
-    icon_file = None  # Would need an .icns file for macOS
-else:
+# PyInstaller ignores icons on Linux, and macOS would need an .icns file.
+if sys.platform == 'win32':
     icon_file = str(root_path / 'webapp' / 'static' / 'favicon.ico')
+else:
+    icon_file = None
 
 # The entry script is dice_gui/dice_gui.py, not dice_gui/__main__.py (the
 # `dice-gui` console script): __main__.py starts joblib workers at launch to
