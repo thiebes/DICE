@@ -9,7 +9,6 @@ from .plots import (
     get_color_definitions,
     plot_gaussian_profile,
     plot_profile_evolution,
-    plot_diffusion_msd,
     plot_cnr_dependence,
     close_figure,
     close_all_figures,
@@ -31,7 +30,6 @@ __all__ = [
     # Basic plotting
     'plot_gaussian_profile',
     'plot_profile_evolution',
-    'plot_diffusion_msd',
     'plot_cnr_dependence',
     
     # Histograms and distributions
