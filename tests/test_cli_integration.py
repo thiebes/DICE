@@ -251,6 +251,26 @@ class TestSeedReproducibility:
         other = self._csv(tmp_path_factory.mktemp('c'), self.NOISE_RANGE, '--seed', '4')
         pd.testing.assert_frame_equal(first, second, check_exact=True)
         assert first['nominal CNR'].iloc[0] != other['nominal CNR'].iloc[0]
+        # Each run draws its own noise level.
+        assert first['noise standard deviation'].nunique() == self.SEED_RUNS
+
+    def test_noise_range_identical_serially_and_in_both_worker_pools(self, tmp_path_factory, monkeypatch):
+        # Starts joblib workers and a process pool of two workers each, which costs some seconds.
+        import dice.analysis.simulation as simulation
+        serial = self._csv(tmp_path_factory.mktemp('serial'), self.NOISE_RANGE, '--seed', '3')
+        joblib_pool = self._csv(tmp_path_factory.mktemp('joblib'), self.NOISE_RANGE, '--seed', '3',
+                                '--multiprocessing', '2')
+        # A standalone build's default: the standard library's process pool.
+        pool_calls = []
+        run_in_process_pool = simulation.run_in_process_pool
+        monkeypatch.setattr(simulation, 'joblib_workers_supported', lambda: False)
+        monkeypatch.setattr(simulation, 'run_in_process_pool',
+                            lambda *args: pool_calls.append(args[1]) or run_in_process_pool(*args))
+        process_pool = self._csv(tmp_path_factory.mktemp('pool'), self.NOISE_RANGE, '--seed', '3',
+                                 '--multiprocessing', '2')
+        assert pool_calls == [2]
+        pd.testing.assert_frame_equal(serial, joblib_pool, check_exact=True)
+        pd.testing.assert_frame_equal(serial, process_pool, check_exact=True)
 
 
 class TestMultiprocessingFlag:
@@ -866,3 +886,111 @@ class TestNominalCnrUsesAmplitude:
             unit_df['estimated CNR'].to_numpy(), rel=1e-9)
         assert double_df['weighted fit diffusion slope'].to_numpy() == pytest.approx(
             unit_df['weighted fit diffusion slope'].to_numpy(), rel=1e-6)
+
+
+class TestNoiseRangeExample:
+    """data/examples/noise_range.txt draws a noise level for each run and reports accuracy against CNR.
+
+    The CSV, the JSON export, and the summary are checked against each other:
+    the JSON records the noise of each CSV row, and the summary and the JSON
+    report the same CNR bins, whose statistics are recomputed from the CSV.
+    """
+
+    RUNS = 100
+    LOW, HIGH = 0.005, 0.1
+
+    @pytest.fixture(scope='class')
+    def example_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('noise_range')
+        run = run_cli(workdir, EXAMPLES_DIR / 'noise_range.txt', 'noise_range',
+                      '--seed', '2', '--export-format', 'both')
+        assert run.exit_code == 0
+        return run
+
+    @staticmethod
+    def _json(run: CliRun) -> dict:
+        return json.loads((run.output_dir / 'noise_range.json').read_text(encoding='utf-8'))
+
+    def test_output_files(self, example_run):
+        assert sorted(p.name for p in example_run.output_dir.iterdir()) == [
+            'noise_range.csv', 'noise_range.json', 'noise_range_accuracy_vs_cnr.png',
+            'noise_range_summary.txt']
+        assert (example_run.output_dir / 'noise_range_accuracy_vs_cnr.png').read_bytes()[:8] == (
+            b'\x89PNG\r\n\x1a\n')
+
+    def test_csv_records_the_noise_of_each_run(self, example_run):
+        df = example_run.read_csv()
+        expected_columns = list(CSV_COLUMNS)
+        expected_columns.insert(expected_columns.index('nominal CNR'), 'noise standard deviation')
+        assert list(df.columns) == expected_columns
+        noise = df['noise standard deviation'].to_numpy()
+        assert len(noise) == len(np.unique(noise)) == self.RUNS
+        assert np.all((noise >= self.LOW) & (noise <= self.HIGH))
+        # The CSV keeps about 16 significant digits of each value.
+        assert df['nominal CNR'].to_numpy() == pytest.approx(1 / noise, rel=1e-12)
+
+    def test_json_records_each_run_and_each_bin(self, example_run):
+        exported = self._json(example_run)
+        df = example_run.read_csv()
+        assert exported['summary']['total_runs'] == self.RUNS
+        assert exported['summary']['noise_values'] == pytest.approx(
+            df['noise standard deviation'].tolist(), rel=1e-12)
+        assert exported['summary']['noise_range'] == {'low': self.LOW, 'high': self.HIGH, 'logarithmic': True}
+        bins = exported['analysis']['cnr_bins']
+        assert [entry['num_runs'] for entry in bins] == [20] * 5
+        assert exported['analysis']['noise_analysis'] == {}
+        for entry in bins:
+            # The CSV keeps about 16 significant digits, so the bin limits get a relative margin.
+            in_bin = df[df['nominal CNR'].between(
+                entry['cnr_min'] * (1 - 1e-12), entry['cnr_max'] * (1 + 1e-12))]
+            assert len(in_bin) == entry['num_runs']
+            wls = in_bin['weighted fit diffusion slope'].dropna().to_numpy() / 2
+            assert entry['accuracy']['wls']['mean'] == pytest.approx(wls.mean(), rel=1e-12)
+            assert entry['accuracy']['wls']['std'] == pytest.approx(wls.std(), rel=1e-12)
+            assert entry['statistics']['wls']['num_successful'] == len(wls)
+            assert entry['precision']['10%']['wls'] == pytest.approx(np.mean(np.abs(wls / 0.01 - 1) <= 0.1))
+
+    def test_summary_agrees_with_csv_and_json(self, example_run):
+        df = example_run.read_csv()
+        summary = example_run.read_summary()
+        values = summary_label_to_values(summary)
+        noise, cnr = df['noise standard deviation'], df['nominal CNR']
+        assert values['Number of runs'] == ['100']
+        assert values['Noise standard deviation, drawn for each run'] == [
+            f"100 values from {noise.min():.4f} to {noise.max():.4f} (range 0.0050 to 0.1000)"]
+        assert values['Initial CNR (Contrast-to-Noise Ratio), drawn for each run'] == [
+            f"{cnr.min():.3f} to {cnr.max():.3f} (range 10.000 to 200.000, uniform in log10 of the CNR)"]
+        assert 'Noise standard deviation values' not in values
+        bin_headers = [line for line in summary.splitlines() if re.match(r'Initial CNR [0-9.]+ to ', line)]
+        assert bin_headers == [
+            f"Initial CNR {entry['cnr_min']:.3f} to {entry['cnr_max']:.3f} ({entry['num_runs']} runs):"
+            for entry in self._json(example_run)['analysis']['cnr_bins']]
+        d_unit = 'micrometer^2/nanosecond'
+        assert values['Mean estimate'] == [
+            f"{entry['accuracy'][key]['mean']:.5f} {d_unit}"
+            for entry in self._json(example_run)['analysis']['cnr_bins'] for key in ('wls', 'ols')]
+
+    @pytest.mark.parametrize('noise_range, message', [
+        ([0.05, 0.01], "Invalid noise range [0.05, 0.01]. The first value (low) must be less than the second (high)."),
+        ([0.0, 0.05], "Invalid noise range [0.0, 0.05]. Both values must be positive and finite."),
+        ([0.01], "Invalid noise range [0.01]. Must be two numeric values."),
+    ])
+    def test_malformed_range_rejected_before_simulation(self, tmp_path, capsys, noise_range, message):
+        params_file = write_quick_test_variant(
+            tmp_path, 'bad_range', {'noise range, reciprocal log': noise_range}, removed=('noise value',))
+        run = run_cli(tmp_path, params_file, 'bad_range')
+        assert run.exit_code == 1
+        assert message in capsys.readouterr().out
+        assert not (tmp_path / 'output').exists()
+
+    def test_dice_runner_draws_a_noise_level_for_each_run(self, tmp_path):
+        import dice
+        from dice.models.parameters import NoiseRange
+        params_file = write_quick_test_variant(
+            tmp_path, 'runner_range',
+            {'noise range, reciprocal': [0.01, 0.05], 'number of runs': 6, 'multiprocessing': False},
+            removed=('noise value',))
+        result = dice.dice_runner(str(params_file))
+        assert result.noise_range == NoiseRange(0.01, 0.05, logarithmic=False)
+        assert result.num_runs == len(result.run_results) == len(result.noise_values) == 6
+        assert [run.noise_sigma for run in result.run_results] == result.noise_values

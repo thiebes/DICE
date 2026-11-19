@@ -477,3 +477,87 @@ class TestImageType:
         plt.close(fig)
         assert target.stat().st_size > 0
 
+
+
+class TestAccuracyVsCnr:
+    """A simulation with a noise range plots each run's D_est/D_nom against its initial CNR."""
+
+    @staticmethod
+    def _data(count=60):
+        rng = np.random.default_rng(4)
+        cnr = rng.uniform(20, 100, count)
+        return cnr, 1 + rng.normal(0, 1, count) / cnr
+
+    def test_points_reference_line_and_labels(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr, ratios = self._data()
+        target = tmp_path / 'scatter.png'
+        fig = plot_accuracy_vs_cnr(cnr, ratios, str(target))
+
+        ax = fig.axes[0]
+        np.testing.assert_array_equal(ax.collections[0].get_offsets(), np.column_stack([cnr, ratios]))
+        [reference] = ax.lines
+        assert list(reference.get_ydata()) == [1.0, 1.0]
+        assert (ax.get_xlabel(), ax.get_ylabel()) == ('Initial CNR', '$D_{est}/D_{nom}$')
+        assert ax.get_xscale() == 'linear'
+        assert ax.get_ylim() == pytest.approx((ratios.mean() - 3 * ratios.std(), ratios.mean() + 3 * ratios.std()))
+        assert target.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
+        plt.close(fig)
+
+    @pytest.mark.parametrize('low, high, labels', [
+        (10, 100, ['10', '20', '50', '100']),
+        (1, 10000, ['1', '10', '100', '1000', '10000']),
+    ])
+    def test_logarithmic_cnr_axis_labels_plain_numbers(self, tmp_path, low, high, labels):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr = np.geomspace(low, high, 50)
+        fig = plot_accuracy_vs_cnr(cnr, np.ones_like(cnr), str(tmp_path / 'scatter.png'), log_cnr=True)
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        left, right = ax.get_xlim()
+        assert ax.get_xscale() == 'log'
+        assert [label.get_text() for label in ax.get_xticklabels()
+                if left <= label.get_position()[0] <= right] == labels
+        plt.close(fig)
+
+    def test_non_finite_ratios_do_not_set_the_limits(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr, ratios = self._data()
+        with_nan = np.append(ratios, np.nan)
+        fig = plot_accuracy_vs_cnr(np.append(cnr, 50.0), with_nan, str(tmp_path / 'scatter.png'))
+        assert np.isfinite(fig.axes[0].get_ylim()).all()
+        plt.close(fig)
+
+    def test_lengths_must_match(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        with pytest.raises(ValueError, match="differ in length: 3 and 2"):
+            plot_accuracy_vs_cnr([20, 30, 40], [1.0, 1.1], str(tmp_path / 'scatter.png'))
+
+    def test_image_keys_apply_with_x_lim_on_the_accuracy_axis(self, tmp_path):
+        import inspect
+        from dice.visualization.histograms import accuracy_scatter_options, plot_accuracy_vs_cnr
+        parameters = {
+            'image type': 'svg', 'image width': 12, 'image height': 8, 'image dpi': 150,
+            'image font size': 7, 'image tick length': 3, 'image tick width': 1.5,
+            'image numbins': 11, 'image x_lim': [0.5, 1.5],
+        }
+
+        options = accuracy_scatter_options(parameters)
+
+        assert options == {
+            'image_type': 'svg', 'width': 12, 'height': 8, 'dpi': 150, 'font_size': 7,
+            'tick_length': 3, 'tick_width': 1.5, 'y_lim': [0.5, 1.5],
+        }
+        assert set(options) <= set(inspect.signature(plot_accuracy_vs_cnr).parameters)
+        cnr, ratios = self._data()
+        target = tmp_path / 'scatter.svg'
+        fig = plot_accuracy_vs_cnr(cnr, ratios, str(target), **options)
+        assert fig.axes[0].get_ylim() == (0.5, 1.5)
+        assert fig.axes[0].xaxis.label.get_fontsize() == 7
+        assert target.read_text(encoding='utf-8').lstrip().startswith('<?xml')
+        plt.close(fig)
+
+    def test_malformed_x_lim_is_rejected_by_name(self):
+        from dice.visualization.histograms import accuracy_scatter_options
+        with pytest.raises(ValueError, match="'image x_lim' must be two increasing finite numbers"):
+            accuracy_scatter_options({'image x_lim': [1.5, 0.5]})

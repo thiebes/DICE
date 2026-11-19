@@ -355,6 +355,39 @@ class TestRelativeNoiseDataPath:
         assert window._error_labels["noise_file"].isHidden()
 
 
+class TestNoiseRangeFile:
+    """A file with a noise range opens with a warning that the GUI cannot edit or run the range."""
+
+    @pytest.mark.parametrize("key", ["noise range, reciprocal", "noise_range_reciprocal_log"])
+    def test_opening_warns_and_keeps_the_gui_noise(self, window, dialogs, work_dir, key):
+        params = read_example("quick_test.txt")
+        del params["noise value"]
+        params[key] = [0.005, 0.1]
+        params_file = work_dir / "range.txt"
+        params_file.write_text(str(params))
+        noise_before = (window.noise_fixed_radio.isChecked(), window.noise_value_input.text())
+
+        _open_via_menu(window, dialogs, params_file)
+
+        assert dialogs.titles("information") == []
+        assert dialogs.titles("warning") == ["Noise Range Not Editable"]
+        [text] = dialogs.texts("warning")
+        assert f"Parameters loaded from:\n{params_file}" in text
+        assert f"'{key}': [0.005, 0.1]" in text
+        assert "The GUI cannot show, edit, or run a noise range." in text
+        assert f'dice "{params_file}"' in text
+        # The other values load; the noise fields keep the GUI's own setting.
+        assert window.windowTitle() == "DICE - [range.txt]"
+        assert window.num_runs_spin.value() == params["number of runs"]
+        assert (window.noise_fixed_radio.isChecked(), window.noise_value_input.text()) == noise_before
+        assert "noise range, reciprocal" not in _engine_parameters(window)
+
+    def test_bundled_example_warns(self, window, dialogs):
+        window.load_parameters_from_file(str(EXAMPLES_DIR / "noise_range.txt"))
+        assert dialogs.titles() == ["Noise Range Not Editable"]
+        assert "'noise range, reciprocal log': [0.005, 0.1]" in dialogs.texts("warning")[0]
+
+
 class TestLoadErrors:
 
     def test_truncated_file_is_reported_and_leaves_the_form_unchanged(self, window, dialogs, work_dir):

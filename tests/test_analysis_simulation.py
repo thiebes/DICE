@@ -617,5 +617,104 @@ class TestSplitIntoBatches:
         assert split_into_batches(0, 8) == []
 
 
+class TestNoiseLevelForEachRun:
+    """With a noise range, run i uses noise value i; the seeds and the result stay consistent."""
+
+    NOISE_RANGE_SIGMAS = [0.04, 0.011, 0.025, 0.018, 0.05, 0.013, 0.031]
+
+    def _simulate(self, noise_values, num_runs, noise_range=None, **options):
+        from dice.models.parameters import NoiseRange
+        return run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(),
+            x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]),
+            noise_values=list(noise_values),
+            num_runs=num_runs,
+            seed=17,
+            noise_range=noise_range if noise_range is not None else NoiseRange(0.01, 0.05),
+            multiprocessing=options.pop('multiprocessing', False),
+            **options,
+        )
+
+    @staticmethod
+    def _run_values(result) -> np.ndarray:
+        return np.array([
+            (r.run_id, r.noise_sigma, r.cnr_0_estimate, r.estimated_sigma2_0, r.ols_slope, r.wls_slope)
+            for r in result.run_results
+        ])
+
+    def test_each_run_uses_its_own_noise_value(self):
+        from dice.models.parameters import NoiseRange
+        noise_range = NoiseRange(0.01, 0.05, logarithmic=True)
+        result = self._simulate(self.NOISE_RANGE_SIGMAS, len(self.NOISE_RANGE_SIGMAS), noise_range)
+
+        assert [r.noise_sigma for r in result.run_results] == self.NOISE_RANGE_SIGMAS
+        assert [r.run_id for r in result.run_results] == list(range(7))
+        assert result.num_runs == len(result.run_results) == 7
+        assert result.noise_values == self.NOISE_RANGE_SIGMAS
+        assert result.noise_range == noise_range
+
+    def test_fixed_levels_record_no_range(self):
+        result = run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(), x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0]), noise_values=[0.02, 0.05], num_runs=2,
+            multiprocessing=False, seed=17,
+        )
+        assert result.noise_range is None
+        assert [r.noise_sigma for r in result.run_results] == [0.02, 0.02, 0.05, 0.05]
+
+    def test_same_streams_as_fixed_noise(self):
+        # Run i draws its noise from the same seed stream whether its sigma is
+        # a fixed level or its own value, so equal sigmas give equal runs.
+        per_run = self._simulate([0.02] * 4, 4)
+        fixed = run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(), x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]), noise_values=[0.02], num_runs=4,
+            multiprocessing=False, seed=17,
+        )
+        np.testing.assert_array_equal(self._run_values(per_run), self._run_values(fixed))
+
+    @pytest.mark.parametrize('noise_values', [[0.02] * 6, [0.02] * 8, []])
+    def test_one_value_per_run_required(self, noise_values):
+        with pytest.raises(ValueError, match="one noise value for each of the 7 runs; got"):
+            self._simulate(noise_values, 7)
+
+    def test_serial_joblib_and_process_pool_identical(self):
+        # Starts a joblib pool and a process pool of two workers each, which costs some seconds.
+        from dice.analysis.simulation import JOBLIB_BACKEND, PROCESS_POOL_BACKEND
+        runs = len(self.NOISE_RANGE_SIGMAS)
+        serial = self._simulate(self.NOISE_RANGE_SIGMAS, runs)
+        for backend in (JOBLIB_BACKEND, PROCESS_POOL_BACKEND):
+            parallel = self._simulate(self.NOISE_RANGE_SIGMAS, runs, multiprocessing=True,
+                                      n_jobs=2, parallel_backend=backend)
+            np.testing.assert_array_equal(self._run_values(parallel), self._run_values(serial),
+                                          err_msg=backend)
+            assert parallel.noise_values == serial.noise_values
+            assert parallel.noise_range == serial.noise_range
+
+
+class TestNoiseRangeModel:
+    """NoiseRange accepts only positive, finite bounds with low < high."""
+
+    def test_valid_range(self):
+        from dice.models.parameters import NoiseRange
+        noise_range = NoiseRange(0.01, 0.05, logarithmic=True)
+        assert (noise_range.low, noise_range.high, noise_range.logarithmic) == (0.01, 0.05, True)
+        assert NoiseRange(0.01, 0.05).logarithmic is False
+
+    @pytest.mark.parametrize('low, high, message', [
+        (0.0, 0.05, "Both values must be positive and finite"),
+        (-0.01, 0.05, "Both values must be positive and finite"),
+        (0.01, float('inf'), "Both values must be positive and finite"),
+        (float('nan'), 0.05, "Both values must be positive and finite"),
+        (0.05, 0.01, r"The first value \(low\) must be less than the second \(high\)"),
+        (0.05, 0.05, r"The first value \(low\) must be less than the second \(high\)"),
+    ])
+    def test_invalid_range_rejected(self, low, high, message):
+        from dice.models.parameters import NoiseRange
+        with pytest.raises(ValueError, match=r"Invalid noise range \[.*\]\. " + message):
+            NoiseRange(low, high)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

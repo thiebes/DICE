@@ -199,3 +199,98 @@ class TestFormatQuantity:
     def test_format(self, value, decimals, reference, expected):
         from dice.io.results import format_quantity
         assert format_quantity(value, decimals, reference) == expected
+
+
+RANGE_RUNS = 45  # two CNR bins, of 23 and 22 runs
+
+
+@pytest.fixture(scope='module')
+def range_simulation(quick_test_parameters) -> MonteCarloOutput:
+    """quick_test.txt with an amplitude of 2 and a noise level drawn for each run."""
+    from dice.core.noise import make_noise_distribution
+    from dice.models.parameters import NoiseRange
+    params = quick_test_parameters
+    noise_range = NoiseRange(0.01, 0.05, logarithmic=False)
+    sim_params = create_parameters_from_legacy(
+        params | {'amplitude_0': 2.0}, params['nominal diffusion coefficient'],
+        params['nominal lifetime (tau)'], params['nominal diffusion length'])
+    return run_monte_carlo_simulation(
+        sim_params, params['x array'], params['time series'],
+        make_noise_distribution(0.01, 0.05, RANGE_RUNS, seed=8), num_runs=RANGE_RUNS,
+        multiprocessing=False, seed=9, noise_range=noise_range)
+
+
+class TestNoiseRangeOutputs:
+    """A simulation with a noise range: the CSV records each run's noise; the summary reports CNR bins."""
+
+    def test_csv_gains_the_noise_of_each_run(self, tmp_path, range_simulation, quick_test_simulation):
+        ranged = export_collated_results(range_simulation, tmp_path / 'range.csv')
+        fixed = export_collated_results(quick_test_simulation, tmp_path / 'fixed.csv')
+
+        expected_columns = list(fixed.columns)
+        expected_columns.insert(expected_columns.index('nominal CNR'), 'noise standard deviation')
+        assert list(ranged.columns) == expected_columns
+        assert 'noise standard deviation' not in fixed.columns
+        reloaded = load_results_csv(tmp_path / 'range.csv')
+        sigmas = [run.noise_sigma for run in range_simulation.run_results]
+        assert reloaded['noise standard deviation'].tolist() == pytest.approx(sigmas, rel=1e-15)
+        assert reloaded['nominal CNR'].to_numpy() == pytest.approx(2.0 / np.array(sigmas), rel=1e-15)
+        assert reloaded['run number'].tolist() == list(range(RANGE_RUNS))
+
+    def _summary(self, tmp_path, simulation, parameters, analysis) -> str:
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(simulation, summary_file, parameters, analysis)
+        return summary_file.read_text(encoding='utf-8')
+
+    def test_summary_reports_the_drawn_range(self, tmp_path, range_simulation, quick_test_parameters):
+        text = self._summary(tmp_path, range_simulation, quick_test_parameters,
+                             analyze_simulation_results(range_simulation))
+        sigmas = np.array(range_simulation.noise_values)
+
+        assert "Noise standard deviation values:" not in text
+        assert str(range_simulation.noise_values[0]) not in text  # no list of every value
+        assert (f"Noise standard deviation, drawn for each run:\n"
+                f"    {RANGE_RUNS} values from {sigmas.min():.4f} to {sigmas.max():.4f}"
+                f" (range 0.0100 to 0.0500)\n") in text
+        assert (f"Initial CNR (Contrast-to-Noise Ratio), drawn for each run:\n"
+                f"    {2 / sigmas.max():.3f} to {2 / sigmas.min():.3f}"
+                f" (range 40.000 to 200.000, uniform in CNR)\n") in text
+        assert "Number of runs:\n    45\n" in text
+
+    def test_summary_reports_each_cnr_bin(self, tmp_path, range_simulation, quick_test_parameters):
+        analysis = analyze_simulation_results(range_simulation)
+        text = self._summary(tmp_path, range_simulation, quick_test_parameters, analysis)
+
+        # Recompute the bins from the runs: sorted by CNR, the first 23 runs, then 22.
+        runs = sorted(range_simulation.run_results, key=lambda run: -run.noise_sigma)
+        bins = [runs[:23], runs[23:]]
+        assert "Statistics in bins of initial CNR with equal numbers of runs:\n" in text
+        for runs_in_bin in bins:
+            cnr = [2.0 / run.noise_sigma for run in runs_in_bin]
+            header = f"\nInitial CNR {min(cnr):.3f} to {max(cnr):.3f} ({len(runs_in_bin)} runs):\n"
+            assert header in text
+            section = text.split(header)[1].split("\nInitial CNR ")[0]
+            wls = np.array([run.wls_slope / 2 for run in runs_in_bin])
+            assert f"      Mean estimate:\n          {wls.mean():.5f} micrometer^2/nanosecond\n" in section
+            assert f"      Standard deviation:\n          {wls.std():.5f} micrometer^2/nanosecond\n" in section
+            within_10 = np.mean(np.abs(wls / 0.01 - 1) <= 0.1)
+            assert f"    Fraction within ±10% of nominal:\n      WLS: {within_10:.2%}" in section
+        # The pooled statistics of all runs are not reported.
+        assert "\nDiffusion Coefficient Estimate Statistics:" not in text
+        assert text.count("Diffusion Coefficient Estimate Statistics:") == 2
+        assert text.endswith("\n\nSimulation completed successfully.\n")
+
+    def test_summary_names_the_logarithmic_distribution(self, tmp_path, range_simulation,
+                                                        quick_test_parameters):
+        import dataclasses
+        from dice.models.parameters import NoiseRange
+        logarithmic = dataclasses.replace(range_simulation, noise_range=NoiseRange(0.01, 0.05, True))
+        text = self._summary(tmp_path, logarithmic, quick_test_parameters,
+                             analyze_simulation_results(logarithmic))
+        assert "(range 40.000 to 200.000, uniform in log10 of the CNR)\n" in text
+
+    def test_analysis_without_bins_is_rejected(self, tmp_path, range_simulation, quick_test_parameters):
+        analysis = analyze_simulation_results(range_simulation)
+        del analysis['cnr_bins']
+        with pytest.raises(KeyError, match='cnr_bins'):
+            self._summary(tmp_path, range_simulation, quick_test_parameters, analysis)

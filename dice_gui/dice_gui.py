@@ -1348,10 +1348,26 @@ class DiceGUI(QMainWindow):
         self.add_to_recent_files(file_path)
         self.update_window_title()
 
-        QMessageBox.information(
-            self, "Parameters Loaded",
-            f"Parameters loaded from:\n{file_path}"
-        )
+        from dice.io.parameters import NOISE_RANGE_KEYS
+
+        message = f"Parameters loaded from:\n{file_path}"
+        range_key = next((key for key in NOISE_RANGE_KEYS if key in params), None)
+        if range_key is None:
+            QMessageBox.information(self, "Parameters Loaded", message)
+        else:
+            # The GUI has no noise-range control, so say that it runs with its
+            # own noise setting instead.
+            QMessageBox.warning(
+                self, "Noise Range Not Editable",
+                f"{message}\n\n"
+                f"This file sets '{range_key}': {params[range_key]!r}, which gives each run "
+                "its own noise level, drawn at random from the range. The GUI cannot show, "
+                "edit, or run a noise range. A simulation run from the GUI uses the noise "
+                "setting on the Experimental Conditions tab instead, and saving the parameters "
+                "from the GUI replaces the range with that setting.\n\n"
+                "To simulate the noise range, run the file with the command-line interface:\n"
+                f'dice "{file_path}"'
+            )
 
     def _read_parameter_file(self, file_path: str) -> dict:
         """Parse a parameters.txt-format file into its dictionary.
@@ -1609,7 +1625,8 @@ class DiceGUI(QMainWindow):
             if 'nominal diffusion length' in params:
                 self.diffusion_length_input.setText(str(params['nominal diffusion length']))
 
-            # Noise (mutually exclusive)
+            # Noise (mutually exclusive). A noise range has no control here and
+            # leaves the noise fields as they are; load_parameters_from_file says so.
             if 'noise value' in params:
                 self.noise_fixed_radio.setChecked(True)
                 self.noise_value_input.setText(str(params['noise value']))

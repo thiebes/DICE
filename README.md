@@ -21,11 +21,11 @@ DICE also reports the fraction of estimates within a chosen proximity of the nom
 ### How it works
 
 1. **Generation of time-series profiles:** DICE simulates a population of excited states as a Gaussian profile that diffuses and decays. The initial profile has an amplitude (usually 1), a width given as the full width at half maximum (FWHM) or the standard deviation, a mean position (usually zero), and a baseline of zero.
-2. **Noise addition:** DICE adds white noise to the profiles. The noise has the same standard deviation at every time point. You give the standard deviation directly, or DICE derives it from a measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package.
+2. **Noise addition:** DICE adds white noise to the profiles. The noise has the same standard deviation at every time point. You give the standard deviation directly, or DICE derives it from a measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. With a noise range, each run draws its own standard deviation, so one simulation covers a range of CNR.
 3. **Gaussian fit:** DICE fits a Gaussian function to each noisy profile. The change of the fitted variance over time gives the mean squared displacement (MSD).
 4. **Linear fit and diffusion coefficient estimation:** DICE fits the variance against time with two linear fits, weighted least squares (WLS) and ordinary least squares (OLS). In one dimension, the slope of the fit is twice the estimated diffusion coefficient.
 5. **Analysis:** DICE compares the estimated diffusion coefficients with the nominal diffusion coefficient that generated the profiles. Because it repeats the simulation many times with the same parameters, the estimates form a distribution that shows the precision and accuracy of the measurement.
-6. **Presentation:** DICE writes a results file, a summary, and a histogram of the estimates.
+6. **Presentation:** DICE writes a results file, a summary, and a histogram of the estimates. With a noise range, the summary reports the statistics for bins of initial CNR, and a scatter plot of the estimates against the initial CNR replaces the histogram.
 
 ## Quick Start
 

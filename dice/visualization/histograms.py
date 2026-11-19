@@ -16,8 +16,9 @@ if os.environ.get('MPLBACKEND') is None:
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from scipy.stats import norm
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Sequence, Union, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -267,6 +268,144 @@ def plot_accuracy_histogram(
     try:
         plt.savefig(filename, dpi=dpi, format=image_type)
         logger.info("Accuracy histogram saved as: %s", filename)
+    except Exception as e:
+        logger.warning("Error saving file: %s", e)
+
+    return fig
+
+
+def accuracy_scatter_options(parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build the plot_accuracy_vs_cnr keyword arguments from a parameters dictionary.
+
+    The 'image ...' keys apply as they do to the histogram (histogram_options),
+    except 'image numbins', which a scatter plot does not use, and
+    'image x_lim', the limits of D_est/D_nom, which set the y-axis of the
+    scatter plot.
+
+    Raises
+    ------
+    ValueError
+        If 'image x_lim' is not two increasing finite numbers.
+    """
+    options = histogram_options(parameters)
+    options.pop('num_bins', None)
+    if 'x_lim' in options:
+        options['y_lim'] = options.pop('x_lim')
+    return options
+
+
+def plot_accuracy_vs_cnr(
+    cnr_values: Sequence[float],
+    d_est_over_d_nom: Sequence[float],
+    filename: str,
+    log_cnr: bool = False,
+    image_type: str = 'png',
+    width: float = 10.0,
+    height: float = 6.0,
+    dpi: float = 100,
+    font_size: float = 12,
+    tick_length: float = 4,
+    tick_width: float = 1,
+    y_lim: Optional[List[float]] = None
+) -> plt.Figure:
+    """
+    Scatter plot of the diffusion accuracy (D_est/D_nom) of each run against its initial CNR.
+
+    A simulation with a noise range draws this plot in place of the accuracy
+    histogram. A dashed line marks D_est/D_nom = 1.
+
+    Parameters
+    ----------
+    cnr_values : sequence of float
+        Nominal initial CNR of each run.
+    d_est_over_d_nom : sequence of float
+        Each run's diffusion coefficient estimate over the nominal value, in
+        the order of cnr_values.
+    filename : str
+        Output filename for the image.
+    log_cnr : bool
+        Whether the CNR axis is logarithmic, as suits a CNR drawn uniformly
+        in its logarithm.
+    image_type : str
+        Image format ('png', 'jpg', 'svg', etc.).
+    width : float
+        Width of the image in cm.
+    height : float
+        Height of the image in cm.
+    dpi : float
+        Resolution in dots per inch.
+    font_size : float
+        Font size for labels and text.
+    tick_length : float
+        Length of axis ticks in points.
+    tick_width : float
+        Width of axis ticks in points.
+    y_lim : list, optional
+        Limits [min, max] of the D_est/D_nom axis. If None, the mean ± 3
+        standard deviations of the finite ratios, as on the histogram's x-axis.
+
+    Returns
+    -------
+    plt.Figure
+        The matplotlib figure object.
+
+    Raises
+    ------
+    ValueError
+        If cnr_values and d_est_over_d_nom differ in length.
+    """
+    cnr = np.asarray(cnr_values, dtype=float)
+    ratios = np.asarray(d_est_over_d_nom, dtype=float)
+    if cnr.shape != ratios.shape:
+        raise ValueError(
+            f"cnr_values and d_est_over_d_nom differ in length: {cnr.size} and {ratios.size}")
+
+    # Convert width and height from cm to inches
+    inch = 1/2.54
+    colors = get_color_definitions()
+    fig, ax = plt.subplots(layout='constrained', figsize=(width * inch, height * inch))
+
+    ax.scatter(cnr, ratios, s=12, color=colors['dice_blue'], alpha=0.5, edgecolors='none')
+    ax.axhline(1.0, color=colors['dice_gold'], linewidth=2, linestyle='--')
+
+    if log_cnr:
+        # Plain numbers at each power of ten, and also at 2 and 5 times each
+        # one when the CNR spans two decades or less, so that a range of one
+        # decade has more than two labels.
+        ax.set_xscale('log')
+        positive_cnr = cnr[np.isfinite(cnr) & (cnr > 0)]
+        decades = np.log10(positive_cnr.max() / positive_cnr.min()) if positive_cnr.size else 0.0
+        ax.xaxis.set_major_locator(LogLocator(subs=(1.0, 2.0, 5.0) if decades <= 2 else (1.0,)))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f'{value:g}'))
+        ax.xaxis.set_minor_formatter(NullFormatter())
+    ax.set_xlabel('Initial CNR', fontsize=font_size)
+    ax.set_ylabel('$D_{est}/D_{nom}$', fontsize=font_size)
+
+    # Default y-axis limits: the 99.97% interval of a normal distribution, as for the histogram
+    finite_ratios = ratios[np.isfinite(ratios)]
+    if y_lim is None and finite_ratios.size > 0:
+        mean, std = np.mean(finite_ratios), np.std(finite_ratios)
+        y_lim = [mean - 3 * std, mean + 3 * std] if std > 0 else [mean - 0.1, mean + 0.1]
+    if y_lim is not None:
+        ax.set_ylim(y_lim)
+
+    ax.tick_params(
+        axis='both',
+        which='both',
+        labelsize=font_size,
+        direction='in',
+        length=tick_length,
+        width=tick_width
+    )
+
+    # Make background white and opaque
+    fig.patch.set_facecolor('w')
+    fig.patch.set_alpha(1)
+
+    try:
+        plt.savefig(filename, dpi=dpi, format=image_type)
+        logger.info("Accuracy scatter plot saved as: %s", filename)
     except Exception as e:
         logger.warning("Error saving file: %s", e)
 

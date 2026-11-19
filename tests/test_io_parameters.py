@@ -652,5 +652,125 @@ class TestRetiredProximityLevel:
         assert len(check_retired_parameters({'proximity level': 0.1})) == 1
 
 
+class TestNoiseRangeDraws:
+    """A noise range draws one noise sigma for each run from the parser's seed, uniformly in 1/sigma or its log."""
+
+    RUNS = 20000
+    LOW, HIGH = 0.01, 0.05
+
+    def _parsed(self, key='noise range, reciprocal', runs=None, value=None, seed=None) -> dict:
+        import ast
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params[key] = [self.LOW, self.HIGH] if value is None else value
+        params['number of runs'] = self.RUNS if runs is None else runs
+        return parameter_parser(params, seed=seed)
+
+    @pytest.mark.parametrize('key, logarithmic', [
+        ('noise range, reciprocal', False), ('noise_range_reciprocal', False),
+        ('noise range, reciprocal log', True), ('noise_range_reciprocal_log', True),
+    ])
+    def test_one_value_per_run_and_the_range_is_recognized(self, key, logarithmic):
+        from dice.io.parameters import noise_range_from_parameters
+        from dice.models.parameters import NoiseRange
+        parsed = self._parsed(key, runs=7, seed=1)
+        assert len(parsed['noise series']) == 7
+        assert len(set(parsed['noise series'])) == 7
+        assert noise_range_from_parameters(parsed) == NoiseRange(self.LOW, self.HIGH, logarithmic)
+
+    @pytest.mark.parametrize('noise_key', ['noise value', 'estimate noise from data'])
+    def test_fixed_noise_has_no_range(self, noise_key):
+        import ast
+        import warnings
+        from dice.io.parameters import noise_range_from_parameters
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        if noise_key != 'noise value':
+            del params['noise value']
+            params[noise_key] = str(EXAMPLE_PROFILE)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # the example profile's narrow-peak warning
+            parsed = parameter_parser(params)
+        assert len(parsed['noise series']) == 1
+        assert noise_range_from_parameters(parsed) is None
+
+    @pytest.mark.parametrize('key, transform', [
+        ('noise range, reciprocal', lambda sigma: 1 / sigma),
+        ('noise range, reciprocal log', lambda sigma: np.log10(1 / sigma)),
+    ])
+    def test_draws_are_uniform_within_the_range(self, key, transform):
+        """1/sigma (or its log10) of 20000 draws lies in the range and is uniform within sampling error."""
+        from numpy.random import SeedSequence
+        from scipy.stats import kstest
+        values = transform(np.array(self._parsed(key, seed=SeedSequence(5))['noise series']))
+        low, high = transform(self.HIGH), transform(self.LOW)
+
+        # In range, up to rounding in the reciprocal and the logarithm.
+        assert values.min() >= low * (1 - 1e-12) and values.max() <= high * (1 + 1e-12)
+        # 20 equal-width bins: each count is binomial(n, 1/20), so it lies within 5
+        # standard deviations of n/20 unless the draw is not uniform (the chance
+        # that one of 20 bins of a uniform draw does not is about 1e-5).
+        counts, _ = np.histogram(values, bins=20, range=(low, high))
+        assert counts.sum() == self.RUNS
+        assert np.all(np.abs(counts - self.RUNS / 20) <= 5 * np.sqrt(self.RUNS * (1 / 20) * (19 / 20)))
+        # The mean of a uniform variable lies within 5 standard errors of the midpoint.
+        standard_error = (high - low) / np.sqrt(12) / np.sqrt(self.RUNS)
+        assert abs(values.mean() - (low + high) / 2) <= 5 * standard_error
+        assert kstest(values, 'uniform', args=(low, high - low)).pvalue > 1e-4
+
+    @pytest.mark.parametrize('key, other_transform', [
+        ('noise range, reciprocal', lambda sigma: np.log10(1 / sigma)),
+        ('noise range, reciprocal log', lambda sigma: 1 / sigma),
+    ])
+    def test_the_other_scale_is_not_uniform(self, key, other_transform):
+        """The uniformity check tells the two keys apart: over a 5-fold range the other scale is far from uniform."""
+        from numpy.random import SeedSequence
+        from scipy.stats import kstest
+        values = other_transform(np.array(self._parsed(key, seed=SeedSequence(5))['noise series']))
+        low, high = other_transform(self.HIGH), other_transform(self.LOW)
+        assert kstest(values, 'uniform', args=(low, high - low)).pvalue < 1e-10
+
+    def test_seed_reproduces_the_draws(self):
+        from numpy.random import SeedSequence
+        first = self._parsed(runs=50, seed=SeedSequence(9))['noise series']
+        assert self._parsed(runs=50, seed=SeedSequence(9))['noise series'] == first
+        assert self._parsed(runs=50, seed=SeedSequence(10))['noise series'] != first
+
+    @pytest.mark.parametrize('value, message', [
+        ([0.1], "Invalid noise range [0.1]. Must be two numeric values."),
+        ([0.01, 0.02, 0.03], "Invalid noise range [0.01, 0.02, 0.03]. Must be two numeric values."),
+        ([0.01, 'high'], "Invalid noise range [0.01, 'high']. Must be two numeric values."),
+        ([True, 0.05], "Invalid noise range [True, 0.05]. Must be two numeric values."),
+        (0.05, "Invalid noise range 0.05. Must be two numeric values."),
+        ([0, 0.05], "Invalid noise range [0, 0.05]. Both values must be positive and finite."),
+        ([-0.01, 0.05], "Invalid noise range [-0.01, 0.05]. Both values must be positive and finite."),
+        ([0.01, float('inf')], "Invalid noise range [0.01, inf]. Both values must be positive and finite."),
+        ([0.05, 0.01],
+         "Invalid noise range [0.05, 0.01]. The first value (low) must be less than the second (high)."),
+        ([0.05, 0.05],
+         "Invalid noise range [0.05, 0.05]. The first value (low) must be less than the second (high)."),
+    ])
+    @pytest.mark.parametrize('key', ['noise range, reciprocal', 'noise range, reciprocal log'])
+    def test_malformed_range_rejected(self, key, value, message):
+        import re
+        with pytest.raises(ValueError, match=re.escape(message)):
+            self._parsed(key, runs=5, value=value)
+
+    @pytest.mark.parametrize('runs, error', [
+        (0, ValueError), (-3, ValueError), (2.5, TypeError), ('ten', TypeError)])
+    def test_number_of_runs_must_be_a_positive_integer(self, runs, error):
+        with pytest.raises(error, match="'number of runs' must be"):
+            self._parsed(runs=runs)
+
+    def test_file_with_malformed_range_is_rejected_by_name(self, tmp_path):
+        import ast
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params['noise range, reciprocal log'] = [0.05, 0.01]
+        params_file = tmp_path / 'bad_range.txt'
+        params_file.write_text(str(params))
+        with pytest.raises(ValueError, match=r"Invalid noise range \[0\.05, 0\.01\]\. The first value"):
+            open_parameters(params_file)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

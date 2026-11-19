@@ -13,6 +13,9 @@ uv run dice data/examples/parameters.txt
 
 # Short test run (100 runs)
 uv run dice data/examples/quick_test.txt
+
+# Accuracy over a range of initial CNR (100 runs, a noise level drawn for each)
+uv run dice data/examples/noise_range.txt
 ```
 
 The examples on this page use the files in `data/examples/` and assume that you run them from the `DICE` directory. With pip, leave out `uv run`.
@@ -60,10 +63,10 @@ dice [options] parameters_file
 | `--verbose`, `-v` | Print the settings, the size of the simulation, and progress messages. |
 | `--quiet`, `-q` | Print errors only. |
 | `--output-dir DIR`, `-o DIR` | Write the output files to `DIR` instead of `output/<slug>/`. |
-| `--no-plots` | Do not create the histogram. |
+| `--no-plots` | Do not create the plot: the histogram, or the scatter plot of a noise range. |
 | `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
 | `--seed N` | Use the random seed `N` (a non-negative integer) for the noise. See [Reproducible results](#reproducible-results). |
-| `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. `both` writes both files. |
+| `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. With a noise range, it also has the noise standard deviation of each run and the statistics of each CNR bin. `both` writes both files. |
 | `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
 | `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
 | `--dry-run`, `--check` | Load and validate the parameters file as a real run would, then stop without a simulation and without writing files. |
@@ -72,7 +75,7 @@ dice [options] parameters_file
 
 ### Reproducible results
 
-With `--seed N`, repeated runs with the same parameters and the same seed give identical results. The serial and the parallel calculation also give the same results as each other. Without `--seed`, each run draws new random numbers, so the results differ slightly from one run to the next.
+With `--seed N`, repeated runs with the same parameters and the same seed give identical results. The serial and the parallel calculation also give the same results as each other. With a noise range, the seed also reproduces the noise level that each run draws. Without `--seed`, each run draws new random numbers, so the results differ slightly from one run to the next.
 
 ```bash
 dice data/examples/quick_test.txt --seed 12345
@@ -90,6 +93,7 @@ One row for each run. The main columns are:
 | ------- | ------------- |
 | `run number` | Index of the run |
 | `nominal diffusion coeff`, `nominal lifetime`, `nominal diffusion length` | Nominal values, in the simulation units |
+| `noise standard deviation` | Noise standard deviation of the run. Only with a noise range, where each run draws its own. |
 | `nominal CNR` | `amplitude_0` / noise standard deviation |
 | `estimated CNR` | CNR of the noisy profile at the first time point, estimated with the [fft-cnr](https://pypi.org/project/fft-cnr/) package |
 | `nominal sigma^2_0`, `estimated sigma^2_0` | Variance of the initial profile: nominal value, and fitted value at the first time point |
@@ -113,9 +117,20 @@ A text report that contains:
 
 Each value with a unit is followed by that unit. The standard deviation, mean, bias, and RMSE are in the unit of the nominal diffusion coefficient, for example `micrometer^2/nanosecond`: the global units, or the output units that `output_diffusion_length_unit` and `output_diffusion_time_unit` set. The relative standard error and the fractions have no unit.
 
+With a [noise range](parameters.md#noise-range-reciprocal-and-noise-range-reciprocal-log), the runs differ in initial CNR, and statistics of all runs together would mix low-CNR and high-CNR runs. In place of the noise level and the initial CNR, the summary reports:
+
+- the number of noise standard deviations drawn, their lowest and highest values, and the range they were drawn from
+- the lowest and highest initial CNR of the runs, the CNR range of the parameters, and whether the CNR or its logarithm is uniformly distributed
+
+In place of the statistics of all runs, it gives the same statistics for each bin of initial CNR. DICE sorts the runs by initial CNR and splits them into consecutive bins with equal numbers of runs; the sizes differ by one at most, and the bins with lower CNR take the extra runs. The number of bins is 5, or fewer so that each bin has at least 20 runs: the number of runs divided by 20 and rounded down, but at least 1 and at most 5. For example, 100 or more runs give 5 bins, 50 runs give 2 bins, and fewer than 40 runs give 1 bin. Each bin is headed by its lowest and highest initial CNR and its number of runs, for example `Initial CNR 10.259 to 19.884 (20 runs):`.
+
 ### Histogram: `<slug>_accuracy_histogram.png`
 
 A histogram of the ratio D_est/D_nom of the WLS estimates to the nominal diffusion coefficient. The y-axis shows the probability of each bin. A normal distribution with the same mean and standard deviation is drawn over the histogram, and a legend reports the mean, median, and standard deviation of the ratio. The file type follows the `image type` parameter.
+
+### Scatter plot: `<slug>_accuracy_vs_cnr.png`
+
+A simulation with a noise range writes this plot in place of the histogram. Each point is one run: the ratio D_est/D_nom of its WLS estimate on the y-axis, and its initial CNR on the x-axis. A dashed line marks D_est/D_nom = 1. The CNR axis is logarithmic for `noise range, reciprocal log`. The y-axis spans the mean ± 3 standard deviations of the ratios, or the limits that `image x_lim` sets. The other plot parameters apply as to the histogram, except `image numbins`.
 
 ## Use DICE from Python
 
@@ -136,6 +151,8 @@ print(f"Within ±15%: {analysis['precision']['15%']['wls']:.1%}")
 ```
 
 `analysis["accuracy"]` contains the mean, median, standard deviation, bias, relative bias, RMSE, and relative RMSE of the estimates for each fit (`"wls"` and `"ols"`). `analysis["precision"]` contains the fraction of estimates within each proximity level. The estimates are in the simulation units.
+
+For a simulation with a noise range, `analysis["cnr_bins"]` lists the CNR bins of the summary file, from the lowest CNR to the highest. Each bin has its lowest and highest initial CNR (`"cnr_min"`, `"cnr_max"`), its number of runs (`"num_runs"`), and `"precision"`, `"accuracy"`, and `"statistics"` entries for its runs, in the same form as those of the whole simulation. `result.noise_values` holds the noise standard deviation of each run, in run order.
 
 ### Run the CLI from Python
 
@@ -208,6 +225,8 @@ for noise in [0.01, 0.02, 0.05]:
 ```
 
 Each value writes its results to `output/scan_noise_<value>/`.
+
+To study the effect of the noise level, a noise range does the same in one simulation: each run draws its own noise level, and the summary reports the statistics for each bin of initial CNR (see [`noise range, reciprocal` and `noise range, reciprocal log`](parameters.md#noise-range-reciprocal-and-noise-range-reciprocal-log)).
 
 ## Performance
 

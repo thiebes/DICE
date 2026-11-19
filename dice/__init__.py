@@ -43,7 +43,7 @@ def dice_runner(parameters_filename):
     MonteCarloOutput
         The simulation results.
     """
-    from .io.parameters import open_parameters
+    from .io.parameters import noise_range_from_parameters, open_parameters
     from .analysis.simulation import run_monte_carlo_simulation
     from .analysis.statistics import analyze_simulation_results
     from .utils.legacy_compatibility import create_parameters_from_legacy
@@ -71,7 +71,8 @@ def dice_runner(parameters_filename):
         noise_values=parameters['noise series'],
         num_runs=parameters['number of runs'],
         multiprocessing=parameters.get('multiprocessing', 1) != 0,
-        retain_profile_data=parameters.get('retain profile data', 0) != 0
+        retain_profile_data=parameters.get('retain profile data', 0) != 0,
+        noise_range=noise_range_from_parameters(parameters),
     )
 
     # Analyze results

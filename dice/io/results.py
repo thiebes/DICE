@@ -91,6 +91,9 @@ def export_collated_results(
     """
     Export collated results to CSV file.
 
+    One row per run. For a simulation with a noise range, the column 'noise
+    standard deviation', before 'nominal CNR', holds each run's noise level.
+
     Parameters
     ----------
     results : MonteCarloOutput
@@ -140,11 +143,16 @@ def export_collated_results(
             'nominal diffusion coeff': run.nominal_diffusion_coefficient,
             'nominal lifetime': run.nominal_lifetime,
             'nominal diffusion length': run.nominal_diffusion_length,
+        }
+        # With a noise range each run has its own noise level, so it gets a column.
+        if results.noise_range is not None:
+            row['noise standard deviation'] = run.noise_sigma
+        row.update({
             'nominal CNR': nominal_cnr(amplitude_0, run.noise_sigma),
             'estimated CNR': run.cnr_0_estimate,
             'nominal sigma^2_0': run.nominal_sigma2_0,
             'estimated sigma^2_0': run.estimated_sigma2_0,
-        }
+        })
 
         # One block of columns per estimator with a fit for this run, in registry order
         for spec in ESTIMATORS:
@@ -188,6 +196,11 @@ def write_summary_file(
     """
     Write comprehensive summary file.
 
+    For a simulation with a noise range, the summary reports the number of
+    noise values drawn, their range and the range of the initial CNR, and the
+    statistics of each bin of initial CNR (analysis['cnr_bins']) in place of
+    the statistics of all runs together.
+
     Parameters
     ----------
     results : MonteCarloOutput
@@ -197,7 +210,7 @@ def write_summary_file(
     parameters : dict
         Simulation parameters.
     analysis : dict, optional
-        Analysis results.
+        Analysis results, as from analyze_simulation_results.
     length_unit : str
         Unit of length.
     time_unit : str
@@ -222,6 +235,64 @@ def write_summary_file(
         """A diffusion coefficient in d_unit, in the format the nominal value sets."""
         return format_quantity(in_d_unit(value), 5, reference=nominal_d_in_unit)
 
+    amplitude_0 = results.parameters.profile.amplitude_0
+    noise_range = results.noise_range
+    # The lowest CNR of a noise range sets the format of all its CNR values.
+    lowest_cnr = nominal_cnr(amplitude_0, noise_range.high) if noise_range is not None else None
+
+    def cnr_text(value: float) -> str:
+        """An initial CNR of a simulation with a noise range, in the format its lowest CNR sets."""
+        return format_quantity(value, 3, reference=lowest_cnr)
+
+    def write_noise_range(f: TextIO) -> None:
+        """The noise sigma and initial CNR drawn for the runs, and the range they were drawn from."""
+        drawn = results.noise_values
+
+        def sigma_text(value: float) -> str:
+            return format_quantity(value, 4, reference=noise_range.low)
+
+        # CNR is amplitude_0 / sigma, so the highest noise gives the lowest CNR.
+        distribution = 'uniform in log10 of the CNR' if noise_range.logarithmic else 'uniform in CNR'
+        f.write("Noise standard deviation, drawn for each run:\n")
+        f.write(f"    {len(drawn)} values from {sigma_text(min(drawn))} to {sigma_text(max(drawn))}"
+                f" (range {sigma_text(noise_range.low)} to {sigma_text(noise_range.high)})\n")
+        f.write("Initial CNR (Contrast-to-Noise Ratio), drawn for each run:\n")
+        f.write(f"    {cnr_text(nominal_cnr(amplitude_0, max(drawn)))} to "
+                f"{cnr_text(nominal_cnr(amplitude_0, min(drawn)))} (range {cnr_text(lowest_cnr)} to "
+                f"{cnr_text(nominal_cnr(amplitude_0, noise_range.low))}, {distribution})\n")
+
+    nominal_d = (analysis or {}).get('summary', {}).get('nominal_diffusion_coefficient', None)
+
+    def write_estimate_statistics(f: TextIO, statistics: Dict[str, Any], indent: str) -> None:
+        """The accuracy and precision of each estimator's D estimates, each line after `indent`."""
+        if 'accuracy' in statistics:
+            f.write(f"{indent}Diffusion Coefficient Estimate Statistics:\n")
+            for spec in in_display_order(statistics['accuracy']):
+                metrics = statistics['accuracy'][spec.key]
+                f.write(f"{indent}  {spec.summary_name}:\n")
+                f.write(f"{indent}    Standard deviation:\n")
+                f.write(f"{indent}        {d_text(metrics['std'])} {d_unit}\n")
+                if nominal_d and nominal_d != 0:
+                    rse = metrics['std'] / nominal_d
+                    f.write(f"{indent}    Relative standard error:\n")
+                    f.write(f"{indent}        {rse:.3f}\n")
+                f.write(f"{indent}    Mean estimate:\n")
+                f.write(f"{indent}        {d_text(metrics['mean'])} {d_unit}\n")
+                f.write(f"{indent}    Bias (mean - nominal):\n")
+                f.write(f"{indent}        {d_text(metrics['bias'])} {d_unit}\n")
+                f.write(f"{indent}    Root Mean Square Error:\n")
+                f.write(f"{indent}        {d_text(metrics['rmse'])} {d_unit}\n")
+
+        if 'precision' in statistics:
+            f.write(f"\n{indent}Precision at standard thresholds:\n")
+            for level, values in statistics['precision'].items():
+                f.write(f"{indent}  Fraction within ±{level} of nominal:\n")
+                # One line in display order, e.g. "    WLS: 19.00%    OLS: 15.00%"
+                f.write(indent + "".join(
+                    f"    {spec.short_name}: {values[spec.key]:.2%}"
+                    for spec in in_display_order(values)
+                ) + "\n")
+
     with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
@@ -244,10 +315,13 @@ def write_summary_file(
             time_scale = max(abs(time_series[0]), abs(time_series[-1]))
             f.write(f"    {format_quantity(time_series[0], 3, time_scale)} to "
                     f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}\n")
-        f.write(f"Noise standard deviation values:\n")
-        f.write(f"    {results.noise_values}\n")
-        f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
-        f.write(f"    {nominal_cnr(results.parameters.profile.amplitude_0, results.noise_values[0]):.3f}\n")
+        if noise_range is None:
+            f.write(f"Noise standard deviation values:\n")
+            f.write(f"    {results.noise_values}\n")
+            f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
+            f.write(f"    {nominal_cnr(amplitude_0, results.noise_values[0]):.3f}\n")
+        else:
+            write_noise_range(f)
         f.write(f"Initial profile squared width (sigma^2):\n")
         f.write(f"    {format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2\n")
         f.write(f"Nominal diffusion length:\n")
@@ -263,34 +337,15 @@ def write_summary_file(
             f.write("Analysis Results:\n")
             f.write("-" * 30 + "\n")
 
-            if 'accuracy' in analysis:
-                f.write("Diffusion Coefficient Estimate Statistics:\n")
-                for spec in in_display_order(analysis['accuracy']):
-                    metrics = analysis['accuracy'][spec.key]
-                    f.write(f"  {spec.summary_name}:\n")
-                    f.write(f"    Standard deviation:\n")
-                    f.write(f"        {d_text(metrics['std'])} {d_unit}\n")
-                    nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
-                    if nominal_d and nominal_d != 0:
-                        rse = metrics['std'] / nominal_d
-                        f.write(f"    Relative standard error:\n")
-                        f.write(f"        {rse:.3f}\n")
-                    f.write(f"    Mean estimate:\n")
-                    f.write(f"        {d_text(metrics['mean'])} {d_unit}\n")
-                    f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {d_text(metrics['bias'])} {d_unit}\n")
-                    f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {d_text(metrics['rmse'])} {d_unit}\n")
-
-            if 'precision' in analysis:
-                f.write("\nPrecision at standard thresholds:\n")
-                for level, values in analysis['precision'].items():
-                    f.write(f"  Fraction within ±{level} of nominal:\n")
-                    # One line in display order, e.g. "    WLS: 19.00%    OLS: 15.00%"
-                    f.write("".join(
-                        f"    {spec.short_name}: {values[spec.key]:.2%}"
-                        for spec in in_display_order(values)
-                    ) + "\n")
+            if noise_range is None:
+                write_estimate_statistics(f, analysis, indent="")
+            else:
+                # Statistics pooled over a range of CNR would mix noise regimes.
+                f.write("Statistics in bins of initial CNR with equal numbers of runs:\n")
+                for cnr_bin in analysis['cnr_bins']:
+                    f.write(f"\nInitial CNR {cnr_text(cnr_bin['cnr_min'])} to "
+                            f"{cnr_text(cnr_bin['cnr_max'])} ({cnr_bin['num_runs']} runs):\n")
+                    write_estimate_statistics(f, cnr_bin, indent="  ")
 
             f.write("\n")
         

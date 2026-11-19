@@ -17,6 +17,7 @@ from .plots import (
 
 from .histograms import (
     plot_accuracy_histogram,
+    plot_accuracy_vs_cnr,
     plot_diffusion_coefficient_histogram,
     plot_cnr_histogram,
     plot_precision_vs_parameter,
@@ -34,6 +35,7 @@ __all__ = [
     
     # Histograms and distributions
     'plot_accuracy_histogram',
+    'plot_accuracy_vs_cnr',
     'plot_diffusion_coefficient_histogram',
     'plot_cnr_histogram',
     'plot_precision_vs_parameter',
