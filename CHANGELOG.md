@@ -28,7 +28,10 @@ results with 1.2.0.
   and offers output presets for publication, presentation, and draft figures.
   It has light and dark themes, Alt-key shortcuts for the input fields, and a
   list of the shortcuts under Help. Stop ends a serial run after the current
-  run and a parallel run after the current batch of runs.
+  run and a parallel run after the current batch of runs. The GUI saves
+  results in `output/<slug>/` in the folder it was started from, or in
+  `DICE/output/<slug>/` in the user's Documents folder when it cannot write
+  there, as when the macOS Finder starts the standalone application.
 - GUI warnings before a run for settings that make the fits unreliable: a low
   CNR at the last time point, an initial profile that is narrow compared with
   the pixel size, or very few time points.
