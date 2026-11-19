@@ -180,3 +180,22 @@ class TestLoadMultipleResults:
         (tmp_path / 'empty.csv').write_text('')
         with pytest.raises(ValueError, match="No valid CSV files"):
             load_multiple_results(tmp_path)
+
+
+class TestFormatQuantity:
+    """Fixed decimals unless they would show fewer than two significant digits."""
+
+    @pytest.mark.parametrize('value, decimals, reference, expected', [
+        (0.01, 5, None, '0.01000'),
+        (12.5, 3, None, '12.500'),
+        (0.0, 3, None, '0.000'),
+        (float('inf'), 3, None, 'inf'),
+        (1e-14, 5, None, '1.00000e-14'),
+        (0.0001, 5, None, '0.00010'),
+        (0.00009, 5, None, '9.00000e-05'),
+        (0.0004, 5, 1e-6, '4.00000e-04'),
+        (-3e-7, 5, 0.01, '-0.00000'),
+    ])
+    def test_format(self, value, decimals, reference, expected):
+        from dice.io.results import format_quantity
+        assert format_quantity(value, decimals, reference) == expected

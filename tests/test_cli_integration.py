@@ -502,6 +502,43 @@ def summary_label_to_values(summary: str) -> dict[str, list[str]]:
     return label_to_values
 
 
+class TestSmallValuesInSummary:
+    """In meters and seconds the summary shows small values in scientific notation, not as zero."""
+
+    @pytest.fixture(scope='class')
+    def meter_second_run(self, tmp_path_factory) -> CliRun:
+        # quick_test.txt restated in meters and seconds: lengths scale by 1e-6, and the
+        # time values keep their numbers with a lifetime of 1 second, so D = L^2 = 1e-14 m^2/s.
+        params = ast.literal_eval(QUICK_TEST.read_text())
+        overrides: dict[str, Any] = {'length unit': 'meter', 'time unit': 'second', 'number of runs': 10}
+        for key in ('FWHM_0', 'spatial width', 'nominal diffusion length'):
+            overrides[key] = params[key] * 1e-6
+        workdir = tmp_path_factory.mktemp('meter')
+        return run_cli(workdir, write_quick_test_variant(workdir, 'units_m_s', overrides), 'units_m_s', '--no-plots')
+
+    def test_no_value_prints_as_zero(self, meter_second_run):
+        assert meter_second_run.exit_code == 0
+        values = summary_label_to_values(meter_second_run.read_summary())
+        nominal_d, unit = values['Nominal diffusion coefficient'][0].split(' ', 1)
+        assert unit == 'meter^2/second'
+        assert float(nominal_d) == pytest.approx(1e-14, rel=1e-5)
+        assert 'e-' in nominal_d
+        for label in ('Nominal diffusion length', 'Initial profile squared width (sigma^2)'):
+            number = values[label][0].split(' ', 1)[0]
+            assert float(number) > 0 and 'e-' in number, (label, number)
+
+    def test_estimate_lines_share_the_nominal_format(self, meter_second_run):
+        summary = meter_second_run.read_summary()
+        values = summary_label_to_values(summary)
+        csv = meter_second_run.read_csv()
+        for label in ('Standard deviation', 'Mean estimate', 'Root Mean Square Error'):
+            for line in values[label]:
+                number, unit = line.split(' ', 1)
+                assert unit == 'meter^2/second' and 'e' in number, (label, line)
+        wls_mean = float(values['Mean estimate'][0].split(' ', 1)[0])
+        assert wls_mean == pytest.approx(csv[WLS_D_COLUMN].mean() * 1e-4, rel=1e-5)
+
+
 class TestQuickTestOutputSchema:
     """Pins the output files, CSV columns, and summary structure for data/examples/quick_test.txt.
 

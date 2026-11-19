@@ -45,6 +45,22 @@ def summary_diffusion_units(
     return output_units.diffusion_length or length_unit, output_units.diffusion_time or time_unit
 
 
+def format_quantity(value: float, decimals: int, reference: Optional[float] = None) -> str:
+    """
+    Format a number for the summary with a fixed number of decimals, or in
+    scientific notation when fixed decimals would show fewer than two
+    significant digits of `reference` (default: the value itself).
+
+    Passing one reference for a group of values (for example the nominal
+    diffusion coefficient for all diffusion-coefficient lines) keeps the group
+    in one format. Zero, infinite and NaN references keep the fixed format.
+    """
+    reference = value if reference is None else reference
+    if np.isfinite(reference) and reference != 0 and abs(reference) < 10.0 ** (1 - decimals):
+        return f"{value:.{decimals}e}"
+    return f"{value:.{decimals}f}"
+
+
 def print_and_append(filename: Union[str, Path], message: str, print_to_console: bool = True) -> None:
     """
     Print message to console and append to file.
@@ -200,6 +216,12 @@ def write_summary_file(
         """A diffusion coefficient in simulation units, converted to d_unit."""
         return convert_diffusion_coefficient(value, length_unit, time_unit, d_length_unit, d_time_unit)
 
+    nominal_d_in_unit = in_d_unit(results.parameters.physics.diffusion_coefficient)
+
+    def d_text(value: float) -> str:
+        """A diffusion coefficient in d_unit, in the format the nominal value sets."""
+        return format_quantity(in_d_unit(value), 5, reference=nominal_d_in_unit)
+
     with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
@@ -219,17 +241,19 @@ def write_summary_file(
         f.write(f"    {len(time_series)} frames\n")
         if len(time_series) > 0:
             f.write(f"Time range:\n")
-            f.write(f"    {time_series[0]:.3f} to {time_series[-1]:.3f} {time_unit}\n")
+            time_scale = max(abs(time_series[0]), abs(time_series[-1]))
+            f.write(f"    {format_quantity(time_series[0], 3, time_scale)} to "
+                    f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}\n")
         f.write(f"Noise standard deviation values:\n")
         f.write(f"    {results.noise_values}\n")
         f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
         f.write(f"    {nominal_cnr(results.parameters.profile.amplitude_0, results.noise_values[0]):.3f}\n")
         f.write(f"Initial profile squared width (sigma^2):\n")
-        f.write(f"    {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
+        f.write(f"    {format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2\n")
         f.write(f"Nominal diffusion length:\n")
-        f.write(f"    {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
+        f.write(f"    {format_quantity(results.parameters.physics.diffusion_length, 3)} {length_unit}\n")
         f.write(f"Nominal diffusion coefficient:\n")
-        f.write(f"    {in_d_unit(results.parameters.physics.diffusion_coefficient):.5f} {d_unit}\n")
+        f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
         f.write(f"    {results.parameters.physics.lifetime} {time_unit}\n")
         f.write("\n")
@@ -245,18 +269,18 @@ def write_summary_file(
                     metrics = analysis['accuracy'][spec.key]
                     f.write(f"  {spec.summary_name}:\n")
                     f.write(f"    Standard deviation:\n")
-                    f.write(f"        {in_d_unit(metrics.get('std', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {d_text(metrics.get('std', np.nan))} {d_unit}\n")
                     nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
                     if nominal_d and nominal_d != 0:
                         rse = metrics.get('std', 0) / nominal_d
                         f.write(f"    Relative standard error:\n")
                         f.write(f"        {rse:.3f}\n")
                     f.write(f"    Mean estimate:\n")
-                    f.write(f"        {in_d_unit(metrics.get('mean', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {d_text(metrics.get('mean', np.nan))} {d_unit}\n")
                     f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {in_d_unit(metrics.get('bias', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {d_text(metrics.get('bias', np.nan))} {d_unit}\n")
                     f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {in_d_unit(metrics.get('rmse', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {d_text(metrics.get('rmse', np.nan))} {d_unit}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")
