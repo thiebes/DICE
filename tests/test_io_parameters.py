@@ -2,6 +2,8 @@
 Tests for dice.io.parameters module.
 """
 
+import re
+
 import pytest
 import numpy as np
 import tempfile
@@ -516,6 +518,17 @@ class TestEstimateNoiseFromData:
         bad_file.write_text(text)
         params_file = self._write_parameters(tmp_path, bad_file, 1.0)
         with pytest.raises(ValueError, match="Error reading CSV"):
+            open_parameters(params_file)
+
+    def test_profile_of_several_lines_rejected(self, tmp_path):
+        """The measured profile is one line; a file of several profiles is named as such, not as a shape error."""
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        two_lines = tmp_path / 'two_profiles.csv'
+        np.savetxt(two_lines, np.vstack([measured, measured]), delimiter=',', fmt='%.17g')
+        params_file = self._write_parameters(tmp_path, two_lines, 1.0)
+        with pytest.raises(ValueError, match=re.escape(
+                f"The measured profile {str(two_lines)!r} must be a single line of comma-separated "
+                f"values; it has 2 lines of {measured.size} values.")):
             open_parameters(params_file)
 
     def test_missing_amplitude_rejected(self):
