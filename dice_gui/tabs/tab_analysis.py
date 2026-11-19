@@ -141,6 +141,11 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     return tab
 
 
+def selected_estimator_key(main_window: "DiceGUI") -> str:
+    """Key of the estimator the Fit Method radio buttons select (dice.models.estimators)."""
+    return 'wls' if main_window.plot_method_wls_radio.isChecked() else 'ols'
+
+
 def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
     """Handle proximity spin box value change — update label, target, and fraction."""
     pct = int(round(value * 100))
@@ -150,7 +155,7 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
     # Recalculate fraction if results are available
     if main_window.interface.last_result is not None:
         fraction = main_window.interface.calculate_proximity_on_demand(
-            value, use_wls=main_window.plot_method_wls_radio.isChecked()
+            value, estimator=selected_estimator_key(main_window)
         )
         if fraction is not None:
             main_window.proximity_fraction_label.setText(

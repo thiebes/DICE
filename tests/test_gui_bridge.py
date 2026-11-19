@@ -22,7 +22,7 @@ NOMINAL_D = 0.01
 WLS_SLOPES = [0.02, 0.0216, None, 0.03]     # D / D_nominal: 1.0, 1.08, -, 1.5
 OLS_SLOPES = [0.019, None, 0.017, 0.026]    # D / D_nominal: 0.95, -, 0.85, 1.3
 # Keyword arguments that select each fit method.
-METHOD_ARGUMENTS = {'wls': {'use_wls': True}, 'ols': {'use_wls': False}}
+METHOD_ARGUMENTS = {'wls': {'estimator': 'wls'}, 'ols': {'estimator': 'ols'}}
 METHOD_SLOPES = {'wls': WLS_SLOPES, 'ols': OLS_SLOPES}
 IMAGE_SETTINGS = {'image_type': 'png'}
 
@@ -142,6 +142,7 @@ class TestLoadAndPlotFromCsv:
         assert [r.nominal_diffusion_coefficient for r in runs] == [NOMINAL_D] * 3
         assert interface.last_parameters == {'nominal diffusion coefficient': NOMINAL_D,
                                              'filename slug': 'exported'}
+        assert interface.last_result.estimator_keys == ('ols', 'wls')
         # The other fit method works from the stored slopes without reloading.
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) == 2 / 3
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['ols']) == 1 / 3
@@ -166,4 +167,13 @@ class TestLoadAndPlotFromCsv:
             str(ols_only), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['ols'])
         assert plotted == [_ratios(OLS_SLOPES)]
         assert [r.wls_slope for r in interface.last_result.run_results] == [None] * 3
+        assert interface.last_result.estimator_keys == ('ols',)
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) is None
+
+    def test_unknown_estimator_is_rejected(self, exported_csv, plotted, tmp_path):
+        interface = DiceInterface()
+        with pytest.raises(RuntimeError, match="unknown estimator 'nope'"):
+            interface.load_and_plot_from_csv(
+                str(exported_csv), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, estimator='nope')
+        assert plotted == []
+        assert interface.last_result is None
