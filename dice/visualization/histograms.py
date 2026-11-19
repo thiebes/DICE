@@ -16,6 +16,7 @@ if os.environ.get('MPLBACKEND') is None:
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from scipy.stats import norm
 from typing import Dict, List, Optional, Sequence, Union, Any
 from pathlib import Path
@@ -369,7 +370,15 @@ def plot_accuracy_vs_cnr(
     ax.axhline(1.0, color=colors['dice_gold'], linewidth=2, linestyle='--')
 
     if log_cnr:
+        # Plain numbers at each power of ten, and also at 2 and 5 times each
+        # one when the CNR spans two decades or less, so that a range of one
+        # decade has more than two labels.
         ax.set_xscale('log')
+        positive_cnr = cnr[np.isfinite(cnr) & (cnr > 0)]
+        decades = np.log10(positive_cnr.max() / positive_cnr.min()) if positive_cnr.size else 0.0
+        ax.xaxis.set_major_locator(LogLocator(subs=(1.0, 2.0, 5.0) if decades <= 2 else (1.0,)))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f'{value:g}'))
+        ax.xaxis.set_minor_formatter(NullFormatter())
     ax.set_xlabel('Initial CNR', fontsize=font_size)
     ax.set_ylabel('$D_{est}/D_{nom}$', fontsize=font_size)
 

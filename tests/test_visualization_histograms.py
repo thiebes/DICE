@@ -504,11 +504,20 @@ class TestAccuracyVsCnr:
         assert target.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
         plt.close(fig)
 
-    def test_logarithmic_cnr_axis(self, tmp_path):
+    @pytest.mark.parametrize('low, high, labels', [
+        (10, 100, ['10', '20', '50', '100']),
+        (1, 10000, ['1', '10', '100', '1000', '10000']),
+    ])
+    def test_logarithmic_cnr_axis_labels_plain_numbers(self, tmp_path, low, high, labels):
         from dice.visualization.histograms import plot_accuracy_vs_cnr
-        cnr, ratios = self._data()
-        fig = plot_accuracy_vs_cnr(cnr, ratios, str(tmp_path / 'scatter.png'), log_cnr=True)
-        assert fig.axes[0].get_xscale() == 'log'
+        cnr = np.geomspace(low, high, 50)
+        fig = plot_accuracy_vs_cnr(cnr, np.ones_like(cnr), str(tmp_path / 'scatter.png'), log_cnr=True)
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        left, right = ax.get_xlim()
+        assert ax.get_xscale() == 'log'
+        assert [label.get_text() for label in ax.get_xticklabels()
+                if left <= label.get_position()[0] <= right] == labels
         plt.close(fig)
 
     def test_non_finite_ratios_do_not_set_the_limits(self, tmp_path):
