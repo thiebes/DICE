@@ -67,26 +67,17 @@ class TestLoadingExamples:
         )
 
     @pytest.mark.parametrize("filename", EXAMPLE_PARAMETER_FILES)
-    def test_diffusion_length_only_file_derives_lifetime_from_last_time(self, window, filename):
-        """GUI convention: with only L given, tau is the final time and D = L^2 / tau."""
+    def test_diffusion_length_only_file_uses_unit_lifetime(self, window, filename):
+        """Engine convention: with only L given, tau is 1 and D = L^2."""
         expected = read_example(filename)
         window.load_parameters_from_file(str(EXAMPLES_DIR / filename))
 
         length = expected["nominal diffusion length"]
-        lifetime = expected["time range"][1]
         assert float(window.diffusion_length_input.text()) == length
-        assert float(window.lifetime_input.text()) == lifetime
-        assert float(window.diffusion_coeff_input.text()) == pytest.approx(length ** 2 / lifetime, rel=1e-3)
+        assert float(window.lifetime_input.text()) == 1.0
+        assert float(window.diffusion_coeff_input.text()) == pytest.approx(length ** 2, rel=1e-3)
 
-    @pytest.mark.parametrize("filename", [
-        pytest.param(name, marks=pytest.mark.xfail(
-            strict=True,
-            reason="For a diffusion-length-only file the GUI sets tau to the final time "
-                   "(2 here) while the engine and CLI set tau = 1; the two front ends then "
-                   "simulate different decay for the same file. Needs a decision on the convention.",
-        )) if name == "high_precision.txt" else name
-        for name in EXAMPLE_PARAMETER_FILES
-    ])
+    @pytest.mark.parametrize("filename", EXAMPLE_PARAMETER_FILES)
     def test_gui_and_cli_simulate_the_same_physics_for_an_example(self, window, filename):
         path = EXAMPLES_DIR / filename
         window.load_parameters_from_file(str(path))

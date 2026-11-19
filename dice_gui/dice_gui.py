@@ -1643,18 +1643,13 @@ class DiceGUI(QMainWindow):
                 self.image_tick_width_spin.setValue(int(params['image tick width']))
             if 'image numbins' in params:
                 self.image_numbins_spin.setValue(params['image numbins'])
-            # Auto-derive lifetime when only diffusion length is provided:
-            # assume tau = t_final, then let the linked-field logic compute D.
+            # When only the diffusion length is provided, use the engine's
+            # convention (tau = 1, so the time axis is in units of the
+            # lifetime), then let the linked-field logic compute D = L^2.
             if ('nominal diffusion length' in params
                     and 'nominal diffusion coefficient' not in params
                     and 'nominal lifetime (tau)' not in params):
-                t_final = None
-                if 'time range' in params:
-                    t_final = params['time range'][1]
-                elif 'time series' in params and params['time series']:
-                    t_final = max(params['time series'])
-                if t_final is not None and t_final > 0:
-                    self.lifetime_input.setText(str(t_final))
+                self.lifetime_input.setText("1")
 
         finally:
             self._populating = False  # Re-enable modification marking
