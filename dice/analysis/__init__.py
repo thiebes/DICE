@@ -8,7 +8,6 @@ and performing statistical analysis on the results.
 from .simulation import (
     run_single_simulation,
     run_monte_carlo_simulation,
-    scan_runner_compatibility,
 )
 from ..core.fitting import calculate_wls_weights
 
@@ -23,7 +22,6 @@ __all__ = [
     # Simulation functions
     'run_single_simulation',
     'run_monte_carlo_simulation',
-    'scan_runner_compatibility',
     'calculate_wls_weights',
     # Statistics functions
     'calculate_precision',

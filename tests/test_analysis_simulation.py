@@ -9,7 +9,6 @@ from dice.analysis.simulation import (
     run_single_simulation,
     calculate_wls_weights,
     run_monte_carlo_simulation,
-    scan_runner_compatibility,
 )
 
 
@@ -495,81 +494,6 @@ class TestSplitIntoBatches:
     def test_no_runs_no_batches(self):
         from dice.analysis.simulation import split_into_batches
         assert split_into_batches(0, 8) == []
-
-
-class TestScanRunnerCompatibility:
-    """Test backward compatibility wrapper."""
-    
-    def test_legacy_format(self):
-        """Test legacy format compatibility."""
-        indices = {
-            'x axis': np.linspace(-10, 10, 101),
-            'time axis': np.array([0, 1, 2])
-        }
-        
-        parameters = {
-            'sigma^2_0': 1.0,
-            'amplitude_0': 1.0,
-            'mu_0': 0.0
-        }
-        
-        result = scan_runner_compatibility(
-            indices=indices,
-            parameters=parameters,
-            ld=2.0,
-            this_diff=0.5,
-            this_tau=8.0,
-            this_noise=0.05,
-            this_run=42,
-            retain_profile_data=False
-        )
-        
-        # Check legacy format structure
-        assert 'run_42' in result
-        run_data = result['run_42']
-        
-        assert run_data['run'] == 42
-        assert run_data['run parameters']['nominal diffusion coefficient'] == 0.5
-        assert run_data['run parameters']['nominal lifetime'] == 8.0
-        assert run_data['run parameters']['nominal diffusion length'] == 2.0
-        assert run_data['run parameters']['noise stdev'] == 0.05
-        
-        assert 'cnr_0 estimate' in run_data
-        assert 'diffusion' in run_data
-        assert 'unweighted fit' in run_data['diffusion']
-        assert 'weighted fit' in run_data['diffusion']
-    
-    def test_legacy_with_profile_data(self):
-        """Test legacy format with profile data retention."""
-        indices = {
-            'x axis': np.linspace(-5, 5, 51),
-            'time axis': np.array([0, 1])
-        }
-        
-        parameters = {
-            'sigma^2_0': 0.5,
-            'amplitude_0': 2.0,
-            'mu_0': 0.5
-        }
-        
-        result = scan_runner_compatibility(
-            indices=indices,
-            parameters=parameters,
-            ld=1.0,
-            this_diff=1.0,
-            this_tau=1.0,
-            this_noise=0.01,
-            this_run=0,
-            retain_profile_data=True
-        )
-        
-        run_data = result['run_0']
-        
-        # Should have profile data
-        assert 'nominal profiles' in run_data
-        assert 'y_values_t' in run_data['nominal profiles']
-        assert 'noisy profiles' in run_data
-        assert 'y_values_t' in run_data['noisy profiles']
 
 
 if __name__ == "__main__":
