@@ -54,9 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Behavior change: `proximity level` is no longer a simulation parameter. A
-  `proximity level` key in a parameters file has no effect. DICE reports the
-  standard deviation, relative standard error, mean, bias, and root-mean-square
-  error (RMSE) of the diffusion coefficient estimates, and the fraction of
+  `proximity level` key in a parameters file triggers a warning and is
+  otherwise ignored. DICE reports the standard deviation, relative standard
+  error, mean, bias, and root-mean-square error (RMSE) of the diffusion
+  coefficient estimates, and the fraction of
   estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Choose any
   other proximity level after the simulation, in the GUI or from the results
   file.
@@ -132,6 +133,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys of the parameter file to the histogram, and it honors
   `retain profile data`. It ignored these keys. A malformed `image x_lim` is
   rejected before the simulation starts.
+- `--dry-run` loads and validates the parameters file and reports the first
+  problem it finds, without running the simulation. It reported success
+  without reading the file.
+- Summary and other text output files are written as UTF-8 on every
+  platform. On Windows they used the system code page, so the ± sign was not
+  valid UTF-8.
+- Proximity levels are labeled by their exact percentage. They were cut down
+  to whole percentages, so 0.29 was labeled 28%, and two levels such as 0.565
+  and 0.57 shared one label, so one result replaced the other.
 - `CITATION.cff` declares the MIT License, in agreement with `LICENSE.md`.
 
 ### Removed
