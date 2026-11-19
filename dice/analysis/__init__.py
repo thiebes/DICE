@@ -15,11 +15,8 @@ from ..core.fitting import calculate_wls_weights
 from .statistics import (
     calculate_precision,
     calculate_accuracy_metrics,
-    estimates_precision,
     analyze_simulation_results,
-    precision_counts,
     calculate_confidence_intervals,
-    analyze_cnr_dependence,
 )
 
 __all__ = [
@@ -31,9 +28,6 @@ __all__ = [
     # Statistics functions
     'calculate_precision',
     'calculate_accuracy_metrics',
-    'estimates_precision',
     'analyze_simulation_results',
-    'precision_counts',
     'calculate_confidence_intervals',
-    'analyze_cnr_dependence',
 ]
