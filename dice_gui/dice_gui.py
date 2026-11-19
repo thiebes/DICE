@@ -1136,15 +1136,16 @@ class DiceGUI(QMainWindow):
         self.simulation_thread.start()
 
     def stop_simulation(self):
-        """Stop the running simulation."""
+        """Ask the running simulation to stop; simulation_cancelled() resets the window when it has.
+
+        A serial simulation stops after its current run and a parallel one
+        after its current batch. The thread is not terminated, because a
+        terminated parallel run leaves its worker processes behind.
+        """
         if self.simulation_thread and self.simulation_thread.isRunning():
             self.simulation_thread.request_stop()
-            self.simulation_thread.wait(5000)
-            if self.simulation_thread.isRunning():
-                self.simulation_thread.terminate()
-                self.simulation_thread.wait()
-            self.reset_ui_after_simulation()
-            self.status_label.setText("Simulation stopped by user")
+            self.stop_button.setEnabled(False)
+            self.status_label.setText("Stopping...")
 
     def update_progress(self, message: str):
         """Update progress display."""
@@ -1152,6 +1153,9 @@ class DiceGUI(QMainWindow):
 
     def _update_iteration_progress(self, current: int, total: int):
         """Update progress bar with iteration count and estimated time remaining."""
+        # An update queued before a stop request must not replace "Stopping...".
+        if self.simulation_thread is not None and self.simulation_thread.stop_requested():
+            return
         self.progress_bar.setValue(current)
         self.status_label.setText(f"Running {current:,}/{total:,}")
 
@@ -1248,8 +1252,7 @@ class DiceGUI(QMainWindow):
         if self.simulation_thread is not None:
             self.simulation_thread.deleteLater()
             self.simulation_thread = None
-        # Set last: queued progress updates from before the stop may have
-        # overwritten the message stop_simulation() showed.
+        # Replaces the "Stopping..." that stop_simulation() showed.
         self.status_label.setText("Simulation stopped by user")
 
     def reset_ui_after_simulation(self):

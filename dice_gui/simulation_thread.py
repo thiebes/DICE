@@ -57,3 +57,7 @@ class SimulationThread(QThread):
     def request_stop(self):
         """Request the simulation to stop."""
         self._stop_event.set()
+
+    def stop_requested(self) -> bool:
+        """Whether request_stop() has been called."""
+        return self._stop_event.is_set()

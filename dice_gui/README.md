@@ -66,7 +66,7 @@ The analysis acts on the results of the last simulation. It does not change the 
 
 - **Load Example...**: fill all tabs with example parameters.
 - **Run Simulation (Ctrl+R)**: check the inputs and start the simulation. Before the run starts, the GUI warns about settings that make the fits unreliable: a low CNR at the last time point, an initial profile that is narrow compared with the pixel size, or very few time points. You can continue or go back.
-- **Stop**: stop a running simulation.
+- **Stop**: stop a running simulation. A serial simulation stops after the current run; a parallel simulation stops after the current batch of runs (about a tenth of a large simulation). The status line reads "Stopping..." until then.
 - A progress bar with elapsed and estimated remaining time.
 
 ### Menus
