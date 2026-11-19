@@ -47,7 +47,8 @@ jobs:
             libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 x11-utils
       - run: uv python install ${{ matrix.python-version }}
       # --python overrides .python-version, which would otherwise select 3.12
-      # for every matrix entry. --locked fails if uv.lock is out of date.
-      - run: uv sync --locked --extra test --python ${{ matrix.python-version }}
+      # for every matrix entry. --locked fails if uv.lock is out of date. The
+      # webapp extra installs Flask, without which tests/test_webapp.py skips.
+      - run: uv sync --locked --extra test --extra webapp --python ${{ matrix.python-version }}
       - name: Run tests with coverage
         run: uv run --no-sync pytest --tb=short --cov=dice --cov=dice_gui --cov-report=term-missing
