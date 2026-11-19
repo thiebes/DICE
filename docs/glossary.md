@@ -28,6 +28,10 @@ The amplitude of the signal above the baseline divided by the standard deviation
 
 CNR is distinct from the signal-to-noise ratio (SNR), which has several definitions, for example the ratio of signal power to noise power.
 
+### CNR Bin
+
+A group of runs with similar initial CNR. In a simulation with a noise range, each run has its own initial CNR. DICE sorts the runs by initial CNR, splits them into up to five bins with equal numbers of runs, and reports the statistics of each bin in the summary file.
+
 ## D
 
 ### Diffusion Coefficient (D)

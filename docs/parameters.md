@@ -4,7 +4,7 @@ Every parameter of a DICE simulation is described below. You set the parameters 
 
 ## Overview
 
-A simulation consists of many runs. Each run simulates one diffusion measurement: a series of Gaussian profiles that spread by diffusion and decay over time, with random noise added. DICE fits each noisy profile, estimates the diffusion coefficient from the fits, and compares the estimates of all runs with the nominal diffusion coefficient. All runs use the same parameters; only the random noise differs.
+A simulation consists of many runs. Each run simulates one diffusion measurement: a series of Gaussian profiles that spread by diffusion and decay over time, with random noise added. DICE fits each noisy profile, estimates the diffusion coefficient from the fits, and compares the estimates of all runs with the nominal diffusion coefficient. All runs use the same parameters; only the random noise differs. With a [noise range](#noise-range-reciprocal-and-noise-range-reciprocal-log), the noise level also differs from run to run.
 
 The table lists the parameters by group. "One of" means that you give exactly one option of the group.
 
@@ -28,7 +28,7 @@ A prefix for the output files. DICE writes the output to the directory `output/<
 
 - `output/example/example.csv`: results of every run
 - `output/example/example_summary.txt`: parameters and summary statistics
-- `output/example/example_accuracy_histogram.png`: histogram of the estimates
+- `output/example/example_accuracy_histogram.png`: histogram of the estimates, or with a noise range, `output/example/example_accuracy_vs_cnr.png`: the estimates against the initial CNR
 
 Use only characters that are valid in file names. If the key is missing, the slug is `dice_simulation`.
 
@@ -187,9 +187,21 @@ DICE warns when the peak of the measured profile is narrower than 9 pixels at ha
 
 ### `noise range, reciprocal` and `noise range, reciprocal log`
 
-**Format:** `[low, high]`, two noise standard deviations with low < high
+**Format:** `[low, high]`, two positive noise standard deviations with low < high
 
-DICE draws one noise value at random from this range. With `noise range, reciprocal`, the reciprocal of the noise value (the CNR for an amplitude of 1) is uniformly distributed between 1/high and 1/low. With `noise range, reciprocal log`, its base-10 logarithm is uniformly distributed. All runs of the simulation use the one drawn value, which the summary file reports.
+**Units:** the units of the amplitude
+
+Each run draws its own noise standard deviation σ at random from this range, so one simulation shows how the accuracy and precision change with the initial CNR. With `noise range, reciprocal`, 1/σ is uniformly distributed between 1/high and 1/low. The initial CNR, `amplitude_0` / σ, is then uniformly distributed between `amplitude_0` / high and `amplitude_0` / low. With `noise range, reciprocal log`, the base-10 logarithm of 1/σ, and so of the CNR, is uniformly distributed instead, and each tenfold step of CNR gets, on average, the same number of runs. Use the logarithmic option when high is more than a few times low.
+
+The outputs differ from those of a fixed noise level:
+
+- The results file has a `noise standard deviation` column with the σ of each run.
+- The summary file reports the number of drawn values, their range, and the range of the initial CNR. In place of the statistics of all runs, it gives the statistics of each of up to five bins of initial CNR, with equal numbers of runs in each bin. The [CLI guide](cli-guide.md#summary-file-slug_summarytxt) states the rule for the number of bins.
+- A scatter plot of D_est/D_nom against the initial CNR replaces the accuracy histogram. Its CNR axis is logarithmic for `noise range, reciprocal log`.
+
+DICE checks before the simulation that the range is two positive numbers with low < high. With `--seed`, the drawn noise levels are reproducible, like the noise itself. `data/examples/noise_range.txt` is an example with 100 runs and an initial CNR from 10 to 200.
+
+The GUI has no control for a noise range. When it opens a parameters file with a noise range, it shows a warning: a simulation run from the GUI uses the GUI's own noise setting, and saving the parameters from the GUI replaces the range with that setting. Run such files with the command-line interface.
 
 ## Spatial axis
 
@@ -270,7 +282,7 @@ The proximity level (the fraction of the nominal value within which an estimate 
 
 ## Plot parameters
 
-Optional parameters for the accuracy histogram.
+Optional parameters for the plot: the accuracy histogram, or for a simulation with a noise range, the scatter plot of accuracy against the initial CNR.
 
 ### `image type`
 
@@ -294,7 +306,7 @@ The resolution in dots per inch.
 
 ### `image font size`, `image tick length`, `image tick width`, `image numbins`
 
-The font size of the plot text (points), the length and width of the axis ticks (points), and the number of histogram bins.
+The font size of the plot text (points), the length and width of the axis ticks (points), and the number of histogram bins. The scatter plot of a noise range has no bins and ignores `image numbins`.
 
 The command-line interface and the GUI both apply these values. The GUI takes them from its Output Settings tab.
 
@@ -302,7 +314,7 @@ The command-line interface and the GUI both apply these values. The GUI takes th
 
 ### `image x_lim`
 
-The limits of the x-axis of the histogram.
+The limits of the D_est/D_nom axis: the x-axis of the histogram, or the y-axis of the scatter plot of a noise range.
 
 **Format:** `[low, high]`, two numbers with low < high
 
