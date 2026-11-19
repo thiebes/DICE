@@ -54,7 +54,7 @@ The analysis acts on the results of the last simulation. It does not change the 
 
 - **Fit Method**: show results for the weighted least squares (WLS) or the ordinary least squares (OLS) fit of the mean squared displacement (MSD) against time.
 - **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value.
-- **Explore Accuracy Threshold**: after a run, choose a threshold between 1% and 50% (0.01 to 0.50). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, for example "within ±10%". A target diagram shows the threshold. You can change the threshold as often as you like without running the simulation again.
+- **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, for example "within ±10%". A target diagram shows the threshold. You can change the threshold as often as you like without running the simulation again.
 
 ### Output Settings
 
