@@ -13,7 +13,8 @@ import pandas as pd
 from ..core.profiles import gaussian, make_diffusion_decay
 from fft_cnr import fft_cnr
 from ..core.noise import Seed, add_noise
-from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit, calculate_wls_weights
+from ..core.fitting import gauss_fitting, calculate_wls_weights
+from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import parallel_processing_supported
@@ -92,21 +93,7 @@ def run_single_simulation(
     gaussfit_sigma2_t = np.array(fit_results['sigma^2_t estimates'])
     gaussfit_sigma2_stderrs = np.array(fit_results['sigma^2_t standard errors'])
     
-    # Initialize diffusion results
-    ols_result = None
-    wls_result = None
-    weights = None
-    
-    if len(time_axis) > 1:
-        # Calculate weights for WLS fitting
-        # Weight inversely proportional to relative variance
-        weights = calculate_wls_weights(gaussfit_sigma2_t, gaussfit_sigma2_stderrs)
-        
-        # Perform OLS and WLS fits
-        ols_result = diffusion_ols_fit(time_axis, gaussfit_sigma2_t)
-        wls_result = diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights)
-    
-    # Create result object
+    # Create result object; the estimators fill in their slope fits below
     result = RunResult(
         run_id=run_id,
         nominal_diffusion_coefficient=parameters.physics.diffusion_coefficient,
@@ -116,16 +103,20 @@ def run_single_simulation(
         cnr_0_estimate=cnr_0_estimate,
         nominal_sigma2_0=parameters.profile.sigma2_0,
         estimated_sigma2_0=gaussfit_sigma2_t[0] if len(gaussfit_sigma2_t) > 0 else None,
-        ols_slope=ols_result['MSD_t slope estimate'] if ols_result else None,
-        ols_slope_stderr=ols_result['MSD_t slope std error'] if ols_result else None,
-        ols_intercept=ols_result['intercept estimate'] if ols_result else None,
-        ols_intercept_stderr=ols_result['intercept standard error'] if ols_result else None,
-        wls_slope=wls_result['MSD_t slope estimate'] if wls_result else None,
-        wls_slope_stderr=wls_result['MSD_t slope std error'] if wls_result else None,
-        wls_intercept=wls_result['intercept estimate'] if wls_result else None,
-        wls_intercept_stderr=wls_result['intercept standard error'] if wls_result else None
     )
-    
+
+    weights = None
+    if len(time_axis) > 1:
+        # WLS weights, inversely proportional to the squared relative error
+        # (kept for retained profile data; the WLS estimator computes its own)
+        weights = calculate_wls_weights(gaussfit_sigma2_t, gaussfit_sigma2_stderrs)
+
+        # Fit MSD against time with each estimator, from the same per-frame fits
+        frame_fits = FrameFits(time_axis=time_axis, sigma2=gaussfit_sigma2_t,
+                               sigma2_stderr=gaussfit_sigma2_stderrs)
+        for key in DEFAULT_ESTIMATOR_KEYS:
+            result.set_slope_fit(key, get_estimator(key).estimate(frame_fits))
+
     # Add profile data if requested
     if retain_profile_data:
         # Convert lists to numpy arrays for consistency
@@ -238,7 +229,8 @@ def run_monte_carlo_simulation(
         parameters=parameters,
         run_results=results,
         num_runs=total_runs,
-        noise_values=noise_values
+        noise_values=noise_values,
+        estimator_keys=DEFAULT_ESTIMATOR_KEYS,
     )
 
     return simulation_result

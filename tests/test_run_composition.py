@@ -107,3 +107,13 @@ def test_profile_data_is_dropped_unless_retained(parameters):
     assert result.wls_slope is not None and result.ols_slope is not None
     assert result.weights is None
     assert result.fitted_sigma2_t is None
+
+
+def test_simulation_records_the_estimators_that_ran(parameters):
+    from dice.analysis.simulation import run_monte_carlo_simulation
+    output = run_monte_carlo_simulation(parameters, X_AXIS, TIME_AXIS, noise_values=[NOISE_SIGMA],
+                                        num_runs=2, multiprocessing=False, seed=8)
+
+    assert output.estimator_keys == ('ols', 'wls')
+    for key in output.estimator_keys:
+        assert all(run.slope_fit(key) is not None for run in output.run_results)
