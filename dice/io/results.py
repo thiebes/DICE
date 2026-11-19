@@ -246,18 +246,18 @@ def write_summary_file(
                     metrics = analysis['accuracy'][spec.key]
                     f.write(f"  {spec.summary_name}:\n")
                     f.write(f"    Standard deviation:\n")
-                    f.write(f"        {in_d_unit(metrics.get('std', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {in_d_unit(metrics['std']):.5f} {d_unit}\n")
                     nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
                     if nominal_d and nominal_d != 0:
-                        rse = metrics.get('std', 0) / nominal_d
+                        rse = metrics['std'] / nominal_d
                         f.write(f"    Relative standard error:\n")
                         f.write(f"        {rse:.3f}\n")
                     f.write(f"    Mean estimate:\n")
-                    f.write(f"        {in_d_unit(metrics.get('mean', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {in_d_unit(metrics['mean']):.5f} {d_unit}\n")
                     f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {in_d_unit(metrics.get('bias', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {in_d_unit(metrics['bias']):.5f} {d_unit}\n")
                     f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {in_d_unit(metrics.get('rmse', np.nan)):.5f} {d_unit}\n")
+                    f.write(f"        {in_d_unit(metrics['rmse']):.5f} {d_unit}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")
