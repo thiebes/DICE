@@ -218,10 +218,11 @@ def analyze_simulation_results(
     d_estimates = {key: result.d_estimates(key) for key in keys}
     nominal_d = result.parameters.physics.diffusion_coefficient
 
-    # Calculate precision at different levels
+    # Calculate precision at different levels, keyed by percentage ('10%', '2.5%').
+    # Formatted, not truncated: 0.29 * 100 is 28.999... in floating point.
     precision_results = {}
     for level in proximity_levels:
-        precision_results[f'{int(level*100)}%'] = {
+        precision_results[f'{level * 100:g}%'] = {
             key: calculate_precision(d_estimates[key], nominal_d, level) for key in keys
         }
 

@@ -423,3 +423,31 @@ class TestNoiseAnalysisCnr:
 
         for noise_sigma in noise_values:
             assert noise_analysis[f'noise_{noise_sigma}']['cnr'] == pytest.approx(amplitude_0 / noise_sigma)
+
+
+class TestCustomProximityLevels:
+    """Each requested proximity level gets its own key, named by its exact percentage."""
+
+    def test_levels_are_keyed_by_their_exact_percentage(self):
+        from pathlib import Path
+        from dice.analysis.simulation import run_monte_carlo_simulation
+        from dice.io.parameters import open_parameters
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+        sim_params = create_parameters_from_legacy(
+            params, params['nominal diffusion coefficient'],
+            params['nominal lifetime (tau)'], params['nominal diffusion length'])
+        result = run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], params['noise series'],
+            num_runs=20, multiprocessing=False, seed=11)
+        # 0.29 * 100 and 0.565 * 100 fall just below 29 and 56.5 in binary floating point.
+        levels = {0.29: '29%', 0.565: '56.5%', 0.57: '57%', 0.025: '2.5%'}
+
+        precision = analyze_simulation_results(result, proximity_levels=list(levels))['precision']
+
+        assert sorted(precision) == sorted(levels.values())
+        nominal_d = params['nominal diffusion coefficient']
+        for level, label in levels.items():
+            for key in ('ols', 'wls'):
+                assert precision[label][key] == calculate_precision(
+                    result.d_estimates(key), nominal_d, level)
