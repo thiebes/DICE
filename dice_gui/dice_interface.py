@@ -176,7 +176,6 @@ class DiceInterface:
             )
             from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
-            from pathlib import Path
 
             # Resolve per-parameter unit overrides before parsing,
             # so that values are in the global unit system when the
