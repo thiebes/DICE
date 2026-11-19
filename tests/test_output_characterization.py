@@ -179,6 +179,13 @@ def test_summary_rejects_an_unknown_estimator_key(tmp_path):
                            analysis)
 
 
+def test_summary_names_a_missing_accuracy_metric(tmp_path):
+    analysis = analyze_simulation_results(edge_case_output())
+    del analysis['accuracy']['wls']['rmse']
+    with pytest.raises(KeyError, match="'rmse'"):
+        write_summary_file(edge_case_output(), tmp_path / 'summary.txt', SUMMARY_PARAMETERS, analysis)
+
+
 def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
     """1 micrometer^2/ns is 10 cm^2/s: the nominal D and four statistics scale, nothing else changes."""
     output = edge_case_output()

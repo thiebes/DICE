@@ -269,18 +269,18 @@ def write_summary_file(
                     metrics = analysis['accuracy'][spec.key]
                     f.write(f"  {spec.summary_name}:\n")
                     f.write(f"    Standard deviation:\n")
-                    f.write(f"        {d_text(metrics.get('std', np.nan))} {d_unit}\n")
+                    f.write(f"        {d_text(metrics['std'])} {d_unit}\n")
                     nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
                     if nominal_d and nominal_d != 0:
-                        rse = metrics.get('std', 0) / nominal_d
+                        rse = metrics['std'] / nominal_d
                         f.write(f"    Relative standard error:\n")
                         f.write(f"        {rse:.3f}\n")
                     f.write(f"    Mean estimate:\n")
-                    f.write(f"        {d_text(metrics.get('mean', np.nan))} {d_unit}\n")
+                    f.write(f"        {d_text(metrics['mean'])} {d_unit}\n")
                     f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {d_text(metrics.get('bias', np.nan))} {d_unit}\n")
+                    f.write(f"        {d_text(metrics['bias'])} {d_unit}\n")
                     f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {d_text(metrics.get('rmse', np.nan))} {d_unit}\n")
+                    f.write(f"        {d_text(metrics['rmse'])} {d_unit}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")
