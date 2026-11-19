@@ -19,6 +19,18 @@ from pathlib import Path
 from datetime import datetime
 
 
+def read_file(file_path: Path) -> str:
+    """Read a file without translating its line endings."""
+    with open(file_path, encoding='utf-8', newline='') as f:
+        return f.read()
+
+
+def write_file(file_path: Path, content: str) -> None:
+    """Write a file without translating its line endings, so a one-line edit stays one line."""
+    with open(file_path, 'w', encoding='utf-8', newline='') as f:
+        f.write(content)
+
+
 def validate_version(version: str) -> bool:
     """Validate that version follows semantic versioning."""
     pattern = r'^\d+\.\d+\.\d+$'
@@ -36,7 +48,7 @@ def validate_date(date_str: str) -> bool:
 
 def update_dice_init(file_path: Path, new_version: str) -> bool:
     """Update version in dice/__init__.py."""
-    content = file_path.read_text(encoding='utf-8')
+    content = read_file(file_path)
     pattern = r'__version__ = "[^"]+"'
     replacement = f'__version__ = "{new_version}"'
 
@@ -45,14 +57,14 @@ def update_dice_init(file_path: Path, new_version: str) -> bool:
         return False
 
     new_content = re.sub(pattern, replacement, content)
-    file_path.write_text(new_content, encoding='utf-8')
+    write_file(file_path, new_content)
     print(f"Updated {file_path}")
     return True
 
 
 def update_citation_cff(file_path: Path, new_version: str, new_date: str) -> bool:
     """Update version and date in CITATION.cff."""
-    content = file_path.read_text(encoding='utf-8')
+    content = read_file(file_path)
 
     # Update version (both occurrences)
     version_pattern = r'version: "[^"]+"'
@@ -75,15 +87,16 @@ def update_citation_cff(file_path: Path, new_version: str, new_date: str) -> boo
         print(f"No changes needed in {file_path}")
         return True
 
-    file_path.write_text(new_content, encoding='utf-8')
+    write_file(file_path, new_content)
     print(f"Updated {file_path}")
     return True
 
 
 def update_pyproject_toml(file_path: Path, new_version: str) -> bool:
     """Update version in pyproject.toml."""
-    content = file_path.read_text(encoding='utf-8')
-    pattern = r'(^version = ")[^"]+(")$'
+    content = read_file(file_path)
+    # (?=\r?$): a Windows (CRLF) checkout has a carriage return before the line end.
+    pattern = r'(^version = ")[^"]+(")(?=\r?$)'
     replacement = rf'\g<1>{new_version}\g<2>'
 
     if not re.search(pattern, content, flags=re.MULTILINE):
@@ -96,7 +109,7 @@ def update_pyproject_toml(file_path: Path, new_version: str) -> bool:
         print(f"No changes needed in {file_path}")
         return True
 
-    file_path.write_text(new_content, encoding='utf-8')
+    write_file(file_path, new_content)
     print(f"Updated {file_path}")
     return True
 
@@ -107,7 +120,7 @@ def update_setup_py(file_path: Path, new_version: str) -> bool:
         print(f"Skipping {file_path} (file does not exist)")
         return True
 
-    content = file_path.read_text(encoding='utf-8')
+    content = read_file(file_path)
     pattern = r'(version=")[^"]+("),'
     replacement = rf'\g<1>{new_version}\g<2>,'
 
@@ -117,7 +130,7 @@ def update_setup_py(file_path: Path, new_version: str) -> bool:
         print(f"WARNING: No changes made to {file_path}")
         return True
 
-    file_path.write_text(new_content, encoding='utf-8')
+    write_file(file_path, new_content)
     print(f"Updated {file_path}")
     return True
 
@@ -125,7 +138,7 @@ def update_setup_py(file_path: Path, new_version: str) -> bool:
 def get_current_version(repo_root: Path) -> str:
     """Get current version from dice/__init__.py."""
     init_file = repo_root / 'dice' / '__init__.py'
-    content = init_file.read_text(encoding='utf-8')
+    content = read_file(init_file)
     match = re.search(r'__version__ = "([^"]+)"', content)
     if match:
         return match.group(1)

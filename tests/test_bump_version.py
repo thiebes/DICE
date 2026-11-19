@@ -81,3 +81,29 @@ def test_missing_version_field_fails(repo_copy: Path) -> None:
 
     assert result.returncode == 1
     assert "Could not find version" in result.stdout
+
+
+@pytest.mark.parametrize("line_ending", [b"\n", b"\r\n"])
+def test_line_endings_are_kept(repo_copy: Path, line_ending: bytes) -> None:
+    """A version bump changes the version lines only, on every platform."""
+    for relative in VERSIONED_FILES:
+        path = repo_copy / relative
+        lines = path.read_bytes().replace(b"\r\n", b"\n").split(b"\n")
+        path.write_bytes(line_ending.join(lines))
+    before = {relative: (repo_copy / relative).read_bytes() for relative in VERSIONED_FILES}
+
+    result = run_bump(repo_copy, "9.8.7", "--date", "2031-02-03")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for relative in VERSIONED_FILES:
+        after = (repo_copy / relative).read_bytes()
+        assert after.count(line_ending) == before[relative].count(line_ending), relative
+        if line_ending == b"\n":
+            assert b"\r\n" not in after, relative
+        changed = [
+            (old, new)
+            for old, new in zip(before[relative].split(line_ending), after.split(line_ending))
+            if old != new
+        ]
+        assert changed, relative
+        assert all(b"9.8.7" in new or b"2031-02-03" in new for _, new in changed), relative
