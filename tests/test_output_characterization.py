@@ -152,6 +152,28 @@ def test_analysis_rejects_an_unknown_estimator_key():
         analyze_simulation_results(misspelled)
 
 
+def test_summary_reports_only_the_estimators_in_the_analysis(tmp_path):
+    wls_only = dataclasses.replace(edge_case_output(), estimator_keys=('wls',))
+    _summary(wls_only, tmp_path / 'summary.txt')
+    text = (tmp_path / 'summary.txt').read_text(encoding='utf-8')
+    golden = (GOLDEN_DIR / 'edge_cases_summary.txt').read_text(encoding='utf-8')
+
+    assert 'Least Squares' not in text.replace('  Weighted Least Squares:', '')
+    wls_block = golden[golden.index('  Weighted Least Squares:'):golden.index('  Ordinary')]
+    assert wls_block in text
+    precision_lines = [line for line in text.splitlines() if line.startswith('    WLS:')]
+    assert precision_lines == [line.split('    OLS:')[0] for line in golden.splitlines()
+                               if line.startswith('    WLS:')]
+
+
+def test_summary_rejects_an_unknown_estimator_key(tmp_path):
+    analysis = analyze_simulation_results(edge_case_output())
+    analysis['accuracy']['wsl'] = analysis['accuracy'].pop('wls')
+    with pytest.raises(KeyError, match="unknown estimator 'wsl'"):
+        write_summary_file(edge_case_output(), tmp_path / 'summary.txt', SUMMARY_PARAMETERS,
+                           analysis)
+
+
 def test_csv_columns_follow_first_appearance(tmp_path):
     columns = written_text('weighted_first_default.csv', tmp_path).splitlines()[0].split(',')
     assert columns.index('weighted fit diffusion slope') < columns.index(

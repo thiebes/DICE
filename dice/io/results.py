@@ -13,6 +13,7 @@ import json
 import csv
 
 from ..core.noise import nominal_cnr
+from ..models.estimators import ESTIMATORS, in_display_order
 from ..models.results import MonteCarloOutput, RunResult
 from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
@@ -107,27 +108,19 @@ def export_collated_results(
             'estimated sigma^2_0': run.estimated_sigma2_0,
         }
 
-        # Add OLS results if available
-        if run.ols_slope is not None:
-            row.update({
-                'unweighted fit diffusion slope': run.ols_slope,
-                'unweighted fit diffusion slope stderr': run.ols_slope_stderr,
-                'unweighted fit intercept': run.ols_intercept,
-                'unweighted fit intercept stderr': run.ols_intercept_stderr,
-                f'unweighted fit diffusion coeff [{d_unit_label}]': _convert_slope_to_d(run.ols_slope),
-                f'unweighted fit diffusion stderr [{d_unit_label}]': _convert_slope_to_d(run.ols_slope_stderr) if run.ols_slope_stderr else None,
-            })
-
-        # Add WLS results if available
-        if run.wls_slope is not None:
-            row.update({
-                'weighted fit diffusion slope': run.wls_slope,
-                'weighted fit diffusion slope stderr': run.wls_slope_stderr,
-                'weighted fit intercept': run.wls_intercept,
-                'weighted fit intercept stderr': run.wls_intercept_stderr,
-                f'weighted fit diffusion coeff [{d_unit_label}]': _convert_slope_to_d(run.wls_slope),
-                f'weighted fit diffusion stderr [{d_unit_label}]': _convert_slope_to_d(run.wls_slope_stderr) if run.wls_slope_stderr else None,
-            })
+        # One block of columns per estimator with a fit for this run, in registry order
+        for spec in ESTIMATORS:
+            fit = run.slope_fit(spec.key)
+            if fit is not None:
+                label = spec.csv_label
+                row.update({
+                    f'{label} diffusion slope': fit.slope,
+                    f'{label} diffusion slope stderr': fit.slope_stderr,
+                    f'{label} intercept': fit.intercept,
+                    f'{label} intercept stderr': fit.intercept_stderr,
+                    f'{label} diffusion coeff [{d_unit_label}]': _convert_slope_to_d(fit.slope),
+                    f'{label} diffusion stderr [{d_unit_label}]': _convert_slope_to_d(fit.slope_stderr) if fit.slope_stderr else None,
+                })
 
         # Add nominal diffusion coefficient in output units
         row[f'nominal diffusion coeff [{d_unit_label}]'] = convert_diffusion_coefficient(
@@ -215,30 +208,32 @@ def write_summary_file(
 
             if 'accuracy' in analysis:
                 f.write("Diffusion Coefficient Estimate Statistics:\n")
-                for method in ['wls', 'ols']:
-                    if method in analysis['accuracy']:
-                        metrics = analysis['accuracy'][method]
-                        method_name = "Weighted Least Squares" if method == 'wls' else "Ordinary (unweighted) Least Squares"
-                        f.write(f"  {method_name}:\n")
-                        f.write(f"    Standard deviation:\n")
-                        f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
-                        nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
-                        if nominal_d and nominal_d != 0:
-                            rse = metrics.get('std', 0) / nominal_d
-                            f.write(f"    Relative standard error:\n")
-                            f.write(f"        {rse:.3f}\n")
-                        f.write(f"    Mean estimate:\n")
-                        f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
-                        f.write(f"    Bias (mean - nominal):\n")
-                        f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
-                        f.write(f"    Root Mean Square Error:\n")
-                        f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
+                for spec in in_display_order(analysis['accuracy']):
+                    metrics = analysis['accuracy'][spec.key]
+                    f.write(f"  {spec.summary_name}:\n")
+                    f.write(f"    Standard deviation:\n")
+                    f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
+                    nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
+                    if nominal_d and nominal_d != 0:
+                        rse = metrics.get('std', 0) / nominal_d
+                        f.write(f"    Relative standard error:\n")
+                        f.write(f"        {rse:.3f}\n")
+                    f.write(f"    Mean estimate:\n")
+                    f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
+                    f.write(f"    Bias (mean - nominal):\n")
+                    f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
+                    f.write(f"    Root Mean Square Error:\n")
+                    f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")
                 for level, values in analysis['precision'].items():
                     f.write(f"  Fraction within ±{level} of nominal:\n")
-                    f.write(f"    WLS: {values['wls']:.2%}    OLS: {values['ols']:.2%}\n")
+                    # One line in display order, e.g. "    WLS: 19.00%    OLS: 15.00%"
+                    f.write("".join(
+                        f"    {spec.short_name}: {values[spec.key]:.2%}"
+                        for spec in in_display_order(values)
+                    ) + "\n")
 
             f.write("\n")
         
