@@ -633,6 +633,22 @@ class TestQuickTestOutputSchema:
 class TestOutputOptions:
     """Export format, output directory, plot format, and their prerequisites."""
 
+    def test_unwritten_plot_is_not_reported_as_saved(self, tmp_path, monkeypatch, capsys):
+        """The plot functions log a failed save and return; the CLI must not claim the file was saved."""
+        cli_main = importlib.import_module('dice.cli.main')
+        monkeypatch.setattr(cli_main, 'plot_accuracy_histogram', lambda **kwargs: None)
+        stale = tmp_path / 'output' / 'no_plot' / 'no_plot_accuracy_histogram.png'
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b'from an earlier run')
+        params_file = write_quick_test_variant(tmp_path, 'no_plot', {'number of runs': 4})
+
+        with pytest.warns(UserWarning, match='Accuracy histogram could not be written to'):
+            with contextlib.chdir(tmp_path):
+                assert main([str(params_file), '--multiprocessing', '0']) == 0
+
+        assert 'Accuracy histogram saved to' not in capsys.readouterr().out
+        assert not stale.exists()
+
     OPTION_RUNS = 4
 
     def _run(self, workdir: Path, slug: str, *cli_args: str, overrides=None) -> CliRun:
