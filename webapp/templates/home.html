@@ -9,10 +9,9 @@
     
     <hr />
 
-    <p>First, <strong>before using this tool</strong>, you must:<br />
-        <ol><li>subtract your background (baseline), and</li>
-        <li>normalize so the peak height is set to unity.</li></ol>
-    </p>
+    <p>You do not need to subtract the background or normalize the profile. The estimate does not change when the values are multiplied by a constant or shifted by a constant. For a reliable estimate:</p>
+    <ol><li>enter at least 16 values, and</li>
+    <li>include the flat background on both sides of the peak. The baseline is estimated from the outer quarter of the profile on each side.</li></ol>
 
     <p><img src="/static/favicon-16x16.png" /> Enter your noisy Gaussian profile as a list of comma-separated values here: <br />
     <input type="text" name="values">

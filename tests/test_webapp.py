@@ -61,11 +61,28 @@ def test_example_profile_gives_the_fft_cnr_estimate(client, separator: str) -> N
     assert f"Contrast-to-noise estimate: {expected}" in response.get_data(as_text=True)
 
 
+@pytest.mark.parametrize("scale, offset", [(1.0 / 1530.0, 0.0), (1.0, 500.0)])
+def test_estimate_does_not_depend_on_normalization_or_background(
+    client, scale: float, offset: float
+) -> None:
+    """The home page tells users that neither preprocessing step is needed."""
+    profile = np.loadtxt(EXAMPLE_PROFILE, delimiter=",")
+    expected = fft_cnr(profile.tolist()).cnr
+    values = ",".join(repr(value * scale + offset) for value in profile.tolist())
+
+    response = client.post("/", data={"values": values})
+
+    text = response.get_data(as_text=True)
+    reported = float(text.split("Contrast-to-noise estimate: ")[1].split("<")[0])
+    assert reported == pytest.approx(expected, rel=1e-9)
+
+
 @pytest.mark.parametrize(
     "values, message",
     [
         ("", "No data provided"),
         ("1, 2, not-a-number", "Please enter a valid list"),
+        ("1, 2, 3", "Error processing data"),
     ],
 )
 def test_malformed_input_shows_an_error_page(client, values: str, message: str) -> None:
