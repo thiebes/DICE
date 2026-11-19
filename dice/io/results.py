@@ -5,6 +5,7 @@ This module provides functions for exporting simulation results to CSV
 files and text summaries, and for loading result CSV files.
 """
 
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union, TextIO
