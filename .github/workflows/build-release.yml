@@ -48,9 +48,11 @@ jobs:
           persist-credentials: false
 
       # Inputs reach the script through environment variables, never through
-      # expression interpolation, so they cannot inject shell code.
-      - name: Determine version label
-        id: version
+      # expression interpolation, so they cannot inject shell code. The asset
+      # name states the version, platform, and architecture, for example
+      # DICE-1.3.0-macOS-arm64.
+      - name: Determine asset name
+        id: asset
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -74,7 +76,15 @@ jobs:
               exit 1
             fi
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$RUNNER_ARCH" in
+            X64) arch=x86_64 ;;
+            ARM64) arch=arm64 ;;
+            *)
+              echo "::error::Unsupported runner architecture '$RUNNER_ARCH'"
+              exit 1
+              ;;
+          esac
+          echo "name=DICE-${version}-${RUNNER_OS}-${arch}" >> "$GITHUB_OUTPUT"
 
       # uv is pinned to a version whose SHA-256 setup-uv carries in its known
       # list, and the cache is off so a release run cannot restore a cache
@@ -119,17 +129,43 @@ jobs:
       - name: Build with PyInstaller
         run: uv run --no-sync pyinstaller --noconfirm --clean dice-gui.spec
 
-      # Start the binary with the offscreen Qt platform and require it to be
-      # running a minute later. A start-up exception ends the process on Linux
-      # and macOS.
+      # One file per platform: the Windows executable; the Linux executable
+      # in a .tar.gz, which keeps its executable bit; and the macOS app
+      # bundle zipped with ditto, which keeps the symbolic links inside the
+      # bundle that zip -r would replace with copies.
+      - name: Package
+        shell: bash
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          mkdir release
+          case "$RUNNER_OS" in
+            Windows) cp dist/DICE.exe "release/${ASSET}.exe" ;;
+            macOS) ditto -c -k --keepParent dist/DICE.app "release/${ASSET}.zip" ;;
+            Linux) tar --owner=0 --group=0 --numeric-owner -czf "release/${ASSET}.tar.gz" -C dist DICE ;;
+          esac
+          ls -l release
+
+      # Unpack the release asset, start it with the offscreen Qt platform, and
+      # require it to be running a minute later. A start-up exception ends
+      # the process on Linux and macOS.
       - name: Smoke test
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
         run: |
+          mkdir smoke
           if [ "$RUNNER_OS" = macOS ]; then
-            app=dist/DICE.app/Contents/MacOS/DICE
+            ditto -x -k "release/${ASSET}.zip" smoke
+            app=smoke/DICE.app/Contents/MacOS/DICE
           else
-            app=dist/DICE
+            tar -xzf "release/${ASSET}.tar.gz" -C smoke
+            app=smoke/DICE
+          fi
+          if [ ! -x "$app" ]; then
+            echo "::error::$app is missing from the release asset or is not executable"
+            exit 1
           fi
           "$app" > smoke.log 2>&1 &
           pid=$!
@@ -154,41 +190,28 @@ jobs:
       - name: Smoke test
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
         run: |
-          $proc = Start-Process -FilePath dist\DICE.exe -PassThru
+          $proc = Start-Process -FilePath "release\$env:ASSET.exe" -PassThru
           $null = $proc.Handle  # keeps the exit code readable after exit
           Start-Sleep -Seconds 60
-          $windows = @(Get-Process -Name DICE -ErrorAction SilentlyContinue | Where-Object MainWindowTitle)
+          $windows = @(Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue | Where-Object MainWindowTitle)
           $exited = $proc.HasExited
-          Get-Process -Name DICE -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue | Stop-Process -Force
           if ($exited) {
-            Write-Output "::error::DICE.exe exited during start-up with code $($proc.ExitCode)"
+            Write-Output "::error::$env:ASSET.exe exited during start-up with code $($proc.ExitCode)"
             exit 1
           }
           if ($windows.Count -gt 0) {
-            Write-Output "::error::DICE.exe opened a window titled '$($windows[0].MainWindowTitle)'"
+            Write-Output "::error::$env:ASSET.exe opened a window titled '$($windows[0].MainWindowTitle)'"
             exit 1
           }
-          Write-Output "DICE.exe was still running after 60 s with no visible window"
-
-      # ditto keeps the symbolic links inside the .app bundle, which zip -r
-      # would replace with copies.
-      - name: Package
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          mkdir release
-          case "$RUNNER_OS" in
-            Windows) mv dist/DICE.exe "release/DICE-${VERSION}-Windows.exe" ;;
-            macOS) ditto -c -k --keepParent dist/DICE.app "release/DICE-${VERSION}-macOS.zip" ;;
-            Linux) mv dist/DICE "release/DICE-${VERSION}-Linux" ;;
-          esac
-          ls -l release
+          Write-Output "$env:ASSET.exe was still running after 60 s with no visible window"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: DICE-${{ runner.os }}
+          name: ${{ steps.asset.outputs.name }}
           path: release/
           if-no-files-found: error
           retention-days: 5
@@ -209,6 +232,8 @@ jobs:
           pattern: DICE-*
           path: release
           merge-multiple: true
+      # SHA256SUMS.txt covers the files as published: for Linux, the .tar.gz
+      # rather than the executable inside it.
       - name: Upload binaries and checksums
         env:
           GH_TOKEN: ${{ github.token }}
