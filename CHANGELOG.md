@@ -47,7 +47,17 @@ results with 1.2.0.
   Settings > Global Units sets the defaults.
 - Time range of the simulation in the summary file.
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
-  `publication.txt` (1000 runs), and `high_precision.txt` (10000 runs).
+  `publication.txt` (1000 runs), `high_precision.txt` (10000 runs), and
+  `noise_range.txt` (100 runs over a range of CNR).
+- For a noise-range simulation, a scatter plot of the estimated over the
+  nominal diffusion coefficient against the initial CNR, in place of the
+  accuracy histogram, and summary statistics in bins of initial CNR with
+  equal numbers of runs: one bin per 20 runs, at most five.
+- The GUI warns when it opens a parameters file with a noise range, which the
+  GUI cannot edit, instead of silently keeping its own noise setting.
+- Python interface: `run_monte_carlo_simulation()` takes `noise_range`, a
+  `NoiseRange` (`dice.models.parameters`), and then gives each run its own
+  noise level; `MonteCarloOutput.noise_range` records it.
 - Standalone GUI applications for Windows (x86_64), macOS (Apple silicon
   and Intel), and Linux (x86_64), built with PyInstaller when a GitHub
   release is published, with SHA-256 checksums in `SHA256SUMS.txt`. They need
@@ -80,6 +90,12 @@ results with 1.2.0.
 
 ### Changed
 
+- Behavior change: `noise range, reciprocal` and `noise range, reciprocal log`
+  draw a new noise standard deviation for each run, so one simulation covers
+  a range of CNR (#20). They drew one value for the whole simulation. The
+  results file of such a simulation records each run's noise standard
+  deviation, and the summary reports the drawn noise and CNR ranges instead
+  of a single value.
 - Behavior change: `proximity level` is no longer a simulation parameter. A
   `proximity level` key in a parameters file triggers a warning and is
   otherwise ignored. DICE reports the standard deviation, relative standard
