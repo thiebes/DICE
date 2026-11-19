@@ -5,7 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0] - Unreleased
+## [2.0.0] - Unreleased
+
+2.0.0 is a major release because the Python interface changes in ways that
+break existing code: classes and fields are renamed, and
+`dice.core.noise.fft_cnr` is removed (see Changed and Removed). Several
+reported numbers also change; read Changed and Fixed before comparing
+results with 1.2.0.
 
 ### Added
 
@@ -154,6 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dice.core.noise.fft_cnr`. Import `fft_cnr` from the `fft_cnr` package. It
   returns a result object; the CNR estimate is its `cnr` attribute.
 
-Changes before 1.3.0 are recorded in the Git history.
+Changes before 2.0.0 are recorded in the Git history.
 
-[1.3.0]: https://github.com/thiebes/DICE/compare/v1.2.0...v1.3.0
+[2.0.0]: https://github.com/thiebes/DICE/compare/v1.2.0...v2.0.0

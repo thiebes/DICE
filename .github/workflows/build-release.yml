@@ -51,7 +51,7 @@ jobs:
       # Inputs reach the script through environment variables, never through
       # expression interpolation, so they cannot inject shell code. The asset
       # name states the version, platform, and architecture, for example
-      # DICE-1.3.0-macOS-arm64.
+      # DICE-2.0.0-macOS-arm64.
       - name: Determine asset name
         id: asset
         shell: bash

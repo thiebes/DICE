@@ -136,7 +136,7 @@ uv run dice --version       # with uv
 dice --version              # with pip, environment active
 ```
 
-Both commands print the installed version, for example `dice 1.3.0`.
+Both commands print the installed version, for example `dice 2.0.0`.
 
 Check that the GUI toolkit can be imported:
 
