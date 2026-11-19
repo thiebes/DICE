@@ -118,6 +118,46 @@ class TestGaussFitting:
         )
 
 
+class TestGaussFittingScaleInvariance:
+    """The same profiles in another length unit or intensity scale give the same fits, rescaled.
+
+    The quick_test geometry (FWHM 1 over a 5-wide window of 50 pixels) with
+    white noise at a CNR of 50, in micrometers with amplitude 1 as reference.
+    In meters, sigma^2 is about 2e-13; with amplitude 1e-5, the profile values
+    are about 1e-5.
+    """
+
+    @staticmethod
+    def _noisy_profiles() -> tuple:
+        from dice.utils.axes import make_x_axis
+        from dice.utils.converters import fwhm_to_sigma2
+
+        x = make_x_axis(5, 50)
+        rng = np.random.default_rng(0)
+        clean = gaussian(x, mu=0.0, sig2=fwhm_to_sigma2(1.0), amp=1.0)
+        return x, np.array([clean + rng.normal(0, 0.02, x.size) for _ in range(20)])
+
+    @pytest.mark.parametrize('length_scale, amplitude_scale', [
+        (1e-6, 1.0),    # meters
+        (1e-4, 1.0),    # centimeters
+        (1e-3, 1.0),    # millimeters
+        (1e3, 1.0),     # nanometers
+        (1.0, 1e-5),    # a small signal, such as a change in transmission
+        (1.0, 1e-3),
+        (1e-6, 1e-5),
+    ])
+    def test_fits_scale_with_the_units(self, length_scale, amplitude_scale):
+        x, profiles = self._noisy_profiles()
+        reference = gauss_fitting(x, profiles)
+
+        scaled = gauss_fitting(x * length_scale, profiles * amplitude_scale)
+
+        for key in ('sigma^2_t estimates', 'sigma^2_t standard errors'):
+            np.testing.assert_allclose(
+                np.array(scaled[key]) / length_scale ** 2, reference[key], rtol=1e-6, err_msg=key)
+        assert scaled['fit_failures'] == reference['fit_failures'] == 0
+
+
 class TestFitGaussianProfile:
     """Test single Gaussian profile fitting."""
     

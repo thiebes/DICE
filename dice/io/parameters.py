@@ -331,6 +331,14 @@ def handle_noise_parameters(
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
                 raise ValueError("Error reading CSV for noise estimation.") from e
+            # fft-cnr and the narrow-peak check take one profile; a single
+            # column also loads as one.
+            if t0_profile_strings.ndim > 1:
+                lines, values = t0_profile_strings.shape
+                raise ValueError(
+                    f"The measured profile {noise_filename!r} must be a single line of "
+                    f"comma-separated values; it has {lines} lines of {values} values."
+                )
             # The measured profile is in its own intensity units, so its noise_rms
             # cannot be reused directly. The simulated profile has peak amplitude
             # amplitude_0; its noise must reproduce the measured initial CNR.

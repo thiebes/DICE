@@ -61,9 +61,20 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         'fit_failures': 0,
     }
     
-    # Get x-axis properties
-    xpix = len(x_axis)
+    # Fit on an x-axis centered on the window and in units of its width, and
+    # on each profile divided by its largest absolute value. curve_fit's
+    # convergence tolerances are relative to the whole parameter vector, so in
+    # the simulation's units a small sigma^2 (2e-13 in meters) or amplitude
+    # (1e-5) ended the fit near its initial guess. Scaled, every length unit
+    # and amplitude gives the same fit; sigma^2 and its standard error are
+    # scaled back below.
     xmin, xmax = np.min(x_axis), np.max(x_axis)
+    length_scale = np.abs(xmax - xmin) or 1.0
+    x_fit = (x_axis - (xmin + xmax) / 2) / length_scale
+
+    # Get x-axis properties
+    xpix = len(x_fit)
+    xmin, xmax = np.min(x_fit), np.max(x_fit)
     xwid = np.abs(xmax - xmin)
     
     for this_profile in profiles:
@@ -72,6 +83,11 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         if len(this_profile) != len(x_axis):
             raise ValueError("Profile and x_axis must have the same length")
         
+        intensity_scale = np.max(np.abs(this_profile))
+        if not (np.isfinite(intensity_scale) and intensity_scale > 0):
+            intensity_scale = 1.0  # a zero or non-finite profile is fitted as it is
+        this_profile = this_profile / intensity_scale
+
         # Set bounds for mu (central region of the window)
         mu_margin = xwid * 0.3  # Allow mu within central 60% of window
         mu0_min = xmin + mu_margin
@@ -84,7 +100,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             mu0_max = xmax
 
         # Find maximum amplitude within the mu bounds
-        valid_mask = (x_axis >= mu0_min) & (x_axis <= mu0_max)
+        valid_mask = (x_fit >= mu0_min) & (x_fit <= mu0_max)
         valid_indices = np.where(valid_mask)[0]
 
         if len(valid_indices) > 0:
@@ -97,7 +113,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             max_amp_idx = np.argmax(np.abs(this_profile))
 
         # Initial guesses
-        mu0 = x_axis[max_amp_idx]  # Mean at maximum within bounds
+        mu0 = x_fit[max_amp_idx]  # Mean at maximum within bounds
         sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
         a0 = np.abs(this_profile[max_amp_idx])  # Amplitude guess: absolute max value within bounds
         
@@ -121,7 +137,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         try:
             # Perform the fit
             parms, covars = curve_fit(
-                gaussian, x_axis, this_profile,
+                gaussian, x_fit, this_profile,
                 p0=p0,
                 bounds=(bounds_min, bounds_max),
                 maxfev=5000
@@ -146,8 +162,9 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             sigma2_stderr = np.nan
             fit_dictionary['fit_failures'] += 1
         
-        fit_dictionary['sigma^2_t estimates'].append(sigma2_estimate)
-        fit_dictionary['sigma^2_t standard errors'].append(sigma2_stderr)
+        # Back to the units of x_axis; the profile's scale does not change sigma^2
+        fit_dictionary['sigma^2_t estimates'].append(sigma2_estimate * length_scale ** 2)
+        fit_dictionary['sigma^2_t standard errors'].append(sigma2_stderr * length_scale ** 2)
     
     return fit_dictionary
 
