@@ -1,12 +1,106 @@
 """
-Tests for dice_gui/standalone.py, the entry script of the standalone build.
+Tests for dice_gui/standalone.py, the entry script of the standalone build,
+and its --self-test option.
 """
 
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
+import dice.analysis.simulation as simulation
 from dice_gui import standalone
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ENTRY_SCRIPT = REPO_ROOT / 'dice_gui' / 'standalone.py'
+
+
+def serial_pool(run_parameters, worker_count, progress_callback=None, drop_seeds=False):
+    """Stands in for run_in_process_pool: the same runs in-process, optionally unseeded."""
+    results = []
+    for arguments in run_parameters:
+        if drop_seeds:
+            arguments = arguments[:-1] + (None,)
+        results.append(simulation.run_single_simulation(*arguments))
+    if progress_callback:
+        progress_callback(len(run_parameters), len(run_parameters))
+    return results
+
+
+@pytest.fixture
+def ten_runs(monkeypatch):
+    """The self-test's example with 10 runs instead of 100, for the in-process tests."""
+    import dice.io.parameters
+
+    open_parameters = dice.io.parameters.open_parameters
+
+    def open_with_ten_runs(filename):
+        return {**open_parameters(filename), 'number of runs': 10}
+
+    monkeypatch.setattr(dice.io.parameters, 'open_parameters', open_with_ten_runs)
+
+
+class TestSelfTestRun:
+
+    def test_self_test_passes_in_a_fresh_process_without_qt(self):
+        # The run the release workflow makes, from source: real worker
+        # processes, which costs a few seconds. -X importtime reaches the
+        # workers too, so no PyQt6 line means no process imported Qt.
+        code = (
+            "import runpy, sys; sys.argv = ['DICE', '--self-test']; "
+            f"runpy.run_path({str(ENTRY_SCRIPT)!r}, run_name='__main__')"
+        )
+        completed = subprocess.run(
+            [sys.executable, '-X', 'importtime', '-c', code],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=600,
+        )
+
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert 'Results identical: yes' in completed.stdout
+        assert 'Worker processes still running: 0' in completed.stdout
+        assert completed.stdout.rstrip().endswith('Self-test passed')
+        assert 'PyQt6' not in completed.stderr
+
+    def test_differing_parallel_results_fail(self, monkeypatch, capsys, ten_runs):
+        monkeypatch.setattr(
+            simulation, 'run_in_process_pool',
+            lambda *args, **kwargs: serial_pool(*args, **kwargs, drop_seeds=True),
+        )
+
+        assert standalone.run_self_test(sys.stdout) is False
+        report = capsys.readouterr().out
+        assert 'Results identical: no' in report
+        assert report.rstrip().endswith('Self-test failed')
+
+    def test_identical_results_pass(self, monkeypatch, capsys, ten_runs):
+        monkeypatch.setattr(simulation, 'run_in_process_pool', serial_pool)
+
+        assert standalone.run_self_test(sys.stdout) is True
+        report = capsys.readouterr().out
+        assert 'Results identical: yes' in report
+        assert 'Progress reached 10 of 10 runs: yes' in report
+
+    def test_standalone_build_that_would_use_joblib_fails(self, monkeypatch, capsys, ten_runs):
+        # The GUI would then start loky workers, which a frozen build cannot.
+        import dice.utils.runtime as runtime
+
+        examples = runtime.examples_directory()
+        monkeypatch.setattr(simulation, 'run_in_process_pool', serial_pool)
+        monkeypatch.setattr(runtime, 'examples_directory', lambda: examples)
+        monkeypatch.setattr(runtime, 'is_standalone_build', lambda: True)
+        monkeypatch.setattr(simulation, 'default_parallel_backend', lambda: simulation.JOBLIB_BACKEND)
+
+        assert standalone.run_self_test(sys.stdout) is False
+        assert 'use: joblib' in capsys.readouterr().out
+
+    def test_missing_example_fails(self, monkeypatch, tmp_path):
+        import dice.utils.runtime as runtime
+
+        monkeypatch.setattr(runtime, 'examples_directory', lambda: tmp_path)
+
+        with pytest.raises(FileNotFoundError, match='quick_test.txt was not found'):
+            standalone.run_self_test(None)
 
 
 class TestEntryPoint:
@@ -40,3 +134,27 @@ class TestEntryPoint:
         with pytest.raises(SystemExit):
             standalone.main()
         assert calls == ['freeze_support']
+
+    @pytest.mark.parametrize(('passed', 'status'), [(True, 0), (False, 1)])
+    def test_self_test_exit_status(self, monkeypatch, calls, passed, status):
+        monkeypatch.setattr(sys, 'argv', ['DICE', '--self-test'])
+        monkeypatch.setattr(standalone, 'run_self_test', lambda output: passed)
+
+        with pytest.raises(SystemExit) as stop:
+            standalone.main()
+
+        assert stop.value.code == status
+        assert calls == ['freeze_support']
+
+    def test_self_test_error_is_printed_not_raised(self, monkeypatch, capsys, calls):
+        def broken(output):
+            raise RuntimeError("worker could not start")
+
+        monkeypatch.setattr(sys, 'argv', ['DICE', '--self-test'])
+        monkeypatch.setattr(standalone, 'run_self_test', broken)
+
+        with pytest.raises(SystemExit) as stop:
+            standalone.main()
+
+        assert stop.value.code == 1
+        assert 'RuntimeError: worker could not start' in capsys.readouterr().err

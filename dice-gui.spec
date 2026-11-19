@@ -43,10 +43,11 @@ else:
 # `dice-gui` console script). Parallel simulations in the frozen application
 # run in a standard-library process pool, whose workers start the executable
 # again; standalone.py calls multiprocessing.freeze_support() before it
-# imports Qt, so a worker runs its simulations and opens no window.
-# __main__.py would start joblib (loky) workers at launch to warm them up,
-# which a frozen application cannot do: a loky worker re-runs the entry
-# script instead of the worker code.
+# imports Qt, so a worker runs its simulations and opens no window. It also
+# runs the headless self-test (`DICE --self-test`) that the release workflow
+# runs on each build. __main__.py would start joblib (loky) workers at launch
+# to warm them up, which a frozen application cannot do: a loky worker re-runs
+# the entry script instead of the worker code.
 
 # The project is built from the source tree, not installed, so put it on
 # sys.path before collect_submodules imports the packages in a subprocess.
@@ -82,9 +83,10 @@ hiddenimports = [
 ]
 
 # Example parameter files, which the application finds in sys._MEIPASS
-# (dice.utils.runtime.examples_directory) for the GUI's example menu. The
-# menu falls back to embedded copies (dice_gui/example_parameters.py) when it
-# cannot find them, as in a wheel installation.
+# (dice.utils.runtime.examples_directory): the GUI's example menu loads them
+# and the self-test simulates quick_test.txt. The menu falls back to embedded
+# copies (dice_gui/example_parameters.py) when it cannot find them, as in a
+# wheel installation.
 datas = [
     (str(root_path / 'data'), 'data'),
 ]
