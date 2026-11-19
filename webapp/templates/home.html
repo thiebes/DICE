@@ -20,19 +20,14 @@
 
     <hr />
 
-    <p>The CNR estimation algorithm works as follows:</p>
+    <p>The CNR estimate comes from the <a href="https://pypi.org/project/fft-cnr/" target="_blank">fft-cnr</a> package. In outline:</p>
     <ol>
-        <li>The data undergoes a unitary (i.e., scaled by <i>n</i><sup>-&#189;</sup>), single sided, one-dimensional discrete Fourier transform (FT).
-        <ul>
-            <li>See <a href="https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html" target="_blank">One-dimensional Discrete Fourier Transform (numpy.fft.rfft)</a>.</li>
-            <li>Within this transformed data set, the signal is positioned at zero frequency, whereas the noise predominantly occupies higher spatial frequencies.</li>
-        </ul>
-        <li>The modulus of each complex value in the transformed data is calculated.</li>
-        <li>The first local minimum subsequent to the signal peak is found.</li>
-        <li>The noise level is determined by calculating the root mean squared (RMS) amplitude for frequencies above the initial local minimum</li>
-        <li>Since the normalized peak amplitude was unity, the CNR is simply the reciprocal of the noise level.</li>
-        <li>The estimate is rounded to two decimal places.</li>
+        <li>The profile is transformed into frequency space, where the signal occupies the low frequencies and white noise spreads over all frequencies.</li>
+        <li>The boundary frequency between signal and noise is chosen with the Akaike information criterion (AIC).</li>
+        <li>The root mean squared (RMS) noise is estimated from the frequencies above that boundary.</li>
+        <li>The CNR is the height of the signal peak above the baseline divided by the RMS noise.</li>
     </ol>
+    <p>The <a href="https://fft-cnr.readthedocs.io" target="_blank">fft-cnr documentation</a> describes the method and its limits.</p>
 
     <p>Download the open-source code for the full DICE application here:<br />
     <a href="https://github.com/thiebes/DICE" target="_blank">https://github.com/thiebes/DICE</a></p>
