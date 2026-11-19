@@ -205,6 +205,24 @@ Choose a width several times larger than the width of the profile at the last ti
 
 The number of points (pixels) on the spatial axis. The axis includes both end points, so the spacing between points is `spatial width` / (`pixel width` − 1).
 
+### Matching a real detector
+
+The points of the spatial axis are the pixel centers. For a detector line of N pixels at pitch p, the centers span p × (N − 1). To simulate that detector, set:
+
+- `pixel width` = N
+- `spatial width` = p × (N − 1)
+
+Do not set `spatial width` to N × p: the spacing between points is then N / (N − 1) times the pitch, about 1% too large for 100 pixels.
+
+**Example:** 100 pixels at a pitch of 0.05 μm:
+
+```python
+'pixel width': 100,
+'spatial width': 4.95,  # 0.05 x (100 - 1), in micrometers
+```
+
+The GUI shows the resulting pixel size, `spatial width` / (`pixel width` − 1), under the pixel count on the Experimental Conditions tab. With these settings it shows the pitch, 0.05 μm.
+
 ## Temporal axis
 
 Give **either** a time range **or** a time series. The linear fit needs at least two time points.
