@@ -15,7 +15,6 @@ from .parameters import (
 )
 from .results import (
     MonteCarloOutput,
-    ProcessedSimulationResult,
     RunResult,
     StatisticalAnalysis,
 )
@@ -44,7 +43,6 @@ __all__ = [
     "OutputParameters",
     # Results
     "MonteCarloOutput",
-    "ProcessedSimulationResult",
     "RunResult",
     "StatisticalAnalysis",
     # Profiles
