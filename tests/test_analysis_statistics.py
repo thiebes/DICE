@@ -335,3 +335,105 @@ class TestCustomProximityLevels:
             for key in ('ols', 'wls'):
                 assert precision[label][key] == calculate_precision(
                     result.d_estimates(key), nominal_d, level)
+
+
+class TestCnrBins:
+    """A simulation with a noise range is analyzed in bins of nominal CNR with equal numbers of runs."""
+
+    BIN_KEYS = ['cnr_min', 'cnr_max', 'num_runs', 'precision', 'accuracy', 'statistics']
+
+    @staticmethod
+    def _range_output(noise_sigmas, amplitude_0=1.0, failed_wls_runs=()):
+        """Runs whose D estimates deviate from the nominal 0.01 in proportion to their noise sigma."""
+        from dice.models.parameters import NoiseRange
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        parameters = create_parameters_from_legacy(
+            {'sigma^2_0': 0.18, 'amplitude_0': amplitude_0, 'mu_0': 0.0},
+            diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
+        runs = []
+        for run_id, sigma in enumerate(noise_sigmas):
+            sign = 1 if run_id % 2 else -1
+            fit = {'slope': 0.02 * (1 + sign * 4 * sigma), 'slope_stderr': 0.001,
+                   'intercept': 0.0, 'intercept_stderr': 0.001}
+            fields = {f'ols_{name}': value for name, value in fit.items()}
+            if run_id not in failed_wls_runs:
+                fields |= {f'wls_{name}': value * (1.01 if name == 'slope' else 1) for name, value in fit.items()}
+            runs.append(RunResult(
+                run_id=run_id, nominal_diffusion_coefficient=0.01, nominal_lifetime=1.0,
+                nominal_diffusion_length=0.1, nominal_sigma2_0=0.18, noise_sigma=sigma,
+                cnr_0_estimate=amplitude_0 / sigma, **fields))
+        return MonteCarloOutput(parameters=parameters, run_results=runs, num_runs=len(runs),
+                                noise_values=list(noise_sigmas), noise_range=NoiseRange(0.01, 0.05))
+
+    @pytest.mark.parametrize('run_count, bins', [
+        (0, 1), (1, 1), (39, 1), (40, 2), (59, 2), (60, 3), (99, 4), (100, 5), (101, 5), (10000, 5)])
+    def test_bin_count_rule(self, run_count, bins):
+        from dice.analysis.statistics import MAX_CNR_BINS, MIN_RUNS_PER_CNR_BIN, cnr_bin_count
+        assert (MAX_CNR_BINS, MIN_RUNS_PER_CNR_BIN) == (5, 20)
+        assert cnr_bin_count(run_count) == bins
+
+    def test_bins_hold_every_run_once_in_order_of_cnr(self):
+        from dice.analysis.statistics import runs_by_cnr_bin
+        rng = np.random.default_rng(3)
+        sigmas = list(rng.uniform(0.01, 0.05, size=63))
+        sigmas[10] = sigmas[40]  # a tie keeps run order
+        bins = runs_by_cnr_bin(self._range_output(sigmas, amplitude_0=2.0))
+
+        assert [len(runs) for runs in bins] == [21, 21, 21]
+        ordered = [run for runs in bins for run in runs]
+        assert sorted(run.run_id for run in ordered) == list(range(63))
+        cnr = [2.0 / run.noise_sigma for run in ordered]
+        assert cnr == sorted(cnr)
+        tied = [run.run_id for run in ordered if run.noise_sigma == sigmas[40]]
+        assert tied == [10, 40]
+
+    def test_bin_sizes_differ_by_at_most_one(self):
+        from dice.analysis.statistics import runs_by_cnr_bin
+        bins = runs_by_cnr_bin(self._range_output(list(np.linspace(0.05, 0.01, 103))))
+        assert [len(runs) for runs in bins] == [21, 21, 21, 20, 20]
+
+    def test_each_bin_reports_the_statistics_of_its_runs(self):
+        from dice.analysis.statistics import calculate_accuracy_metrics
+        sigmas = list(np.random.default_rng(5).uniform(0.01, 0.05, size=45))
+        output = self._range_output(sigmas, amplitude_0=2.0, failed_wls_runs=(0, 1, 2))
+        analysis = analyze_simulation_results(output, proximity_levels=[0.05, 0.2])
+
+        bins = analysis['cnr_bins']
+        assert [list(entry) for entry in bins] == [self.BIN_KEYS] * 2
+        assert [entry['num_runs'] for entry in bins] == [23, 22]
+        assert bins[0]['cnr_max'] <= bins[1]['cnr_min']
+
+        # Recompute each bin independently from the runs whose CNR falls in its interval.
+        run_cnr = np.array([2.0 / s for s in sigmas])
+        for entry in bins:
+            in_bin = [run for run, cnr in zip(output.run_results, run_cnr)
+                      if entry['cnr_min'] <= cnr <= entry['cnr_max']]
+            assert len(in_bin) == entry['num_runs']
+            assert entry['cnr_min'] == pytest.approx(min(2.0 / run.noise_sigma for run in in_bin))
+            assert entry['cnr_max'] == pytest.approx(max(2.0 / run.noise_sigma for run in in_bin))
+            for key in ('wls', 'ols'):
+                d = np.array([getattr(run, f'{key}_slope') / 2 for run in in_bin
+                              if getattr(run, f'{key}_slope') is not None])
+                assert entry['accuracy'][key] == pytest.approx(calculate_accuracy_metrics(d, 0.01))
+                for label, level in (('5%', 0.05), ('20%', 0.2)):
+                    assert entry['precision'][label][key] == pytest.approx(
+                        np.mean(np.abs(d / 0.01 - 1) <= level))
+                assert entry['statistics'][key] == {
+                    'num_successful': len(d), 'num_failed': len(in_bin) - len(d),
+                    'success_rate': len(d) / len(in_bin)}
+        assert sum(entry['statistics']['wls']['num_failed'] for entry in bins) == 3
+
+    def test_noise_range_has_no_per_level_analysis(self):
+        analysis = analyze_simulation_results(self._range_output(list(np.linspace(0.01, 0.05, 30))))
+        assert analysis['noise_analysis'] == {}
+        assert analysis['summary']['total_runs'] == 30
+        assert analysis['statistics']['wls']['num_successful'] == 30
+
+    def test_fixed_noise_has_no_cnr_bins(self):
+        import dataclasses
+        fixed = dataclasses.replace(self._range_output([0.02] * 30), noise_values=[0.02], noise_range=None)
+        assert 'cnr_bins' not in analyze_simulation_results(fixed)
+
+    def test_no_runs_no_bins(self):
+        analysis = analyze_simulation_results(self._range_output([]))
+        assert analysis['cnr_bins'] == []
