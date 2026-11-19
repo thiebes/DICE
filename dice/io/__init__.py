@@ -20,7 +20,6 @@ from .results import (
     print_and_append,
     export_collated_results,
     write_summary_file,
-    export_to_json,
     load_results_csv,
     load_multiple_results,
 )
@@ -47,7 +46,6 @@ __all__ = [
     'print_and_append',
     'export_collated_results',
     'write_summary_file',
-    'export_to_json',
     'load_results_csv',
     'load_multiple_results',
     # Data loader functions

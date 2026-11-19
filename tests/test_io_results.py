@@ -5,7 +5,6 @@ The fixtures parse data/examples/quick_test.txt and run a short serial
 simulation, so the writers receive the same objects the CLI passes them.
 """
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +15,6 @@ from dice.analysis.statistics import analyze_simulation_results
 from dice.io.parameters import open_parameters
 from dice.io.results import (
     export_collated_results,
-    export_to_json,
     load_multiple_results,
     load_results_csv,
     print_and_append,
@@ -182,34 +180,3 @@ class TestLoadMultipleResults:
         (tmp_path / 'empty.csv').write_text('')
         with pytest.raises(ValueError, match="No valid CSV files"):
             load_multiple_results(tmp_path)
-
-
-class TestExportToJson:
-    """JSON export schema, with and without retained profiles."""
-
-    RUN_KEYS = {'run_id', 'noise_sigma', 'cnr_0_estimate', 'estimated_sigma2_0',
-                'ols_slope', 'ols_slope_stderr', 'wls_slope', 'wls_slope_stderr'}
-
-    def test_schema(self, tmp_path, quick_test_simulation):
-        json_file = tmp_path / 'results.json'
-        export_to_json(quick_test_simulation, json_file)
-        exported = json.loads(json_file.read_text())
-        assert set(exported) == {'parameters', 'runs'}
-        assert set(exported['parameters']) == {
-            'num_runs', 'noise_values', 'diffusion_coefficient', 'lifetime',
-            'diffusion_length', 'sigma2_0', 'amplitude_0', 'mu_0'}
-        assert exported['parameters']['num_runs'] == FIXTURE_RUNS
-        assert [set(run) for run in exported['runs']] == [self.RUN_KEYS] * FIXTURE_RUNS
-
-    def test_retained_profiles_exported(self, tmp_path, quick_test_parameters):
-        time_axis = quick_test_parameters['time series']
-        retained = simulate_quick_test(quick_test_parameters, time_axis, num_runs=2,
-                                       retain_profile_data=True)
-        json_file = tmp_path / 'profiles.json'
-        export_to_json(retained, json_file, include_profile_data=True)
-        runs = json.loads(json_file.read_text())['runs']
-        expected_shape = (len(time_axis), len(quick_test_parameters['x array']))
-        for run, result in zip(runs, retained.run_results):
-            assert set(run) == self.RUN_KEYS | {'nominal_profiles', 'noisy_profiles'}
-            assert np.shape(run['noisy_profiles']) == expected_shape
-            np.testing.assert_allclose(run['noisy_profiles'], result.noisy_profiles)

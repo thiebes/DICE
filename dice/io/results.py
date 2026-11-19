@@ -1,15 +1,13 @@
 """
 Result export and file I/O for DICE simulations.
 
-This module provides functions for exporting simulation results to various
-formats including CSV, text summaries, and structured data files.
+This module provides functions for exporting simulation results to CSV
+files and text summaries, and for loading result CSV files.
 """
 
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union, TextIO
-import json
 import csv
 
 from ..core.noise import nominal_cnr
@@ -239,61 +237,6 @@ def write_summary_file(
         
         # Write completion message
         f.write("Simulation completed successfully.\n")
-
-
-def export_to_json(
-    results: MonteCarloOutput,
-    filename: Union[str, Path],
-    include_profile_data: bool = False
-) -> None:
-    """
-    Export results to JSON format.
-    
-    Parameters
-    ----------
-    results : MonteCarloOutput
-        Simulation results.
-    filename : str or Path
-        Output JSON filename.
-    include_profile_data : bool
-        Whether to include profile data.
-    """
-    # Convert results to dictionary
-    data = {
-        'parameters': {
-            'num_runs': results.num_runs,
-            'noise_values': results.noise_values,
-            'diffusion_coefficient': results.parameters.physics.diffusion_coefficient,
-            'lifetime': results.parameters.physics.lifetime,
-            'diffusion_length': results.parameters.physics.diffusion_length,
-            'sigma2_0': results.parameters.profile.sigma2_0,
-            'amplitude_0': results.parameters.profile.amplitude_0,
-            'mu_0': results.parameters.profile.mu_0,
-        },
-        'runs': []
-    }
-    
-    for run in results.run_results:
-        run_data = {
-            'run_id': run.run_id,
-            'noise_sigma': run.noise_sigma,
-            'cnr_0_estimate': run.cnr_0_estimate,
-            'estimated_sigma2_0': run.estimated_sigma2_0,
-            'ols_slope': run.ols_slope,
-            'ols_slope_stderr': run.ols_slope_stderr,
-            'wls_slope': run.wls_slope,
-            'wls_slope_stderr': run.wls_slope_stderr,
-        }
-        
-        if include_profile_data and hasattr(run, 'nominal_profiles'):
-            run_data['nominal_profiles'] = run.nominal_profiles.tolist() if isinstance(run.nominal_profiles, np.ndarray) else run.nominal_profiles
-            run_data['noisy_profiles'] = run.noisy_profiles.tolist() if isinstance(run.noisy_profiles, np.ndarray) else run.noisy_profiles
-        
-        data['runs'].append(run_data)
-    
-    # Write JSON file
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
 
 
 def load_results_csv(filename: Union[str, Path]) -> pd.DataFrame:
