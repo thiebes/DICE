@@ -213,7 +213,9 @@ class TestAlternativeInputModes:
         assert "noise value" not in params
         profile = np.loadtxt(EXAMPLE_PROFILE_CSV, delimiter=",").tolist()
         parsed = parameter_parser(resolve_units(params))
-        assert parsed["noise series"] == [pytest.approx(fft_cnr(profile).noise_rms)]
+        # The noise is set so that the simulated initial CNR equals the measured one.
+        expected_noise = parsed["amplitude_0"] / fft_cnr(profile).cnr
+        assert parsed["noise series"] == [pytest.approx(expected_noise)]
 
 
 class TestMalformedInput:

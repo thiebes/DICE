@@ -145,7 +145,7 @@ class DiceInterface:
             # Resolve per-parameter unit overrides before parsing,
             # so that values are in the global unit system when the
             # parser converts between representations (e.g., FWHM -> sigma^2).
-            from dice.utils.units import resolve_units
+            from dice.utils.units import resolve_units, global_length_unit, global_time_unit
             parameters = resolve_units(parameters)
 
             # Parse and process parameters (same as open_parameters does)
@@ -187,9 +187,9 @@ class DiceInterface:
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Results are in the global units resolve_units() converted to;
-            # the exporters label and convert from these (same defaults).
-            length_unit = processed_params.get('length unit', 'micrometer')
-            time_unit = processed_params.get('time unit', 'nanosecond')
+            # the exporters label and convert from these.
+            length_unit = global_length_unit(processed_params)
+            time_unit = global_time_unit(processed_params)
 
             # Export results to CSV
             csv_file = output_dir / f"{slug}.csv"
