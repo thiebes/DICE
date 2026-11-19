@@ -24,6 +24,15 @@ from .profiles import (
     TimeSeriesProfile,
     GaussianProfile,
 )
+from .estimators import (
+    DEFAULT_ESTIMATOR_KEYS,
+    DISPLAY_ORDER,
+    ESTIMATORS,
+    EstimatorSpec,
+    FrameFits,
+    SlopeFit,
+    get_estimator,
+)
 
 __all__ = [
     # Parameters
@@ -42,4 +51,12 @@ __all__ = [
     "ProfileData",
     "TimeSeriesProfile",
     "GaussianProfile",
+    # Estimators
+    "DEFAULT_ESTIMATOR_KEYS",
+    "DISPLAY_ORDER",
+    "ESTIMATORS",
+    "EstimatorSpec",
+    "FrameFits",
+    "SlopeFit",
+    "get_estimator",
 ]

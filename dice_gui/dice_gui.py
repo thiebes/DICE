@@ -48,6 +48,7 @@ from dice_gui.tabs import (
     update_pixel_size,
     combo_value,
     set_combo_value,
+    selected_estimator_key,
 )
 
 # Legacy code moved to separate modules - see dice_gui/tabs/, dice_gui/example_parameters.py, dice_gui/simulation_thread.py
@@ -652,7 +653,7 @@ class DiceGUI(QMainWindow):
             image_settings = self.collect_image_settings()
 
             # Get plot method (WLS or OLS)
-            use_wls = self.plot_method_wls_radio.isChecked()
+            estimator = selected_estimator_key(self)
 
             # Get output location (original directory)
             slug = self.interface.last_parameters.get('filename slug', 'plot')
@@ -666,7 +667,7 @@ class DiceGUI(QMainWindow):
             self.interface.regenerate_plot_from_memory(
                 filename=filename,
                 image_settings=image_settings,
-                use_wls=use_wls
+                estimator=estimator
             )
 
             # Show success message
@@ -708,7 +709,7 @@ class DiceGUI(QMainWindow):
             image_settings = self.collect_image_settings()
 
             # Get plot method
-            use_wls = self.plot_method_wls_radio.isChecked()
+            estimator = selected_estimator_key(self)
 
             # Determine output location
             csv_path = Path(csv_file)
@@ -723,7 +724,7 @@ class DiceGUI(QMainWindow):
                 csv_file=csv_file,
                 filename=filename,
                 image_settings=image_settings,
-                use_wls=use_wls
+                estimator=estimator
             )
 
             # Update status bar
@@ -1211,22 +1212,12 @@ class DiceGUI(QMainWindow):
         if result is None:
             return
 
-        use_wls = self.plot_method_wls_radio.isChecked()
+        # Extract D estimates of the selected fit method
+        d_arr = result.d_estimates(selected_estimator_key(self))
 
-        # Extract D estimates
-        d_estimates = []
-        for run in result.run_results:
-            if use_wls:
-                if run.wls_slope is not None:
-                    d_estimates.append(run.wls_slope / 2)
-            else:
-                if run.ols_slope is not None:
-                    d_estimates.append(run.ols_slope / 2)
-
-        if not d_estimates:
+        if len(d_arr) == 0:
             return
 
-        d_arr = np.array(d_estimates)
         nominal_d = result.run_results[0].nominal_diffusion_coefficient
 
         if nominal_d == 0:

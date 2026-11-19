@@ -5,16 +5,24 @@ This module defines dataclasses for organizing simulation results,
 including individual run results and aggregated statistics.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field, fields
+from typing import Optional, List, Dict, Any, Tuple
 import numpy as np
 import pandas as pd
+
+from .estimators import DEFAULT_ESTIMATOR_KEYS, SlopeFit
 
 
 @dataclass
 class RunResult:
     """
     Results from a single Monte Carlo simulation run.
+
+    Each estimator in dice.models.estimators stores its SlopeFit in four
+    fields named after its key: ``{key}_slope``, ``{key}_slope_stderr``,
+    ``{key}_intercept`` and ``{key}_intercept_stderr``, all None when it
+    produced no fit. Code that handles any estimator reads and writes them
+    through slope_fit() and set_slope_fit().
 
     Attributes
     ----------
@@ -96,19 +104,51 @@ class RunResult:
     fitted_sigma2_stderrs: Optional[np.ndarray] = None
     weights: Optional[np.ndarray] = None
 
+    def slope_fit(self, key: str) -> Optional[SlopeFit]:
+        """Estimator `key`'s fit for this run, or None if it produced none."""
+        names = _slope_fit_field_names(key)
+        if getattr(self, names[0]) is None:
+            return None
+        return SlopeFit(*(getattr(self, name) for name in names))
+
+    def set_slope_fit(self, key: str, fit: Optional[SlopeFit]) -> None:
+        """Store `fit` in estimator `key`'s fields; None clears them."""
+        for name, slope_fit_field in zip(_slope_fit_field_names(key), fields(SlopeFit)):
+            setattr(self, name, None if fit is None else getattr(fit, slope_fit_field.name))
+
+    def accuracy(self, key: str) -> float:
+        """Estimator `key`'s D estimate (slope / 2) over the nominal D; NaN when absent."""
+        fit = self.slope_fit(key)
+        if fit is not None and self.nominal_diffusion_coefficient > 0:
+            return (fit.slope / 2) / self.nominal_diffusion_coefficient
+        return float('nan')
+
     @property
     def ols_accuracy(self) -> float:
         """Calculate OLS estimate accuracy relative to nominal."""
-        if self.ols_slope is not None and self.nominal_diffusion_coefficient > 0:
-            return (self.ols_slope / 2) / self.nominal_diffusion_coefficient
-        return float('nan')
+        return self.accuracy('ols')
 
     @property
     def wls_accuracy(self) -> float:
         """Calculate WLS estimate accuracy relative to nominal."""
-        if self.wls_slope is not None and self.nominal_diffusion_coefficient > 0:
-            return (self.wls_slope / 2) / self.nominal_diffusion_coefficient
-        return float('nan')
+        return self.accuracy('wls')
+
+
+def _slope_fit_field_names(key: str) -> Tuple[str, ...]:
+    """
+    The RunResult fields that hold estimator `key`'s SlopeFit, in SlopeFit field order.
+
+    Raises
+    ------
+    AttributeError
+        If RunResult has no such fields, so that a misspelled key cannot
+        create new attributes or read as "no fit".
+    """
+    names = tuple(f'{key}_{slope_fit_field.name}' for slope_fit_field in fields(SlopeFit))
+    missing = [name for name in names if name not in RunResult.__dataclass_fields__]
+    if missing:
+        raise AttributeError(f"RunResult has no fields {missing} for estimator {key!r}")
+    return names
 
 
 @dataclass
@@ -190,11 +230,21 @@ class MonteCarloOutput:
         Total number of simulation runs completed.
     noise_values : List[float]
         List of noise sigma values used in the simulation.
+    estimator_keys : Tuple[str, ...]
+        Keys of the estimators that ran, as in dice.models.estimators. The
+        analysis reports each of them, even one whose every fit failed.
     """
     parameters: Any
     run_results: List[RunResult]
     num_runs: int
     noise_values: List[float] = field(default_factory=list)
+    estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
+
+    def d_estimates(self, key: str) -> np.ndarray:
+        """Estimator `key`'s D estimates (slope / 2) of the runs that have a fit, in run order."""
+        _slope_fit_field_names(key)  # reject an unknown key even when there are no runs
+        return np.array([fit.slope / 2 for run in self.run_results
+                         if (fit := run.slope_fit(key)) is not None])
 
 
 @dataclass

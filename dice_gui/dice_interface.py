@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Callable
 import sys
 import os
 
+from dice.models.estimators import ESTIMATORS, SlopeFit, get_estimator
 from dice.models.results import RunResult, MonteCarloOutput
 
 
@@ -139,7 +140,6 @@ class DiceInterface:
             from dice.io.results import export_collated_results, write_summary_file
             from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
-            import numpy as np
             from pathlib import Path
 
             # Resolve per-parameter unit overrides before parsing,
@@ -204,17 +204,12 @@ class DiceInterface:
                 length_unit=length_unit, time_unit=time_unit,
             )
 
-            # Create accuracy histogram
-            d_estimates = []
+            # Create accuracy histogram of the WLS estimates
+            d_estimates = result.d_estimates('wls')
             d_nominal = processed_params['nominal diffusion coefficient']
 
-            for run_result in result.run_results:
-                if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
-                    d_est = run_result.wls_slope / 2
-                    d_estimates.append(d_est)
-
-            if d_estimates:
-                d_ratios = np.array(d_estimates) / d_nominal
+            if len(d_estimates) > 0:
+                d_ratios = d_estimates / d_nominal
 
                 # Create legacy-format result for plotting
                 legacy_result = {
@@ -301,7 +296,7 @@ class DiceInterface:
         self,
         filename: str,
         image_settings: Dict[str, Any],
-        use_wls: bool = True
+        estimator: str = 'wls'
     ) -> None:
         """
         Regenerate plot from data in memory with specified image settings.
@@ -309,14 +304,13 @@ class DiceInterface:
         Args:
             filename: Path where plot should be saved
             image_settings: Dictionary with image settings (type, width, height, dpi, etc.)
-            use_wls: If True, use WLS slopes; if False, use OLS slopes
+            estimator: Key of the estimator whose slopes to plot (dice.models.estimators)
 
         Raises:
             ValueError: If no data is available in memory
             RuntimeError: If plot generation fails
         """
         try:
-            import numpy as np
             from dice.visualization.histograms import plot_accuracy_histogram
 
             # Check if data exists
@@ -326,28 +320,16 @@ class DiceInterface:
             if self.last_parameters is None:
                 raise ValueError("No parameters in memory")
 
-            # Extract diffusion estimates based on method selection
-            d_estimates = []
+            # Extract diffusion estimates of the selected estimator
             d_nominal = self.last_parameters['nominal diffusion coefficient']
+            d_estimates = self.last_result.d_estimates(estimator)
 
-            for run_result in self.last_result.run_results:
-                if use_wls:
-                    # Use WLS slopes
-                    if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
-                        d_est = run_result.wls_slope / 2
-                        d_estimates.append(d_est)
-                else:
-                    # Use OLS slopes
-                    if hasattr(run_result, 'ols_slope') and run_result.ols_slope is not None:
-                        d_est = run_result.ols_slope / 2
-                        d_estimates.append(d_est)
-
-            if not d_estimates:
-                method_name = "WLS" if use_wls else "OLS"
+            if len(d_estimates) == 0:
+                method_name = get_estimator(estimator).short_name
                 raise ValueError(f"No {method_name} diffusion estimates found in results")
 
             # Calculate ratios
-            d_ratios = np.array(d_estimates) / d_nominal
+            d_ratios = d_estimates / d_nominal
 
             # Create legacy-format result for plotting
             legacy_result = {
@@ -380,7 +362,7 @@ class DiceInterface:
         csv_file: str,
         filename: str,
         image_settings: Dict[str, Any],
-        use_wls: bool = True
+        estimator: str = 'wls'
     ) -> None:
         """
         Load results from CSV file and generate plot.
@@ -389,7 +371,7 @@ class DiceInterface:
             csv_file: Path to CSV file with simulation results
             filename: Path where plot should be saved
             image_settings: Dictionary with image settings (type, width, height, dpi, etc.)
-            use_wls: If True, use WLS slopes; if False, use OLS slopes
+            estimator: Key of the estimator whose slopes to plot (dice.models.estimators)
 
         Raises:
             FileNotFoundError: If CSV file does not exist
@@ -418,12 +400,9 @@ class DiceInterface:
                 return matches[0] if matches else None
 
             # Determine which columns to use
-            if use_wls:
-                slope_col = _find_csv_column('weighted fit diffusion slope')
-                method_name = 'WLS'
-            else:
-                slope_col = _find_csv_column('unweighted fit diffusion slope')
-                method_name = 'OLS'
+            spec = get_estimator(estimator)
+            slope_col = _find_csv_column(f'{spec.csv_label} diffusion slope')
+            method_name = spec.short_name
 
             nom_col = _find_csv_column('nominal diffusion coeff')
 
@@ -476,11 +455,14 @@ class DiceInterface:
             )
 
             # Store loaded data in memory for regeneration
-            # Get both WLS and OLS slopes if available for future regeneration
-            wls_slopes = df['weighted fit diffusion slope'].dropna().values if 'weighted fit diffusion slope' in df.columns else None
-            ols_slopes = df['unweighted fit diffusion slope'].dropna().values if 'unweighted fit diffusion slope' in df.columns else None
+            # Get every estimator's slopes whose column the CSV has, for future regeneration
+            stored_slopes = {
+                spec.key: df[column].dropna().values
+                for spec in ESTIMATORS
+                if (column := f'{spec.csv_label} diffusion slope') in df.columns
+            }
 
-            # Create RunResult objects with both WLS and OLS slopes
+            # Create RunResult objects with those slopes
             # Use placeholder values for required fields not available in CSV
             run_results = []
             num_runs = len(slopes)
@@ -493,9 +475,10 @@ class DiceInterface:
                     nominal_sigma2_0=0.0,
                     noise_sigma=0.0,
                     cnr_0_estimate=0.0,
-                    wls_slope=wls_slopes[i] if wls_slopes is not None and i < len(wls_slopes) else None,
-                    ols_slope=ols_slopes[i] if ols_slopes is not None and i < len(ols_slopes) else None
                 )
+                for key, key_slopes in stored_slopes.items():
+                    if i < len(key_slopes):
+                        run_result.set_slope_fit(key, SlopeFit(slope=key_slopes[i]))
                 run_results.append(run_result)
 
             # Create MonteCarloOutput (parameters and noise_values unavailable from CSV)
@@ -503,7 +486,8 @@ class DiceInterface:
                 parameters=None,
                 run_results=run_results,
                 num_runs=num_runs,
-                noise_values=[]
+                noise_values=[],
+                estimator_keys=tuple(stored_slopes),
             )
 
             # Store parameters for regeneration
@@ -524,14 +508,14 @@ class DiceInterface:
     def calculate_proximity_on_demand(
         self,
         proximity_level: float,
-        use_wls: bool = True
+        estimator: str = 'wls'
     ) -> Optional[float]:
         """
         Calculate fraction of estimates within proximity of nominal, on demand.
 
         Args:
             proximity_level: Fractional tolerance (e.g., 0.1 for ±10%)
-            use_wls: If True, use WLS estimates; if False, use OLS
+            estimator: Key of the estimator whose estimates to use (dice.models.estimators)
 
         Returns:
             Fraction within proximity (0-1), or None if no data available.
@@ -539,23 +523,15 @@ class DiceInterface:
         if self.last_result is None:
             return None
 
-        import numpy as np
         from dice.analysis.statistics import calculate_precision
 
-        d_estimates = []
-        for run in self.last_result.run_results:
-            if use_wls:
-                if run.wls_slope is not None:
-                    d_estimates.append(run.wls_slope / 2)
-            else:
-                if run.ols_slope is not None:
-                    d_estimates.append(run.ols_slope / 2)
+        d_estimates = self.last_result.d_estimates(estimator)
 
-        if not d_estimates:
+        if len(d_estimates) == 0:
             return None
 
         nominal_d = self.last_result.run_results[0].nominal_diffusion_coefficient
         if nominal_d == 0:
             return None
 
-        return calculate_precision(np.array(d_estimates), nominal_d, proximity_level)
+        return calculate_precision(d_estimates, nominal_d, proximity_level)

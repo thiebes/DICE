@@ -270,17 +270,12 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
     fig = None
     try:
         # Prepare simulation result in legacy format for plotting
-        # Extract diffusion coefficients (WLS estimates)
-        d_estimates = []
+        # Extract diffusion coefficients (WLS estimates, slope / 2)
+        d_estimates = result.d_estimates('wls')
         d_nominal = parameters['nominal diffusion coefficient']
 
-        for run_result in result.run_results:
-            if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
-                d_est = run_result.wls_slope / 2  # Convert slope to diffusion coefficient
-                d_estimates.append(d_est)
-
-        if d_estimates:
-            d_ratios = np.array(d_estimates) / d_nominal
+        if len(d_estimates) > 0:
+            d_ratios = d_estimates / d_nominal
 
             # Create legacy-format result for plotting
             legacy_result = {

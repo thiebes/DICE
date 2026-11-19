@@ -29,6 +29,7 @@ from dice_gui.tabs.tab_analysis import (
     create_tab_analysis_settings,
     populate_precision_summary,
     reset_precision_summary,
+    selected_estimator_key,
 )
 from dice_gui.tabs.tab_output import create_tab_output_settings
 
@@ -55,4 +56,5 @@ __all__ = [
     "browse_noise_file",
     "populate_precision_summary",
     "reset_precision_summary",
+    "selected_estimator_key",
 ]

@@ -5,10 +5,13 @@ This module provides functions for analyzing the precision and accuracy
 of diffusion coefficient estimates from Monte Carlo simulations.
 """
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union
 from ..core.noise import nominal_cnr
+from ..models.estimators import in_column_order
 from ..models.results import MonteCarloOutput
 
 
@@ -208,36 +211,23 @@ def analyze_simulation_results(
     """
     if proximity_levels is None:
         proximity_levels = [0.05, 0.1, 0.2, 0.5]
-    # Extract OLS and WLS estimates
-    ols_slopes = []
-    wls_slopes = []
-    
-    for run in result.run_results:
-        if run.ols_slope is not None:
-            ols_slopes.append(run.ols_slope)
-        if run.wls_slope is not None:
-            wls_slopes.append(run.wls_slope)
-    
-    ols_slopes = np.array(ols_slopes)
-    wls_slopes = np.array(wls_slopes)
-    
-    # Convert slopes to diffusion coefficients (divide by 2 for 1D)
-    ols_d_estimates = ols_slopes / 2
-    wls_d_estimates = wls_slopes / 2
+
+    # Diffusion coefficient estimates (slope / 2 in 1D) of each estimator that ran,
+    # keyed by estimator in column order. An estimator whose every fit failed is kept.
+    keys = [spec.key for spec in in_column_order(result.estimator_keys)]
+    d_estimates = {key: result.d_estimates(key) for key in keys}
     nominal_d = result.parameters.physics.diffusion_coefficient
-    
+
     # Calculate precision at different levels
     precision_results = {}
     for level in proximity_levels:
         precision_results[f'{int(level*100)}%'] = {
-            'ols': calculate_precision(ols_d_estimates, nominal_d, level),
-            'wls': calculate_precision(wls_d_estimates, nominal_d, level)
+            key: calculate_precision(d_estimates[key], nominal_d, level) for key in keys
         }
-    
+
     # Calculate accuracy metrics
-    ols_accuracy = calculate_accuracy_metrics(ols_d_estimates, nominal_d)
-    wls_accuracy = calculate_accuracy_metrics(wls_d_estimates, nominal_d)
-    
+    accuracy = {key: calculate_accuracy_metrics(d_estimates[key], nominal_d) for key in keys}
+
     # Analyze by noise level if multiple noise values
     noise_analysis = {}
     if len(result.noise_values) > 1:
@@ -245,21 +235,31 @@ def analyze_simulation_results(
         for noise_val in result.noise_values:
             # Filter runs for this noise value
             noise_runs = [r for r in result.run_results if r.noise_sigma == noise_val]
-            
-            noise_ols = np.array([r.ols_slope/2 for r in noise_runs 
-                                 if r.ols_slope is not None])
-            noise_wls = np.array([r.wls_slope/2 for r in noise_runs 
-                                 if r.wls_slope is not None])
-            
-            noise_analysis[f'noise_{noise_val}'] = {
+            noise_result = dataclasses.replace(
+                result, run_results=noise_runs, num_runs=len(noise_runs))
+            noise_d = {key: noise_result.d_estimates(key) for key in keys}
+
+            # Every estimator's precision, then every estimator's bias
+            entry = {
                 'cnr': nominal_cnr(amplitude_0, noise_val),
                 'num_runs': len(noise_runs),
-                'ols_precision_10%': calculate_precision(noise_ols, nominal_d, 0.1),
-                'wls_precision_10%': calculate_precision(noise_wls, nominal_d, 0.1),
-                'ols_bias': np.mean(noise_ols) - nominal_d if len(noise_ols) > 0 else np.nan,
-                'wls_bias': np.mean(noise_wls) - nominal_d if len(noise_wls) > 0 else np.nan,
             }
-    
+            for key in keys:
+                entry[f'{key}_precision_10%'] = calculate_precision(noise_d[key], nominal_d, 0.1)
+            for key in keys:
+                entry[f'{key}_bias'] = (
+                    np.mean(noise_d[key]) - nominal_d if len(noise_d[key]) > 0 else np.nan)
+            noise_analysis[f'noise_{noise_val}'] = entry
+
+    statistics = {
+        key: {
+            'num_successful': len(d_estimates[key]),
+            'num_failed': result.num_runs - len(d_estimates[key]),
+            'success_rate': len(d_estimates[key]) / result.num_runs if result.num_runs > 0 else 0
+        }
+        for key in keys
+    }
+
     return {
         'summary': {
             'total_runs': result.num_runs,
@@ -268,23 +268,9 @@ def analyze_simulation_results(
             'nominal_diffusion_length': result.parameters.physics.diffusion_length,
         },
         'precision': precision_results,
-        'accuracy': {
-            'ols': ols_accuracy,
-            'wls': wls_accuracy
-        },
+        'accuracy': accuracy,
         'noise_analysis': noise_analysis,
-        'statistics': {
-            'ols': {
-                'num_successful': len(ols_d_estimates),
-                'num_failed': result.num_runs - len(ols_d_estimates),
-                'success_rate': len(ols_d_estimates) / result.num_runs if result.num_runs > 0 else 0
-            },
-            'wls': {
-                'num_successful': len(wls_d_estimates),
-                'num_failed': result.num_runs - len(wls_d_estimates),
-                'success_rate': len(wls_d_estimates) / result.num_runs if result.num_runs > 0 else 0
-            }
-        }
+        'statistics': statistics,
     }
 
 
