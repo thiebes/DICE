@@ -153,11 +153,22 @@ results with 1.2.0.
 - The `output_length_unit` and `output_time_unit` keys are rejected before
   the simulation. No output used them; lengths and times are reported in the
   global `length unit` and `time unit`.
-- A negative diffusion coefficient or lifetime is rejected when the
-  parameters are loaded.
+- A negative diffusion coefficient, lifetime, or diffusion length is rejected
+  when the parameters are loaded.
 
 ### Fixed
 
+- The Gaussian fit of each frame gives the same estimates in any length
+  unit and for any `amplitude_0`. The fit stopped on tolerances relative to
+  its parameter values, so it ended early when the numbers were small: in
+  meters the spread of the diffusion coefficient estimates was 28 times too
+  large, and with `amplitude_0` = 1e-5 every estimate was 0. The error
+  exceeds 1e-4 of the estimate when the spatial width is below about 0.05 in
+  the chosen unit or `amplitude_0` is below about 0.01. Every release since
+  1.0.0 fits the same way, so results from earlier releases with lengths in
+  centimeters or meters, or with a small amplitude, are affected. Results in
+  micrometers or nanometers with an amplitude near 1 change by less than
+  1e-5 of the estimate.
 - Results in length or time units other than micrometer and nanosecond are
   converted and labeled correctly. In 1.2.0 the command-line interface wrote
   the results file and the summary as if the units were micrometer and
@@ -198,8 +209,8 @@ results with 1.2.0.
   without an error.
 - The `output_diffusion_length_unit` and `output_diffusion_time_unit` keys
   set the unit of the diffusion coefficients in the results file and the
-  summary file, from the command-line interface and from the GUI. They were
-  read and ignored. Give both or neither; an unknown unit name is rejected
+  summary file in the command-line interface. They were read and ignored. The
+  GUI does not set them. Give both or neither; an unknown unit name is rejected
   before the simulation.
 - `load_experimental_data()` reads a CSV whose first line is numbers as data.
   A single-line profile, the documented format, came back empty because its
@@ -214,6 +225,8 @@ results with 1.2.0.
 - `--dry-run` loads and validates the parameters file and reports the first
   problem it finds, without running the simulation. It reported success
   without reading the file.
+- The command-line interface reports a plot as saved only when its file was
+  written, and warns otherwise.
 - Summary and other text output files are written as UTF-8 on every
   platform. On Windows they used the system code page, so the ± sign was not
   valid UTF-8.
