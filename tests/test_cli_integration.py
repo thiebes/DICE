@@ -657,6 +657,32 @@ class TestOutputOptions:
         assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
 
 
+class TestRelativeNoiseDataPath:
+    """A parameters file names its measured profile relative to its own folder, not the working directory."""
+
+    def test_cli_from_another_directory(self, tmp_path):
+        import shutil
+        from fft_cnr import fft_cnr
+        params_dir, workdir = tmp_path / 'project', tmp_path / 'elsewhere'
+        (params_dir / 'data').mkdir(parents=True)
+        workdir.mkdir()
+        shutil.copy(EXAMPLES_DIR / 'example_profile.csv', params_dir / 'data' / 'measured.csv')
+        params_file = write_quick_test_variant(
+            params_dir, 'relative_noise',
+            {'number of runs': 4, 'estimate noise from data': 'data/measured.csv'},
+            removed=('noise value',))
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter('always')
+            run = run_cli(workdir, params_file, 'relative_noise', '--no-plots')
+
+        assert run.exit_code == 0
+        assert run.output_dir.parent.parent == workdir
+        file_cnr = fft_cnr(np.loadtxt(EXAMPLES_DIR / 'example_profile.csv', delimiter=',')).cnr
+        values = summary_label_to_values(run.read_summary())
+        assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
+
+
 class TestNarrowPeakWarning:
     """The CLI shows the warning for a measured profile too narrow for fft-cnr, on stderr."""
 

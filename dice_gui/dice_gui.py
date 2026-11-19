@@ -1351,11 +1351,19 @@ class DiceGUI(QMainWindow):
         )
 
     def _read_parameter_file(self, file_path: str) -> dict:
-        """Parse a parameters.txt-format file into its dictionary."""
+        """Parse a parameters.txt-format file into its dictionary.
+
+        A relative 'estimate noise from data' path is resolved against the
+        file's folder, as the command-line interface resolves it.
+        """
         import ast
+        from dice.io.parameters import resolve_noise_data_path
 
         with open(file_path, 'r') as f:
-            return ast.literal_eval(f.read())
+            params = ast.literal_eval(f.read())
+        if not isinstance(params, dict):
+            return params
+        return resolve_noise_data_path(params, Path(file_path).parent)
 
     def load_example(self, example_name: str):
         """Load example parameters without making the bundled file the save target."""

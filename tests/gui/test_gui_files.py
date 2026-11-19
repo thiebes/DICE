@@ -316,6 +316,29 @@ class TestUnsavedChanges:
         assert dialogs.titles("question") == ["Unsaved Changes"]
 
 
+class TestRelativeNoiseDataPath:
+    """A relative profile path in an opened file is relative to that file's folder, as in the CLI."""
+
+    def test_opened_file_resolves_against_its_folder(self, window, dialogs, work_dir):
+        import shutil
+        params_dir = work_dir / "project"
+        params_dir.mkdir()
+        shutil.copy(EXAMPLE_PROFILE_CSV, params_dir / "measured.csv")
+        params = read_example("quick_test.txt")
+        del params["noise value"]
+        params["estimate noise from data"] = "measured.csv"
+        params_file = params_dir / "relative.txt"
+        params_file.write_text(str(params))
+
+        _open_via_menu(window, dialogs, params_file)
+
+        assert dialogs.titles("critical") == []
+        assert window.noise_estimate_radio.isChecked()
+        assert window.noise_file_input.text() == str(params_dir / "measured.csv")
+        assert _engine_parameters(window)["estimate noise from data"] == str(params_dir / "measured.csv")
+        assert window._error_labels["noise_file"].isHidden()
+
+
 class TestLoadErrors:
 
     def test_truncated_file_is_reported_and_leaves_the_form_unchanged(self, window, dialogs, work_dir):

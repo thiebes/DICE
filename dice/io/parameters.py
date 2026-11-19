@@ -8,6 +8,7 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 """
 
 import ast
+import os
 import warnings
 import numpy as np
 from typing import Dict, Any, List, Optional, Sequence, Union
@@ -32,6 +33,40 @@ from ..models.parameter_keys import (
 # still accepted in parameter files, with a warning.
 RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
 
+# Keys whose value is the path of the measured profile for the noise estimate.
+NOISE_DATA_KEYS = ('estimate noise from data', 'estimate_noise_from_data')
+
+
+def resolve_noise_data_path(
+    parameters_dictionary: Dict[str, Any], base_dir: Union[str, Path]
+) -> Dict[str, Any]:
+    """
+    Resolve a relative measured-profile path against the folder of its parameters file.
+
+    A parameters file names the profile for 'estimate noise from data'
+    relative to its own folder, so that it gives the same run from any working
+    directory. An absolute path, or a value that is not a path string, is left
+    unchanged.
+
+    Parameters
+    ----------
+    parameters_dictionary : dict
+        Parameters as read from the file.
+    base_dir : str or Path
+        Folder of the parameters file.
+
+    Returns
+    -------
+    dict
+        Copy of the parameters with the path made absolute.
+    """
+    resolved = dict(parameters_dictionary)
+    for key in NOISE_DATA_KEYS:
+        path = resolved.get(key)
+        if isinstance(path, str) and path.strip() and not Path(path).is_absolute():
+            resolved[key] = os.path.abspath(Path(base_dir) / path)
+    return resolved
+
 
 def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
     """
@@ -48,8 +83,9 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
     Returns
     -------
     dict
-        Parsed parameters dictionary.
-    
+        Parsed parameters dictionary. A relative 'estimate noise from data'
+        path is resolved against the folder of the file.
+
     Raises
     ------
     FileNotFoundError
@@ -66,6 +102,7 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
             # parser converts between representations (e.g., FWHM -> sigma^2).
             from ..utils.units import resolve_units
             parms_dict = resolve_units(parms_dict)
+            parms_dict = resolve_noise_data_path(parms_dict, Path(filename).parent)
             result = parameter_parser(parms_dict, seed=seed)
         return result
     except FileNotFoundError:

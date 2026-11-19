@@ -162,7 +162,7 @@ The standard deviation σ of the noise.
 
 ### `estimate noise from data`
 
-The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the current working directory.
+The path to a CSV file that contains a measured initial profile, as a single line of comma-separated values. A relative path is relative to the folder that contains the parameters file, so the parameters file gives the same run from any working directory. The GUI resolves a relative path in the same way when it opens a parameters file.
 
 DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.org/project/fft-cnr/) package. It then sets the noise level so that the initial CNR of the simulated profiles equals that estimate. The amplitude and units of the measured profile do not matter. The [fft-cnr documentation](https://fft-cnr.readthedocs.io) describes the method and its limits.
 

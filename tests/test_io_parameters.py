@@ -556,6 +556,72 @@ class TestEstimateNoiseFromData:
             "The peak of the measured profile 'measured.csv' is 4.6 pixels wide")
 
 
+class TestNoiseDataPath:
+    """A relative 'estimate noise from data' path is relative to the parameters file's folder."""
+
+    def test_relative_path_joins_the_base_folder(self, tmp_path):
+        from dice.io.parameters import resolve_noise_data_path
+        params = {'estimate noise from data': 'profiles/measured.csv', 'number of runs': 3}
+        resolved = resolve_noise_data_path(params, tmp_path)
+        assert resolved == {'estimate noise from data': str(tmp_path / 'profiles' / 'measured.csv'),
+                            'number of runs': 3}
+        assert params['estimate noise from data'] == 'profiles/measured.csv'
+
+    def test_parent_reference_is_normalized(self, tmp_path):
+        from dice.io.parameters import resolve_noise_data_path
+        resolved = resolve_noise_data_path({'estimate_noise_from_data': '../measured.csv'}, tmp_path / 'params')
+        assert resolved['estimate_noise_from_data'] == str(tmp_path / 'measured.csv')
+
+    @pytest.mark.parametrize('value', [str(EXAMPLE_PROFILE), '', 0.02, None])
+    def test_absolute_path_and_non_path_values_unchanged(self, tmp_path, value):
+        from dice.io.parameters import resolve_noise_data_path
+        params = {'estimate noise from data': value}
+        assert resolve_noise_data_path(params, tmp_path) == params
+
+    def test_parameter_without_a_noise_file_unchanged(self, tmp_path):
+        from dice.io.parameters import resolve_noise_data_path
+        params = {'noise value': 0.02}
+        assert resolve_noise_data_path(params, tmp_path) == params
+
+    def test_open_parameters_resolves_against_the_file_folder(self, tmp_path, monkeypatch):
+        import ast
+        import shutil
+        params_dir, elsewhere = tmp_path / 'params', tmp_path / 'elsewhere'
+        params_dir.mkdir()
+        elsewhere.mkdir()
+        shutil.copy(EXAMPLE_PROFILE, params_dir / 'measured.csv')
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params['estimate noise from data'] = 'measured.csv'
+        params_file = params_dir / 'relative.txt'
+        params_file.write_text(str(params))
+        monkeypatch.chdir(elsewhere)
+
+        with pytest.warns(UserWarning, match="pixels wide at half maximum"):
+            parsed = open_parameters(params_file)
+
+        assert parsed['estimate noise from data'] == str(params_dir / 'measured.csv')
+        from fft_cnr import fft_cnr
+        file_cnr = fft_cnr(np.loadtxt(EXAMPLE_PROFILE, delimiter=',')).cnr
+        assert parsed['amplitude_0'] / parsed['noise series'][0] == pytest.approx(file_cnr, rel=1e-12)
+
+    def test_path_relative_to_the_working_directory_is_not_used(self, tmp_path, monkeypatch):
+        import ast
+        import shutil
+        params_dir = tmp_path / 'params'
+        params_dir.mkdir()
+        shutil.copy(EXAMPLE_PROFILE, tmp_path / 'measured.csv')
+        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
+        del params['noise value']
+        params['estimate noise from data'] = 'measured.csv'
+        params_file = params_dir / 'relative.txt'
+        params_file.write_text(str(params))
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="Error reading CSV for noise estimation"):
+            open_parameters(params_file)
+
+
 class TestRetiredProximityLevel:
     """'proximity level' no longer affects a run; a file that sets it gets one warning."""
 
