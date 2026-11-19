@@ -23,7 +23,6 @@ from .results import (
     export_to_json,
     load_results_csv,
     load_multiple_results,
-    export_legacy_format,
 )
 
 from .data_loader import (
@@ -51,7 +50,6 @@ __all__ = [
     'export_to_json',
     'load_results_csv',
     'load_multiple_results',
-    'export_legacy_format',
     # Data loader functions
     'load_profile_data',
     'load_time_series_profiles',
