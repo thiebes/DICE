@@ -1,37 +1,33 @@
 # DICE Command-Line Interface Guide
 
-Complete guide to using DICE from the command line.
+The command-line interface (CLI) runs a DICE simulation from a parameters file and writes the results to files. It suits batch processing, scripts, and computers without a display.
 
-## Quick Reference
+## Quick reference
 
 ```bash
-# Run with parameters file
-dice parameters.txt
+# Installed with pip, environment active
+dice data/examples/parameters.txt
 
-# Using uv
-uv run dice parameters.txt
+# With uv, from the DICE directory
+uv run dice data/examples/parameters.txt
 
-# Using Python module
-python run_dice.py parameters.txt
+# Short test run (100 runs)
+uv run dice data/examples/quick_test.txt
 ```
 
-## Basic Usage
+The examples on this page use the files in `data/examples/` and assume that you run them from the `DICE` directory. With pip, leave out `uv run`.
 
-### Running Simulations
-
-DICE reads parameters from a text file and runs Monte Carlo simulations to assess diffusion coefficient estimation accuracy.
-
-**Command:**
+## Run a simulation
 
 ```bash
 dice parameters.txt
 ```
 
-**Output:** Results are saved to `output/<filename_slug>/` directory.
+DICE reads the parameters file, runs the simulation, and writes three files to `output/<slug>/` under the current working directory, where `<slug>` is the `filename slug` parameter.
 
-### Parameters File
+### Parameters file
 
-Create a `parameters.txt` file with simulation parameters as a Python dictionary:
+A parameters file contains one Python dictionary. For example:
 
 ```python
 {
@@ -48,371 +44,188 @@ Create a `parameters.txt` file with simulation parameters as a Python dictionary
     'spatial width': 10.0,
     'pixel width': 100,
     'time range': [0.0, 10.0, 11],
-    'proximity level': 0.1,
 }
 ```
 
-See [Parameter Reference](parameters.md) for complete documentation.
+The [Parameter Reference](parameters.md) describes every parameter. `data/examples/parameters.txt` lists all parameters with comments.
 
-## Running Methods
+## Command-line options
 
-### Method 1: Installed Package
-
-If you installed DICE with `pip install -e .`:
-
-```bash
-dice parameters.txt
+```text
+dice [options] parameters_file
 ```
 
-The `dice` command is available from any directory.
+| Option | Effect |
+| ------- | ------------- |
+| `--verbose`, `-v` | Print the settings, the size of the simulation, and progress messages. |
+| `--quiet`, `-q` | Print errors only. |
+| `--output-dir DIR`, `-o DIR` | Write the output files to `DIR` instead of `output/<slug>/`. |
+| `--no-plots` | Do not create the histogram. |
+| `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
+| `--seed N` | Use the random seed `N` (a non-negative integer) for the noise. See [Reproducible results](#reproducible-results). |
+| `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. `both` writes both files. |
+| `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
+| `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
+| `--dry-run`, `--check` | Check that the parameters file exists, then stop without a simulation. The contents of the file are not checked. |
+| `--version` | Print the version and stop. |
+| `--help`, `-h` | Print the list of options and stop. |
 
-### Method 2: Using uv
+### Reproducible results
 
-With uv, you don't need to install DICE separately:
-
-```bash
-cd DICE
-uv run dice parameters.txt
-```
-
-### Method 3: Direct Script Execution
-
-From the DICE directory:
-
-```bash
-python run_dice.py parameters.txt
-```
-
-### Method 4: Python Module
+With `--seed N`, repeated runs with the same parameters and the same seed give identical results. The serial and the parallel calculation also give the same results as each other. Without `--seed`, each run draws new random numbers, so the results differ slightly from one run to the next.
 
 ```bash
-python -m dice.cli.main parameters.txt
+dice data/examples/quick_test.txt --seed 12345
 ```
 
-## Programmatic Usage
+Results are reproducible for the same versions of DICE and its dependencies on the same platform. Identical numbers across platforms or across dependency versions are not guaranteed. The GUI has no seed option.
 
-### From Python Scripts
+## Output files
+
+### Results file: `<slug>.csv`
+
+One row for each run. The main columns are:
+
+| Columns | Content |
+| ------- | ------------- |
+| `run number` | Index of the run |
+| `nominal diffusion coeff`, `nominal lifetime`, `nominal diffusion length` | Nominal values, in the simulation units |
+| `nominal CNR` | 1 / noise standard deviation |
+| `estimated CNR` | CNR of the noisy profile at the first time point, estimated with the [fft-cnr](https://pypi.org/project/fft-cnr/) package |
+| `nominal sigma^2_0`, `estimated sigma^2_0` | Variance of the initial profile: nominal value, and fitted value at the first time point |
+| `weighted fit diffusion slope`, `... slope stderr`, `... intercept`, `... intercept stderr` | WLS fit of variance against time, in the simulation units |
+| `unweighted fit ...` | The same quantities for the OLS fit |
+| `weighted fit diffusion coeff [cm²/s]`, `weighted fit diffusion stderr [cm²/s]` | WLS estimate of the diffusion coefficient and its standard error, in cm²/s |
+| `unweighted fit diffusion coeff [cm²/s]`, `unweighted fit diffusion stderr [cm²/s]` | The same for the OLS fit |
+| `nominal diffusion coeff [cm²/s]` | Nominal diffusion coefficient in cm²/s |
+
+WLS stands for weighted least squares, OLS for ordinary least squares. In one dimension the slope of the variance against time equals 2D. If a fit fails in a run, the columns of that fit are empty in that row. The file is encoded in UTF-8.
+
+### Summary file: `<slug>_summary.txt`
+
+A text report that contains:
+
+- the main simulation parameters: number of runs, spatial axis, time points, noise level, initial CNR, initial variance, and the nominal diffusion length, diffusion coefficient, and lifetime
+- for the WLS and the OLS fits: the standard deviation, relative standard error, mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
+- the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
+
+### Histogram: `<slug>_accuracy_histogram.png`
+
+A histogram of the ratio D_est/D_nom of the WLS estimates to the nominal diffusion coefficient. The y-axis shows the probability of each bin. A normal distribution with the same mean and standard deviation is drawn over the histogram, and a legend reports the mean, median, and standard deviation of the ratio. The file type follows the `image type` parameter.
+
+## Use DICE from Python
+
+### Run a simulation and analyze it in memory
+
+`dice.dice_runner()` runs the simulation of a parameters file and returns the results. It does not write output files.
 
 ```python
 import dice
 
-# Run simulation with parameters file
-result = dice.dice_runner("parameters.txt")
+result = dice.dice_runner("data/examples/quick_test.txt")
+analysis = dice.analyze_simulation_results(result, proximity_levels=[0.05, 0.15])
+
+wls = analysis["accuracy"]["wls"]
+print(f"Mean estimate: {wls['mean']:.5f}")
+print(f"Standard deviation: {wls['std']:.5f}")
+print(f"Within ±15%: {analysis['precision']['15%']['wls']:.1%}")
 ```
 
-### Using Parameters Dictionary
+`analysis["accuracy"]` contains the mean, median, standard deviation, bias, relative bias, RMSE, and relative RMSE of the estimates for each fit (`"wls"` and `"ols"`). `analysis["precision"]` contains the fraction of estimates within each proximity level. The estimates are in the simulation units.
+
+### Run the CLI from Python
+
+`dice.cli.main.main()` takes the same arguments as the `dice` command, writes the same files, and returns the exit code (0 for success):
 
 ```python
-from dice.analysis.simulation import run_monte_carlo_simulation
-from dice.io.parameters import load_parameters
+from dice.cli.main import main
 
-# Load parameters from file
-parameters = load_parameters("parameters.txt")
-
-# Run simulation
-result = run_monte_carlo_simulation(parameters)
+exit_code = main(["data/examples/quick_test.txt", "--quiet"])
 ```
 
-### Building Parameters in Code
+### Analyze the results in Python
 
-```python
-parameters = {
-    'filename slug': 'code_simulation',
-    'number of runs': 1000,
-    'length unit': 'micrometer',
-    'time unit': 'nanosecond',
-    'nominal diffusion coefficient': 0.5,
-    'nominal lifetime (tau)': 2.0,
-    'amplitude_0': 1.0,
-    'mean_0': 0.0,
-    'FWHM_0': 1.0,
-    'noise value': 0.01,
-    'spatial width': 10.0,
-    'pixel width': 100,
-    'time range': [0.0, 10.0, 11],
-    'proximity level': 0.1,
-}
-
-import dice
-result = dice.dice_runner(parameters)
-```
-
-## Output Files
-
-DICE generates three main output files in `output/<filename_slug>/`:
-
-### 1. Results CSV
-
-**File:** `<slug>.csv`
-
-Contains raw simulation data:
-- Each row is one Monte Carlo iteration
-- Columns include estimated diffusion coefficient, fit parameters, and statistics
-
-**Usage:**
+The results file contains everything needed to compute the fraction of estimates within any proximity level. The slope and the nominal diffusion coefficient are both in the simulation units, so their ratio does not depend on the units:
 
 ```python
 import pandas as pd
 
-# Load results
-df = pd.read_csv('output/my_simulation/my_simulation.csv')
+df = pd.read_csv("output/quick_test/quick_test.csv")
+d_est = df["weighted fit diffusion slope"] / 2  # one dimension: MSD = 2Dt
+ratio = (d_est / df["nominal diffusion coeff"]).dropna()
 
-# Analyze
-print(df['D_est'].describe())
-print(df['D_est/D_nom'].hist())
+print(ratio.describe())
+print(f"Within ±15%: {ratio.between(0.85, 1.15).mean():.1%}")
 ```
 
-### 2. Summary Text
+`dropna()` removes the runs in which the fit failed. In a Jupyter notebook, `ratio.plot.hist(bins=35)` draws a histogram of the ratio.
 
-**File:** `<slug>_summary.txt`
+### Check a parameters file
 
-Human-readable summary including:
-- All simulation parameters
-- Statistical analysis (mean, median, std dev)
-- Proximity analysis results
-- Timestamp and run information
+`open_parameters()` reads and parses a parameters file and raises `ValueError` with a description if the file is invalid. `validate_parameters()` checks that the number of runs, the spatial width, and the number of pixels are positive:
 
-### 3. Histogram Plot
+```python
+from dice.io.parameters import open_parameters, validate_parameters
 
-**File:** `<slug>_accuracy_histogram.png`
+params = open_parameters("data/examples/parameters.txt")
+validate_parameters(params)
+print("Parameters are valid")
+```
 
-Visualization of D_est/D_nom distribution showing:
-- Histogram of estimate ratios
-- Proximity level boundaries
-- Statistical markers
+## Batch processing
 
-## Advanced Usage
-
-### Batch Processing
-
-Process multiple parameter files:
+### Several parameters files
 
 ```bash
 for params in params_*.txt; do
-    dice "$params"
+    dice "$params" --quiet
 done
 ```
 
-Or with Python:
+### Parameter scan
+
+To vary one parameter, write one parameters file for each value and run each file. The following example varies the noise level of `quick_test.txt`:
 
 ```python
-import glob
-import dice
+import ast
+from pathlib import Path
 
-for params_file in glob.glob("params_*.txt"):
-    print(f"Processing {params_file}")
-    dice.dice_runner(params_file)
+from dice.cli.main import main
+
+base = ast.literal_eval(Path("data/examples/quick_test.txt").read_text())
+
+for noise in [0.01, 0.02, 0.05]:
+    params = dict(base)
+    params["noise value"] = noise
+    params["filename slug"] = f"scan_noise_{noise}"
+    path = Path(f"params_noise_{noise}.txt")
+    path.write_text(repr(params))
+    main([str(path), "--quiet"])
 ```
 
-### Parameter Scanning
+Each value writes its results to `output/scan_noise_<value>/`.
 
-Systematically vary parameters:
+## Performance
 
-```python
-import dice
-import numpy as np
-
-base_params = {
-    'filename slug': 'scan',
-    'number of runs': 500,
-    'length unit': 'micrometer',
-    'time unit': 'nanosecond',
-    'amplitude_0': 1.0,
-    'mean_0': 0.0,
-    'FWHM_0': 1.0,
-    'spatial width': 10.0,
-    'pixel width': 100,
-    'time range': [0.0, 10.0, 11],
-    'proximity level': 0.1,
-}
-
-# Scan over noise values
-noise_values = [0.005, 0.01, 0.02, 0.05, 0.1]
-
-for noise in noise_values:
-    params = base_params.copy()
-    params['filename slug'] = f'scan_noise_{noise}'
-    params['noise value'] = noise
-    params['nominal diffusion coefficient'] = 0.5
-    params['nominal lifetime (tau)'] = 2.0
-
-    print(f"Running with noise = {noise}")
-    dice.dice_runner(params)
-```
-
-### Custom Analysis
-
-Access simulation results programmatically:
-
-```python
-from dice.analysis.simulation import run_monte_carlo_simulation
-from dice.io.parameters import load_parameters
-import pandas as pd
-
-# Load and run
-parameters = load_parameters("parameters.txt")
-result = run_monte_carlo_simulation(parameters)
-
-# result is a DataFrame with all simulation data
-print(f"Mean D_est: {result['D_est'].mean()}")
-print(f"Std Dev: {result['D_est'].std()}")
-
-# Custom proximity analysis
-nominal_D = parameters.get('nominal diffusion coefficient',
-                           parameters.get('nominal diffusion length')**2)
-ratios = result['D_est'] / nominal_D
-within_5pct = ((ratios > 0.95) & (ratios < 1.05)).sum() / len(ratios)
-print(f"Within ±5%: {within_5pct:.1%}")
-```
-
-## Performance Optimization
-
-### Parallel Processing
-
-Enable multiprocessing in parameters file:
-
-```python
-{
-    # ... other parameters ...
-    'multiprocessing': True,  # Use all cores
-    # or
-    'multiprocessing': 4,     # Use 4 cores
-}
-```
-
-### Memory Management
-
-For large simulations, disable profile data retention:
-
-```python
-{
-    # ... other parameters ...
-    'retain profile data': False,  # Save memory
-}
-```
-
-### Batch Size
-
-For very long parameter scans, process in batches:
-
-```python
-import dice
-
-def run_batch(param_files, batch_size=10):
-    for i in range(0, len(param_files), batch_size):
-        batch = param_files[i:i+batch_size]
-        for params_file in batch:
-            dice.dice_runner(params_file)
-        print(f"Completed batch {i//batch_size + 1}")
-```
+- Parallel processing is on by default and uses all CPU cores. Turn it off with `'multiprocessing': False` in the parameters file or with `--multiprocessing 0`. To leave some cores free for other work, set the number of worker processes, for example `--multiprocessing 4`.
+- The run time grows in proportion to the number of runs, and with the number of pixels and time points. Use `data/examples/quick_test.txt` (100 runs) to check a setup before a long simulation.
+- Keep `--retain-profiles` off for large simulations, because retained profiles use much memory.
 
 ## Troubleshooting
 
-### Common Errors
+When a simulation cannot start or fails, DICE prints an error message and exits with a non-zero code.
 
-**"File not found"**
-- Check that parameters file path is correct
-- Use absolute paths if running from different directory
+| Message | Cause and solution |
+| ------- | ------------- |
+| `Parameters file not found: <file>` | The path is wrong. Check the path, or give an absolute path. |
+| `Error evaluating the file's contents as a dictionary` | The file is not a valid Python dictionary. Check for missing commas, quotes, or braces. |
+| `The required parameter '<name>' ... is missing` | Add the parameter (see the [Parameter Reference](parameters.md)). |
+| `More than one parameter provided for ...` or `No parameter provided for ...` | Give exactly one option from the group, for example `FWHM_0` or `sigma_0`. |
+| `Provide either 'nominal diffusion length' or both ...` | Give either the diffusion length or both the diffusion coefficient and the lifetime. |
 
-**"Invalid parameter"**
-- Verify parameter file syntax (must be valid Python dict)
-- Check for required parameters (see [Parameter Reference](parameters.md))
+Add `--verbose` to print the full traceback of an error.
 
-**"Simulation failed"**
-- Check parameter values are physically reasonable
-- Ensure sufficient memory for large simulations
-- Verify all units are consistent
-
-### Debugging
-
-Add print statements to see progress:
-
-```python
-import dice
-
-# DICE prints progress information to stdout
-result = dice.dice_runner("parameters.txt")
-```
-
-### Checking Parameters
-
-Validate parameters before running:
-
-```python
-from dice.io.parameters import load_parameters, validate_parameters
-
-params = load_parameters("parameters.txt")
-is_valid, error_msg = validate_parameters(params)
-
-if not is_valid:
-    print(f"Invalid parameters: {error_msg}")
-else:
-    print("Parameters are valid")
-```
-
-## Integration with Workflows
-
-### Jupyter Notebooks
-
-```python
-import dice
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Run simulation
-result = dice.dice_runner("parameters.txt")
-
-# Load and plot results
-df = pd.read_csv('output/my_simulation/my_simulation.csv')
-df['D_est/D_nom'].hist(bins=50)
-plt.xlabel('D_est / D_nom')
-plt.ylabel('Frequency')
-plt.show()
-```
-
-### Shell Scripts
-
-```bash
-#!/bin/bash
-
-# Run multiple simulations
-for noise in 0.01 0.02 0.05 0.1; do
-    # Create parameters file
-    cat > params_${noise}.txt <<EOF
-{
-    'filename slug': 'noise_${noise}',
-    'number of runs': 1000,
-    'noise value': ${noise},
-    # ... other parameters ...
-}
-EOF
-
-    # Run simulation
-    dice params_${noise}.txt
-done
-
-# Combine results
-python analyze_results.py
-```
-
-### Make files
-
-```makefile
-PARAMS = $(wildcard params_*.txt)
-RESULTS = $(PARAMS:params_%.txt=output/%/%.csv)
-
-all: $(RESULTS)
-
-output/%/%.csv: params_%.txt
-	dice $<
-
-clean:
-	rm -rf output/
-
-.PHONY: all clean
-```
-
-## See Also
+## See also
 
 - [Parameter Reference](parameters.md)
 - [Installation Guide](installation.md)

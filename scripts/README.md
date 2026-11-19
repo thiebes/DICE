@@ -1,60 +1,65 @@
 # DICE Maintenance Scripts
 
-This directory contains scripts for maintaining and managing the DICE project.
+The `scripts/` directory contains scripts for maintaining the DICE project.
 
-## Version Management
+## Version management
 
 ### bump_version.py
 
-Updates the version number across all relevant files in the DICE project.
+Sets a new version number in every file that stores it as text.
 
-#### Single Source of Truth
+#### Where the version is defined
 
-The version is defined once in `dice/__init__.py` as `__version__`. All other files that display or reference the version import this value dynamically:
+`dice/__init__.py` defines the version once, as `__version__`. Code that displays the version imports it from there:
 
-- `dice/cli/arguments.py` - imports `__version__`
-- `dice_gui/__init__.py` - imports `__version__`
-- `dice_gui/dice_gui.py` - imports and displays `__version__`
+- `dice/cli/arguments.py` imports `__version__` for `dice --version`
+- `dice_gui/dice_gui.py` imports `__version__` and shows it in the GUI
+- `dice-gui.spec` reads it from `dice/__init__.py` when PyInstaller builds the GUI
 
-The bump script updates files that cannot dynamically import the version:
+The script updates the files that cannot import the version:
 
-- `dice/__init__.py` - the source of truth
-- `CITATION.cff` - citation metadata (2 occurrences + release date)
-- `pyproject.toml` - build configuration
-- `setup.py` - legacy build configuration (if present)
+- `dice/__init__.py`, the source of the version
+- `pyproject.toml`, the package metadata
+- `CITATION.cff`, the citation metadata (two version fields and two release dates)
 
 #### Usage
 
 ```bash
-python scripts/bump_version.py <new_version> [--date YYYY-MM-DD]
+python scripts/bump_version.py <new_version> [--date YYYY-MM-DD] [--no-confirm]
 ```
+
+The release date defaults to the current date. Without `--no-confirm`, the script shows the planned change and asks for confirmation.
+
+If a file already contains the requested version, the script reports that no change is needed in that file and continues. To set only the release date in `CITATION.cff`, run the script with the current version and `--date`. The script stops with an error when the version or the date has an invalid format, when a file has no version field, or when `CITATION.cff` has no `date-released` field. After an update, it prints the next steps of the release workflow.
 
 #### Examples
 
 ```bash
-# Bump to version 1.3.0 with today's date
+# Set version 1.3.0 with the current date as the release date
 python scripts/bump_version.py 1.3.0
 
-# Bump to version 1.3.0 with specific release date
+# Set version 1.3.0 with a given release date
 python scripts/bump_version.py 1.3.0 --date 2025-09-15
 
-# Skip confirmation prompt
+# Skip the confirmation prompt
 python scripts/bump_version.py 1.3.0 --no-confirm
 ```
 
-#### Workflow
+#### Release workflow
 
-1. Run the bump script with the desired version
-2. Review changes with `git diff`
-3. Run tests to ensure everything works
-4. Commit changes: `git add -A && git commit -m "Bump version to X.Y.Z"`
-5. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
-6. Push: `git push && git push --tags`
+1. Run the script with the new version.
+2. Run `uv lock`, so that `uv.lock` records the new version of the `dice` package.
+3. In `CHANGELOG.md`, set the release date of the new version.
+4. Review the changes with `git diff`.
+5. Run the tests: `uv run pytest`.
+6. Commit the changes: `git add -A && git commit -m "Bump version to X.Y.Z"`.
+7. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`.
+8. Push the commit and the tag: `git push && git push --tags`.
 
-#### Version Format
+#### Version format
 
-Versions must follow semantic versioning: `MAJOR.MINOR.PATCH` (e.g., 1.2.0)
+Versions follow semantic versioning, `MAJOR.MINOR.PATCH` (for example, 1.2.0):
 
-- MAJOR: Breaking changes
-- MINOR: Feature additions (backward compatible)
-- PATCH: Bug fixes (backward compatible)
+- MAJOR: changes that are not backward compatible
+- MINOR: added features that are backward compatible
+- PATCH: backward-compatible bug fixes

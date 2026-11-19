@@ -1,56 +1,78 @@
 # Contributing to DICE
 
-Thank you for your interest in contributing to DICE (Diffusion Insight Computation Engine)! This tool helps researchers quantify noise effects in optical transport imaging measurements.
+Thank you for your interest in contributing to DICE (Diffusion Insight Computation Engine). DICE helps researchers quantify the effect of noise on optical measurements of excited state transport.
 
-## Ways to Contribute
+## Ways to contribute
 
-### 🐛 Report Bugs
-- Use the GitHub issue tracker
-- Include experimental parameters, error messages, and expected vs. actual behavior
-- Provide minimal reproducible examples when possible
+### Report bugs
 
-### 💡 Suggest Enhancements
-- New fitting models or diffusion functions
-- Additional noise models or experimental conditions
+- Use the [GitHub issue tracker](https://github.com/thiebes/DICE/issues).
+- Include the parameters file (or the GUI settings), the full error message, and the expected and actual behavior.
+- Provide a minimal example that reproduces the problem, when possible.
+
+### Suggest enhancements
+
+- Fitting models or diffusion models
+- Noise models or experimental conditions
 - Performance improvements
 - Documentation improvements
 
-### 🔬 Submit Examples
-- Real experimental use cases
-- Validation studies comparing DICE predictions to experimental results
-- Tutorials for specific materials systems
+### Submit examples
 
-### 📖 Improve Documentation
-- API documentation
+- Experimental use cases
+- Validation studies that compare DICE predictions with experimental results
+- Tutorials for specific material systems
+
+### Improve documentation
+
 - Usage examples
-- Scientific background explanations
+- Explanations of the scientific background
+- Corrections where the documentation and the code disagree
 
-## Code Contributions
+## Code contributions
 
-### Getting Started
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Update documentation as needed
-6. Submit a pull request
+### Set up a development environment
 
-### Code Standards
-- Follow PEP 8 style guidelines
-- Include docstrings for new functions/classes
-- Add type hints where appropriate
-- Ensure compatibility with existing dependencies (NumPy, SciPy, etc.)
+DICE uses [uv](https://docs.astral.sh/uv/) to manage its development environment. Install uv as described in the [Installation Guide](docs/installation.md), then run from the repository root:
+
+```bash
+uv sync --extra dev
+uv run pytest
+```
+
+`uv sync --extra dev` installs DICE in editable mode with the test tools and Flask. `uv run pytest` runs the test suite. With pip, use `pip install -e ".[dev]"` and `pytest` in an active virtual environment.
+
+When you change dependencies in `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
+
+### Workflow
+
+1. Fork the repository.
+2. Create a branch for your change (`git checkout -b feature/short-description`).
+3. Make your changes.
+4. Add tests for new functionality.
+5. Update the documentation, and describe user-visible changes in `CHANGELOG.md`.
+6. Open a pull request.
+
+### Code standards
+
+- Follow the PEP 8 style guidelines. The repository includes a flake8 configuration (`.flake8`).
+- Include docstrings for new functions and classes.
+- Add type hints where appropriate.
+- Keep compatibility with the dependency ranges declared in `pyproject.toml`.
 
 ### Testing
-- Add tests for new features
-- Verify that existing tests still pass
-- Include validation against known analytical solutions where possible
 
-### Scientific Rigor
-- Provide references for new models or algorithms
-- Include parameter validation and error handling
-- Document assumptions and limitations
-- Consider edge cases and boundary conditions
+- Add tests for new features.
+- Check that the existing tests still pass.
+- Where possible, validate against known analytical solutions.
 
-## Questions?
-Open an issue for discussion or [reach out to the maintainers](mailto:joseph@thiebes.org).
+### Scientific rigor
+
+- Provide references for new models or algorithms.
+- Include parameter validation and error handling.
+- Document assumptions and limitations.
+- Consider edge cases and boundary conditions.
+
+## Questions
+
+Open an issue for discussion, or [contact the maintainer](mailto:joseph@thiebes.org).

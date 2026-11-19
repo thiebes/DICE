@@ -1,91 +1,88 @@
 # Contrast-to-Noise Ratio (CNR) Estimation Web App
 
-This web application estimates the contrast-to-noise ratio (CNR) from a list of comma-separated values representing a one-dimensional excited state population profile. The application utilizes a Fourier transform-based algorithm to calculate the CNR.
+The web application in `webapp/` estimates the contrast-to-noise ratio (CNR) of a one-dimensional profile, for example an excited state population profile, entered as a list of values. The estimate comes from the [fft-cnr](https://pypi.org/project/fft-cnr/) package, which DICE also uses.
 
-This web app is currently available for your use on the web at: https://dice-thiebes.pythonanywhere.com/
+A hosted copy is available at <https://dice-thiebes.pythonanywhere.com/>. No installation is needed to use it.
 
 ## Features
 
 - Accepts comma-separated or space-separated lists of values.
-- Provides an estimation of the contrast-to-noise ratio (CNR).
-- Displays errors if the input is invalid.
-- Provides citations and links to relevant publications and source code.
+- Reports the CNR estimate.
+- Displays an error message if the input is not a list of numbers.
+- Provides citations and links to the source code and the publication.
 
-## Getting Started
+## Run the app locally
 
 ### Prerequisites
 
-- Python 3.x
-- Flask
-- NumPy
-- DICE package (main project)
+- Python 3.11 or later
+- A clone of the complete DICE repository. The app uses the DICE installation and its dependencies.
 
-### Installation
+### Install
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/thiebes/DICE.git
-    cd DICE/webapp
-    ```
+From the root of the repository, install DICE with the `webapp` extra, which adds Flask.
 
-2. Install the required packages:
-    ```sh
-    pip install -r requirements.txt
-    ```
+With uv:
 
-3. Note: This webapp uses the modularized DICE package from the parent directory. Ensure you've cloned the complete DICE repository.
+```bash
+git clone https://github.com/thiebes/DICE.git
+cd DICE
+uv sync --extra webapp
+```
 
-### Running the Application
+With pip, in an active virtual environment:
 
-#### Local Development
+```bash
+git clone https://github.com/thiebes/DICE.git
+cd DICE
+pip install ".[webapp]"
+```
 
-1. Start the Flask development server:
-    ```sh
-    python dice_web_app.py
-    ```
+See the [Installation Guide](../docs/installation.md) for details.
 
-2. Open your web browser and navigate to `http://127.0.0.1:5000/`.
+### Start the development server
 
-#### Production Deployment
+From the root of the repository:
 
-For deploying to PythonAnywhere, see [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on git-based deployment.
+```bash
+uv run python webapp/dice_web_app.py      # with uv
+python webapp/dice_web_app.py             # with pip, environment active
+```
 
-### Usage
+Then open <http://127.0.0.1:5000/> in a web browser. The Flask development server is meant for local use only.
 
-1. Enter a list of comma-separated or space-separated values representing your noisy Gaussian profile.
-2. Click the "Calculate CNR estimate" button.
-3. View the estimated contrast-to-noise ratio (CNR) on the result page.
+### Use the app
 
-## Algorithm
+1. Enter the values of your noisy profile, separated by commas or spaces. `webapp/example_profile.csv` contains an example profile.
+2. Click "Calculate CNR estimate".
+3. Read the CNR estimate on the result page.
 
-The CNR estimation algorithm works as follows:
-1. The data undergoes a unitary, single-sided, one-dimensional discrete Fourier transform (FT).
-2. The modulus of each complex value in the transformed data is calculated.
-3. The first local minimum subsequent to the signal peak is found.
-4. The noise level is determined by calculating the root mean squared (RMS) amplitude for frequencies above the initial local minimum.
-5. Since the normalized peak amplitude was unity, the CNR is simply the reciprocal of the noise level.
-6. The estimate is rounded to the nearest integer value.
+## Method
+
+The app passes the values to the `fft_cnr` function of the fft-cnr package and reports its CNR estimate. In outline, fft-cnr transforms the profile into frequency space, where the signal occupies the low frequencies and white noise spreads over all frequencies. It chooses the boundary frequency between signal and noise with the Akaike information criterion (AIC), estimates the root-mean-square (RMS) noise from the frequencies above that boundary, and divides the height of the signal peak above the baseline by the RMS noise. The [fft-cnr documentation](https://fft-cnr.readthedocs.io) describes the method and its limits.
 
 ## References
 
-- [DICE Source Code](https://github.com/thiebes/DICE)
-- [One-dimensional Discrete Fourier Transform (numpy.fft.rfft)](https://numpy.org/doc/stable/reference/generated/numpy.fft.rfft.html)
+- [DICE source code](https://github.com/thiebes/DICE)
+- [fft-cnr on PyPI](https://pypi.org/project/fft-cnr/) and [fft-cnr documentation](https://fft-cnr.readthedocs.io)
 
 ## Citation
 
-- Code:
-    ```
-    Joseph J. Thiebes. (2023). thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10258191
-    ```
+Code:
 
-- Paper:
-    ```
-    Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in optical measures of excited state transport. J. Chem. Phys. 28 March 2024; 160 (12): 124201. https://doi.org/10.1063/5.0190347
-    ```
+```text
+Joseph J. Thiebes. (2023). thiebes/DICE. Zenodo. https://doi.org/10.5281/zenodo.10258191
+```
+
+Paper:
+
+```text
+Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in optical measures of excited state transport. J. Chem. Phys. 28 March 2024; 160 (12): 124201. https://doi.org/10.1063/5.0190347
+```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+The web app is part of DICE and is licensed under the MIT License. See [LICENSE.md](../LICENSE.md).
 
 ## Acknowledgements
 
