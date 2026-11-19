@@ -16,7 +16,6 @@ from .parameters import (
 from .results import (
     MonteCarloOutput,
     RunResult,
-    StatisticalAnalysis,
 )
 from .profiles import (
     ProfileData,
@@ -44,7 +43,6 @@ __all__ = [
     # Results
     "MonteCarloOutput",
     "RunResult",
-    "StatisticalAnalysis",
     # Profiles
     "ProfileData",
     "TimeSeriesProfile",

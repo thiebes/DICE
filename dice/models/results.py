@@ -1,12 +1,12 @@
 """
 Result dataclasses for DICE simulations.
 
-This module defines dataclasses for organizing simulation results,
-including individual run results and aggregated statistics.
+This module defines dataclasses for organizing simulation results: the
+result of each run and the collected output of a Monte Carlo simulation.
 """
 
 from dataclasses import dataclass, field, fields
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Any, Tuple
 import numpy as np
 
 from .estimators import DEFAULT_ESTIMATOR_KEYS, SlopeFit
@@ -148,67 +148,6 @@ def _slope_fit_field_names(key: str) -> Tuple[str, ...]:
     if missing:
         raise AttributeError(f"RunResult has no fields {missing} for estimator {key!r}")
     return names
-
-
-@dataclass
-class StatisticalAnalysis:
-    """
-    Statistical analysis of simulation results.
-
-    Attributes
-    ----------
-    mean_estimate : float
-        Mean of all diffusion estimates.
-    median_estimate : float
-        Median of all diffusion estimates.
-    std_estimate : float
-        Standard deviation of all diffusion estimates.
-    relative_std_error : float
-        Standard deviation relative to nominal (std / nominal).
-    mean_relative_error : float
-        Mean of D_est/D_nom ratios.
-    bias : float
-        Mean estimate minus nominal value.
-    rmse : float
-        Root mean squared error of estimates.
-    percentiles : Dict[int, float]
-        Key percentiles of the distribution.
-    """
-    mean_estimate: float
-    median_estimate: float
-    std_estimate: float
-    relative_std_error: float
-    mean_relative_error: float
-    bias: float
-    rmse: float
-    percentiles: Dict[int, float] = field(default_factory=dict)
-
-    def __post_init__(self):
-        if not self.percentiles:
-            self.percentiles = {}
-
-    def summary_string(self) -> str:
-        """Generate a text summary of the analysis."""
-        lines = [
-            f"Statistical Analysis Summary",
-            f"=" * 40,
-            f"Diffusion Coefficient Estimates:",
-            f"  Std Dev: {self.std_estimate:.6e}",
-            f"  Relative Std Error: {self.relative_std_error:.3f}",
-            f"  Mean: {self.mean_estimate:.6e}",
-            f"  Median: {self.median_estimate:.6e}",
-            f"  Bias: {self.bias:.6e}",
-            f"  RMSE: {self.rmse:.6e}",
-            f"  Mean D_est/D_nom: {self.mean_relative_error:.3f}",
-        ]
-
-        if self.percentiles:
-            lines.append("")
-            lines.append("Percentiles:")
-            for p, val in sorted(self.percentiles.items()):
-                lines.append(f"  {p}th: {val:.6e}")
-
-        return "\n".join(lines)
 
 
 @dataclass
