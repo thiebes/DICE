@@ -66,7 +66,7 @@ dice [options] parameters_file
 | `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. `both` writes both files. |
 | `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
 | `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
-| `--dry-run`, `--check` | Check that the parameters file exists, then stop without a simulation. The contents of the file are not checked. |
+| `--dry-run`, `--check` | Load and validate the parameters file as a real run would, then stop without a simulation and without writing files. |
 | `--version` | Print the version and stop. |
 | `--help`, `-h` | Print the list of options and stop. |
 
@@ -90,7 +90,7 @@ One row for each run. The main columns are:
 | ------- | ------------- |
 | `run number` | Index of the run |
 | `nominal diffusion coeff`, `nominal lifetime`, `nominal diffusion length` | Nominal values, in the simulation units |
-| `nominal CNR` | 1 / noise standard deviation |
+| `nominal CNR` | `amplitude_0` / noise standard deviation |
 | `estimated CNR` | CNR of the noisy profile at the first time point, estimated with the [fft-cnr](https://pypi.org/project/fft-cnr/) package |
 | `nominal sigma^2_0`, `estimated sigma^2_0` | Variance of the initial profile: nominal value, and fitted value at the first time point |
 | `weighted fit diffusion slope`, `... slope stderr`, `... intercept`, `... intercept stderr` | WLS fit of variance against time, in the simulation units |
@@ -162,7 +162,7 @@ print(f"Within ±15%: {ratio.between(0.85, 1.15).mean():.1%}")
 
 ### Check a parameters file
 
-`open_parameters()` reads and parses a parameters file and raises `ValueError` with a description if the file is invalid. `validate_parameters()` checks that the number of runs, the spatial width, and the number of pixels are positive:
+`open_parameters()` reads and parses a parameters file and raises `ValueError` with a description if the file is invalid. `validate_parameters()` checks that the number of runs, the spatial width, and the number of pixels are positive, that the global length and time units are known, and that `image x_lim`, if given, is two increasing numbers:
 
 ```python
 from dice.io.parameters import open_parameters, validate_parameters

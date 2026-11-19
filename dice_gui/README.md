@@ -90,8 +90,8 @@ Available units:
 The GUI checks each field as you type and shows an error message below a field with an invalid value. A tab that contains an invalid field is marked. The rules are:
 
 - Number of runs and number of pixels: positive integers
-- Diffusion length, profile width, and spatial width: positive numbers
-- Diffusion coefficient, lifetime, amplitude, and noise σ: zero or positive numbers
+- Diffusion coefficient, profile width, and spatial width: positive numbers
+- Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers (the diffusion length is zero when the lifetime is zero, which means no decay)
 - Mean position: any number
 - Time range: numeric start and stop, with start less than stop
 - Time series: comma-separated finite numbers, without duplicates

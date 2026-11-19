@@ -130,7 +130,7 @@ The amplitude of the initial Gaussian profile.
 
 **Typical value:** 1.0
 
-DICE reports the nominal contrast-to-noise ratio (CNR) as 1 / `noise value`, which equals the CNR only for an amplitude of 1. Amplitudes other than 1 have not been tested.
+DICE reports the nominal contrast-to-noise ratio (CNR) as `amplitude_0` / `noise value`. Amplitudes other than 1 have not been tested.
 
 ### `mean_0`
 
