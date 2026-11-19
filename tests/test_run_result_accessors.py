@@ -100,7 +100,10 @@ class TestAccuracy:
             slope = getattr(run, f'{key}_slope')
             expected = ((slope / 2) / nominal_d
                         if slope is not None and nominal_d > 0 else float('nan'))
-            assert run.accuracy(key) == value or (math.isnan(value) and math.isnan(expected))
+            # Both the accessor and the property are checked against the
+            # value computed here; the property delegates to the accessor.
+            accuracy = run.accuracy(key)
+            assert accuracy == expected or (math.isnan(accuracy) and math.isnan(expected))
             assert value == expected or (math.isnan(value) and math.isnan(expected))
 
 

@@ -432,6 +432,47 @@ class TestStandaloneBuildRunsSerially:
         assert progress[-1] == (4, 4)
 
 
+class TestWorkerCountReachesJoblib:
+    """The n_jobs argument is the worker count joblib receives for every batch."""
+
+    class RecordingParallel:
+        """Stands in for joblib.Parallel: records n_jobs and runs the tasks in-process."""
+        n_jobs_seen: list = []
+
+        def __init__(self, n_jobs=None, **kwargs):
+            type(self).n_jobs_seen.append(n_jobs)
+
+        def __call__(self, tasks):
+            return [function(*args, **kwargs) for function, args, kwargs in tasks]
+
+    def _simulate(self, **options):
+        return run_monte_carlo_simulation(
+            parameters=get_legacy_simulation_params(),
+            x_axis=np.linspace(-10, 10, 51),
+            time_axis=np.array([0.0, 1.0, 2.0]),
+            noise_values=[0.02],
+            num_runs=5,
+            seed=13,
+            **options,
+        )
+
+    @pytest.mark.parametrize('n_jobs', [1, 3, -1])
+    def test_n_jobs_is_passed_to_every_parallel_call(self, monkeypatch, n_jobs):
+        import dice.analysis.simulation as simulation
+
+        serial = self._simulate(multiprocessing=False)
+        monkeypatch.setattr(self.RecordingParallel, 'n_jobs_seen', [])
+        monkeypatch.setattr(simulation, 'Parallel', self.RecordingParallel)
+
+        parallel = self._simulate(multiprocessing=True, n_jobs=n_jobs)
+
+        assert self.RecordingParallel.n_jobs_seen
+        assert set(self.RecordingParallel.n_jobs_seen) == {n_jobs}
+        np.testing.assert_array_equal(
+            [(r.ols_slope, r.wls_slope) for r in parallel.run_results],
+            [(r.ols_slope, r.wls_slope) for r in serial.run_results])
+
+
 class TestSplitIntoBatches:
     """Parallel batches cover every run once and keep every worker busy."""
 
