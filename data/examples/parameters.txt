@@ -50,7 +50,7 @@
     ### Noise parameter ###
     # Choose one:
     'noise value': 0.02,           # Standard deviation of noise.
-    # 'estimate noise from data': 'example_profile.csv'
+    # 'estimate noise from data': 'data/examples/example_profile.csv'  # Path relative to the working directory.
 
     ### Spatial axis parameters ###
     'spatial width': 5,           # Spatial width across entire x-axis of profiles (units parameterized above).
