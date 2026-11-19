@@ -5,7 +5,7 @@ Fit method selection and post-hoc precision analysis.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -163,11 +163,16 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
             )
 
 
-def populate_precision_summary(main_window: "DiceGUI", metrics: dict) -> None:
-    """Populate the read-only precision summary labels after simulation."""
-    main_window.precision_std_label.setText(f"{metrics['std']:.5e}")
+def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Optional[str] = None) -> None:
+    """Populate the read-only precision summary labels after simulation.
+
+    The standard deviation and bias are diffusion coefficients in the unit
+    d_unit (no unit is shown when it is None); the two ratios are unitless.
+    """
+    unit_suffix = f" {d_unit}" if d_unit else ""
+    main_window.precision_std_label.setText(f"{metrics['std']:.5e}{unit_suffix}")
     main_window.precision_rse_label.setText(f"{metrics['relative_std_error']:.3f}")
-    main_window.precision_bias_label.setText(f"{metrics['bias']:.5e}")
+    main_window.precision_bias_label.setText(f"{metrics['bias']:.5e}{unit_suffix}")
     main_window.precision_mean_ratio_label.setText(f"{metrics['mean_relative_error']:.3f}")
     main_window.precision_placeholder.setVisible(False)
 

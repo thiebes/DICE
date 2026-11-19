@@ -1224,14 +1224,16 @@ class DiceGUI(QMainWindow):
         if nominal_d == 0:
             return
 
+        # The standard deviation and bias are reported in a named unit; the ratios are unitless.
+        d_scale, d_unit = self.interface.diffusion_coefficient_unit()
         metrics = {
-            'std': np.std(d_arr),
+            'std': np.std(d_arr) * d_scale,
             'relative_std_error': np.std(d_arr) / nominal_d,
-            'bias': np.mean(d_arr) - nominal_d,
+            'bias': (np.mean(d_arr) - nominal_d) * d_scale,
             'mean_relative_error': np.mean(d_arr) / nominal_d,
         }
 
-        populate_precision_summary(self, metrics)
+        populate_precision_summary(self, metrics, d_unit)
 
     def simulation_error(self, error_message: str):
         """Handle simulation error."""

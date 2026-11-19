@@ -167,6 +167,10 @@ def write_summary_file(
     output_units : OutputUnitPreferences, optional
         Preferred units for output display. When None, uses simulation units.
     """
+    # The unit of every diffusion coefficient value: the nominal value and the
+    # statistics of the estimates, except the unitless relative standard error.
+    d_unit = f"{length_unit}^2/{time_unit}"
+
     with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
@@ -196,7 +200,7 @@ def write_summary_file(
         f.write(f"Nominal diffusion length:\n")
         f.write(f"    {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
         f.write(f"Nominal diffusion coefficient:\n")
-        f.write(f"    {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2/{time_unit}\n")
+        f.write(f"    {results.parameters.physics.diffusion_coefficient:.5f} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
         f.write(f"    {results.parameters.physics.lifetime} {time_unit}\n")
         f.write("\n")
@@ -212,18 +216,18 @@ def write_summary_file(
                     metrics = analysis['accuracy'][spec.key]
                     f.write(f"  {spec.summary_name}:\n")
                     f.write(f"    Standard deviation:\n")
-                    f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
+                    f.write(f"        {metrics.get('std', 'N/A'):.5f} {d_unit}\n")
                     nominal_d = analysis.get('summary', {}).get('nominal_diffusion_coefficient', None)
                     if nominal_d and nominal_d != 0:
                         rse = metrics.get('std', 0) / nominal_d
                         f.write(f"    Relative standard error:\n")
                         f.write(f"        {rse:.3f}\n")
                     f.write(f"    Mean estimate:\n")
-                    f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
+                    f.write(f"        {metrics.get('mean', 'N/A'):.5f} {d_unit}\n")
                     f.write(f"    Bias (mean - nominal):\n")
-                    f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
+                    f.write(f"        {metrics.get('bias', 'N/A'):.5f} {d_unit}\n")
                     f.write(f"    Root Mean Square Error:\n")
-                    f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
+                    f.write(f"        {metrics.get('rmse', 'N/A'):.5f} {d_unit}\n")
 
             if 'precision' in analysis:
                 f.write("\nPrecision at standard thresholds:\n")

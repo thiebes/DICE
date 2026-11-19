@@ -109,6 +109,20 @@ class TestRegeneratePlotFromMemory:
         assert plotted == []
 
 
+class TestDiffusionCoefficientUnit:
+    """The unit the GUI reports the standard deviation and bias of the estimates in."""
+
+    @pytest.mark.parametrize('parameters, expected', [
+        ({'length unit': 'nanometer', 'time unit': 'picosecond'}, 'nm²/ps'),
+        ({'length_unit': 'micrometer', 'time_unit': 'nanosecond'}, 'μm²/ns'),
+        ({}, 'μm²/ns'),
+    ])
+    def test_run_results_use_the_global_units(self, parameters, expected):
+        interface = _interface_with(_output(WLS_SLOPES, OLS_SLOPES))
+        interface.last_parameters |= parameters
+        assert interface.diffusion_coefficient_unit() == (1.0, expected)
+
+
 class TestLoadAndPlotFromCsv:
 
     @pytest.fixture
@@ -138,8 +152,12 @@ class TestLoadAndPlotFromCsv:
         assert [r.wls_slope for r in runs] == WLS_SLOPES
         assert [r.ols_slope for r in runs] == OLS_SLOPES
         assert [r.nominal_diffusion_coefficient for r in runs] == [NOMINAL_D] * len(WLS_SLOPES)
-        assert interface.last_parameters == {'nominal diffusion coefficient': NOMINAL_D,
-                                             'filename slug': 'exported'}
+        # 0.01 micrometer^2/ns is 0.1 cm^2/s, the unit of the labeled nominal column.
+        assert interface.last_parameters == {
+            'nominal diffusion coefficient': NOMINAL_D, 'filename slug': 'exported',
+            'diffusion coefficient unit': 'cm²/s',
+            'diffusion coefficient scale': pytest.approx(10, rel=1e-12),
+        }
         assert interface.last_result.estimator_keys == ('ols', 'wls')
         # The other fit method works from the stored slopes without reloading.
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) == 2 / 3
@@ -182,6 +200,31 @@ class TestLoadAndPlotFromCsv:
         assert [r.wls_slope for r in interface.last_result.run_results] == [None] * len(OLS_SLOPES)
         assert interface.last_result.estimator_keys == ('ols',)
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) is None
+
+    def test_statistics_unit_of_loaded_results_is_the_labeled_column_unit(
+            self, plotted, tmp_path):
+        from dice.models.parameters import OutputUnitPreferences
+        csv_file = tmp_path / 'nm_per_ps.csv'
+        export_collated_results(
+            _output(WLS_SLOPES, OLS_SLOPES), csv_file,
+            output_units=OutputUnitPreferences(diffusion_length='nanometer', diffusion_time='picosecond'))
+        interface = DiceInterface()
+        interface.load_and_plot_from_csv(
+            str(csv_file), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['wls'])
+        # 1 micrometer^2/ns = 1e6 nm^2 / 1e3 ps = 1000 nm^2/ps
+        scale, unit = interface.diffusion_coefficient_unit()
+        assert unit == 'nm²/ps'
+        assert scale == pytest.approx(1000, rel=1e-12)
+
+    def test_statistics_have_no_unit_when_the_csv_has_no_labeled_column(
+            self, exported_csv, plotted, tmp_path):
+        frame = pd.read_csv(exported_csv)
+        unlabeled = tmp_path / 'unlabeled.csv'
+        frame[[c for c in frame.columns if '[' not in c]].to_csv(unlabeled, index=False)
+        interface = DiceInterface()
+        interface.load_and_plot_from_csv(
+            str(unlabeled), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['wls'])
+        assert interface.diffusion_coefficient_unit() == (1.0, None)
 
     def test_unknown_estimator_is_rejected(self, exported_csv, plotted, tmp_path):
         interface = DiceInterface()

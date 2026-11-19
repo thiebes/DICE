@@ -109,6 +109,8 @@ A text report that contains:
 - for the WLS and the OLS fits: the standard deviation, relative standard error, mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
 - the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
 
+Each value with a unit is followed by that unit. The standard deviation, mean, bias, and RMSE are in the unit of the nominal diffusion coefficient, for example `micrometer^2/nanosecond`. The relative standard error and the fractions have no unit.
+
 ### Histogram: `<slug>_accuracy_histogram.png`
 
 A histogram of the ratio D_est/D_nom of the WLS estimates to the nominal diffusion coefficient. The y-axis shows the probability of each bin. A normal distribution with the same mean and standard deviation is drawn over the histogram, and a legend reports the mean, median, and standard deviation of the ratio. The file type follows the `image type` parameter.

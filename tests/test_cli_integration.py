@@ -405,17 +405,17 @@ SUMMARY_SKELETON = [
     "-" * 30,
     "Diffusion Coefficient Estimate Statistics:",
     "  Weighted Least Squares:",
-    "    Standard deviation:", "        #",
+    "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
-    "    Mean estimate:", "        #",
-    "    Bias (mean - nominal):", "        #",
-    "    Root Mean Square Error:", "        #",
+    "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "  Ordinary (unweighted) Least Squares:",
-    "    Standard deviation:", "        #",
+    "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
-    "    Mean estimate:", "        #",
-    "    Bias (mean - nominal):", "        #",
-    "    Root Mean Square Error:", "        #",
+    "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "",
     "Precision at standard thresholds:",
     "  Fraction within ±5% of nominal:", "    WLS: #%    OLS: #%",
@@ -505,8 +505,15 @@ class TestQuickTestOutputSchema:
             'ols': df['unweighted fit diffusion slope'].to_numpy() / 2,
         }
         # WLS is listed before OLS under each statistic.
-        assert values['Mean estimate'] == [f"{d_estimates[m].mean():.5f}" for m in ('wls', 'ols')]
-        assert values['Standard deviation'] == [f"{d_estimates[m].std():.5f}" for m in ('wls', 'ols')]
+        d_unit = 'micrometer^2/nanosecond'
+        assert values['Mean estimate'] == [
+            f"{d_estimates[m].mean():.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [
+            f"{d_estimates[m].std():.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Bias (mean - nominal)'] == [
+            f"{d_estimates[m].mean() - 0.01:.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Root Mean Square Error'] == [
+            f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Relative standard error'] == [
             f"{d_estimates[m].std() / 0.01:.3f}" for m in ('wls', 'ols')]
         within_10 = {m: np.mean(np.abs(d / 0.01 - 1) <= 0.1) for m, d in d_estimates.items()}
