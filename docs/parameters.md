@@ -257,11 +257,17 @@ The resolution in dots per inch.
 
 The font size of the plot text (points), the length and width of the axis ticks (points), and the number of histogram bins.
 
-The GUI applies these values from its Output Settings tab. The command-line interface does not apply them; it uses a font size of 12 points, ticks 4 points long and 1 point wide, and 50 bins.
+The command-line interface and the GUI both apply these values. The GUI takes them from its Output Settings tab.
+
+**Defaults:** a font size of 12 points, ticks 4 points long and 1 point wide, and 50 bins
 
 ### `image x_lim`
 
-DICE accepts this key but does not apply it. The x-axis of the histogram spans the mean ± 3 standard deviations of the plotted ratios.
+The limits of the x-axis of the histogram.
+
+**Format:** `[low, high]`, two numbers with low < high
+
+**Default:** the mean ± 3 standard deviations of the plotted ratios
 
 ## Performance parameters
 
@@ -273,7 +279,7 @@ Whether to keep the simulated profiles, the noisy profiles, and the fitted width
 
 **Default:** `False`
 
-The output files do not include the retained data. The data are available from Python, in the result of `dice.dice_runner()`. The command-line interface ignores this key and uses the `--retain-profiles` option instead.
+The output files do not include the retained data. The data are available from Python, in the result of `dice.dice_runner()`. On the command line, the `--retain-profiles` option turns retention on for a file that does not set this key.
 
 **Warning:** retained profile data can use a large amount of memory, in proportion to the number of runs.
 

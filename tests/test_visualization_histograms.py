@@ -392,3 +392,57 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestHistogramOptions:
+    """Parameter-file image keys become plot_accuracy_histogram keyword arguments."""
+
+    def test_every_image_key_maps_to_its_keyword(self):
+        import inspect
+        from dice.visualization.histograms import histogram_options
+
+        parameters = {
+            'image type': 'svg', 'image width': 12, 'image height': 8, 'image dpi': 150,
+            'image font size': 7, 'image tick length': 3, 'image tick width': 1.5,
+            'image numbins': 11, 'image x_lim': [0.5, 1.5],
+            'number of runs': 4,  # unrelated keys are ignored
+        }
+
+        options = histogram_options(parameters)
+
+        assert options == {
+            'image_type': 'svg', 'width': 12, 'height': 8, 'dpi': 150, 'font_size': 7,
+            'tick_length': 3, 'tick_width': 1.5, 'num_bins': 11, 'x_lim': [0.5, 1.5],
+        }
+        accepted = set(inspect.signature(plot_accuracy_histogram).parameters)
+        assert set(options) <= accepted
+
+    def test_absent_and_none_keys_are_left_to_the_plot_defaults(self):
+        from dice.visualization.histograms import histogram_options
+
+        assert histogram_options({}) == {}
+        assert histogram_options({'image numbins': None, 'image dpi': 200}) == {'dpi': 200}
+
+    @pytest.mark.parametrize('x_lim', [
+        [1.5, 0.5], [1.0, 1.0], [0.5], [0.5, 1.0, 1.5], 'wide', [0.5, 'high'], [0.5, float('nan')],
+    ])
+    def test_malformed_x_lim_is_rejected_by_name(self, x_lim):
+        from dice.visualization.histograms import histogram_options
+
+        with pytest.raises(ValueError, match="'image x_lim' must be two increasing finite numbers"):
+            histogram_options({'image x_lim': x_lim})
+
+    def test_options_reach_the_figure(self, tmp_path):
+        from dice.visualization.histograms import histogram_options
+
+        rng = np.random.default_rng(0)
+        result = {'collated results': {'d_est_over_d_nom': rng.normal(1.0, 0.1, 200).tolist()}}
+        options = histogram_options({'image numbins': 11, 'image x_lim': (0.6, 1.4), 'image font size': 7})
+
+        fig = plot_accuracy_histogram(
+            simulation_result=result, filename=str(tmp_path / 'options.png'), **options)
+
+        ax = fig.axes[0]
+        assert ax.get_xlim() == (0.6, 1.4)
+        assert len(ax.patches) == 11
+        assert ax.xaxis.label.get_fontsize() == 7
+        plt.close(fig)

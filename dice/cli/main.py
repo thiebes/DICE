@@ -19,7 +19,7 @@ from ..analysis.simulation import run_monte_carlo_simulation
 from ..core.noise import Seed
 from ..analysis.statistics import analyze_simulation_results
 from ..io.results import export_collated_results, write_summary_file
-from ..visualization.histograms import plot_accuracy_histogram
+from ..visualization.histograms import histogram_options, plot_accuracy_histogram
 from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.units import global_length_unit, global_time_unit
 
@@ -151,7 +151,11 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
         noise_values=parameters['noise series'],
         num_runs=parameters['number of runs'],
         multiprocessing=use_parallel,
-        retain_profile_data=args.retain_profiles if hasattr(args, 'retain_profiles') else False,
+        # The --retain-profiles flag or the parameter-file key turns retention on.
+        retain_profile_data=(
+            getattr(args, 'retain_profiles', False)
+            or parameters.get('retain profile data', 0) != 0
+        ),
         progress_callback=progress_callback,
         seed=seed,
         n_jobs=n_jobs,
@@ -291,11 +295,7 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
                 filename=str(plot_file),
-                image_type=parameters.get('image type', 'png'),
-                width=parameters.get('image width', 10),
-                height=parameters.get('image height', 6),
-                dpi=parameters.get('image dpi', 100),
-                font_size=12
+                **histogram_options(parameters)
             )
 
             if not args.quiet:

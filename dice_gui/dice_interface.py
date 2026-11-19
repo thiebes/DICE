@@ -137,7 +137,7 @@ class DiceInterface:
             from dice.analysis.simulation import run_monte_carlo_simulation
             from dice.analysis.statistics import analyze_simulation_results
             from dice.io.results import export_collated_results, write_summary_file
-            from dice.visualization.histograms import plot_accuracy_histogram
+            from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
             import numpy as np
             from pathlib import Path
@@ -229,14 +229,7 @@ class DiceInterface:
                 plot_accuracy_histogram(
                     simulation_result=legacy_result,
                     filename=str(plot_file),
-                    image_type=processed_params.get('image type', 'png'),
-                    width=processed_params.get('image width', 10),
-                    height=processed_params.get('image height', 6),
-                    dpi=processed_params.get('image dpi', 100),
-                    font_size=processed_params.get('image font size', 12),
-                    tick_length=processed_params.get('image tick length', 6),
-                    tick_width=processed_params.get('image tick width', 2),
-                    num_bins=processed_params.get('image numbins', 35)
+                    **histogram_options(processed_params)
                 )
 
             return result, processed_params

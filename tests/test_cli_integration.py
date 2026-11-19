@@ -543,6 +543,68 @@ class TestOutputOptions:
         assert histogram.read_text(encoding='utf-8').lstrip().startswith('<?xml')
         assert not run.histogram_file.exists()
 
+    def test_image_keys_reach_the_histogram(self, tmp_path, monkeypatch):
+        """Every image key in the parameter file sets the matching figure property."""
+        cli_main = importlib.import_module('dice.cli.main')
+        figures = []
+        real_plot = cli_main.plot_accuracy_histogram
+
+        def recording_plot(**kwargs):
+            figures.append((kwargs, real_plot(**kwargs)))
+            return figures[-1][1]
+
+        monkeypatch.setattr(cli_main, 'plot_accuracy_histogram', recording_plot)
+        image_keys = {
+            'image width': 4, 'image height': 3, 'image dpi': 50, 'image font size': 7,
+            'image tick length': 3, 'image tick width': 1.5, 'image numbins': 11,
+            'image x_lim': [0.5, 1.5],
+        }
+
+        run = self._run(tmp_path, 'styled', overrides=image_keys)
+
+        assert run.exit_code == 0
+        (kwargs, fig), = figures
+        assert {key: kwargs[key] for key in (
+            'width', 'height', 'dpi', 'font_size', 'tick_length', 'tick_width', 'num_bins', 'x_lim',
+        )} == {
+            'width': 4, 'height': 3, 'dpi': 50, 'font_size': 7, 'tick_length': 3,
+            'tick_width': 1.5, 'num_bins': 11, 'x_lim': [0.5, 1.5],
+        }
+        ax = fig.axes[0]
+        assert ax.get_xlim() == (0.5, 1.5)
+        assert len(ax.patches) == 11
+        assert run.histogram_file.exists()
+
+    def test_malformed_x_lim_rejected_before_simulation(self, tmp_path, capsys):
+        run = self._run(tmp_path, 'bad_limits', overrides={'image x_lim': [1.5, 0.5]})
+        assert run.exit_code == 1
+        assert "'image x_lim' must be two increasing finite numbers" in capsys.readouterr().out
+        assert not (tmp_path / 'output').exists()
+
+    @pytest.mark.parametrize(('key_value', 'cli_args', 'expected'), [
+        (None, (), False),
+        (1, (), True),
+        (0, ('--retain-profiles',), True),
+        (0, (), False),
+    ])
+    def test_retain_profile_data_key_or_flag_turns_retention_on(
+            self, tmp_path, monkeypatch, key_value, cli_args, expected):
+        cli_main = importlib.import_module('dice.cli.main')
+        retained = []
+        real_run = cli_main.run_monte_carlo_simulation
+
+        def recording_run(*args, **kwargs):
+            retained.append(kwargs['retain_profile_data'])
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(cli_main, 'run_monte_carlo_simulation', recording_run)
+        overrides = {} if key_value is None else {'retain profile data': key_value}
+
+        run = self._run(tmp_path, 'retention', *cli_args, '--no-plots', overrides=overrides)
+
+        assert run.exit_code == 0
+        assert retained == [expected]
+
     def test_estimated_noise_reaches_summary(self, tmp_path):
         from fft_cnr import fft_cnr
         profile_file = EXAMPLES_DIR / 'example_profile.csv'

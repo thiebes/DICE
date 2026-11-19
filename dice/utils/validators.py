@@ -359,3 +359,35 @@ def validate_range(start: float, stop: float, steps: int,
         raise ValueError(f"{name} start must be less than stop, got {start} >= {stop}")
 
     return (start, stop, steps)
+
+
+def validate_limits(value: Any, name: str = "limits") -> List[float]:
+    """
+    Validate a pair of axis limits [low, high].
+
+    Parameters
+    ----------
+    value : list or tuple
+        The two limits.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    list of float
+        The limits as [low, high].
+
+    Raises
+    ------
+    ValueError
+        If value is not two increasing finite numbers.
+    """
+    is_pair = isinstance(value, (list, tuple)) and len(value) == 2
+    if (not is_pair
+            or not all(isinstance(limit, (int, float)) and not isinstance(limit, bool)
+                       and np.isfinite(limit) for limit in value)
+            or value[0] >= value[1]):
+        raise ValueError(
+            f"{name} must be two increasing finite numbers [low, high], got {value!r}."
+        )
+    return [float(value[0]), float(value[1])]

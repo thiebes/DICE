@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.validators import validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
 )
@@ -483,6 +484,11 @@ def validate_parameters(params) -> None:
         # before the simulation runs rather than when the results are written.
         validate_length_unit(global_length_unit(params))
         validate_time_unit(global_time_unit(params))
+
+        # The histogram is drawn after the simulation, so reject malformed
+        # limits here instead of losing the plot at the end of a long run.
+        if params.get('image x_lim') is not None:
+            validate_limits(params['image x_lim'], "'image x_lim'")
 
         return
     

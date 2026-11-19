@@ -98,6 +98,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   amplitude is positive.
 - `ProcessedSimulationResult.filter_by_cnr()` recomputes the statistics for
   the selected runs. It returned the statistics of all runs.
+- The command-line interface applies the `image font size`,
+  `image tick length`, `image tick width`, `image numbins`, and `image x_lim`
+  keys of the parameter file to the histogram, and it honors
+  `retain profile data`. It ignored these keys. A malformed `image x_lim` is
+  rejected before the simulation starts.
 - `CITATION.cff` declares the MIT License, in agreement with `LICENSE.md`.
 
 ### Removed

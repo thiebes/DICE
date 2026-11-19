@@ -22,6 +22,55 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 from .plots import get_color_definitions
+from ..utils.validators import validate_limits
+
+# Parameter-file key -> keyword argument of plot_accuracy_histogram.
+_HISTOGRAM_OPTION_KEYS = {
+    'image type': 'image_type',
+    'image width': 'width',
+    'image height': 'height',
+    'image dpi': 'dpi',
+    'image font size': 'font_size',
+    'image tick length': 'tick_length',
+    'image tick width': 'tick_width',
+    'image numbins': 'num_bins',
+    'image x_lim': 'x_lim',
+}
+
+
+def histogram_options(parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build the plot_accuracy_histogram keyword arguments from a parameters dictionary.
+
+    The command-line interface and the GUI both call this function, so a
+    parameter file gives the same figure in either one. A key that is absent
+    (or None) is left out, and plot_accuracy_histogram applies its own default.
+
+    Parameters
+    ----------
+    parameters : dict
+        Parsed simulation parameters with the legacy 'image ...' keys.
+
+    Returns
+    -------
+    dict
+        Keyword arguments for plot_accuracy_histogram.
+
+    Raises
+    ------
+    ValueError
+        If 'image x_lim' is not two increasing finite numbers.
+    """
+    options = {
+        argument: parameters[key]
+        for key, argument in _HISTOGRAM_OPTION_KEYS.items()
+        if parameters.get(key) is not None
+    }
+
+    if 'x_lim' in options:
+        options['x_lim'] = validate_limits(options['x_lim'], "'image x_lim'")
+
+    return options
 
 
 def plot_accuracy_histogram(
