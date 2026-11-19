@@ -559,9 +559,12 @@ def validate_parameters(params) -> None:
         validate_time_unit(global_time_unit(params))
 
         # The histogram is drawn after the simulation, so reject malformed
-        # limits here instead of losing the plot at the end of a long run.
+        # limits and an image type it cannot be written as here instead of
+        # losing the plot at the end of a long run.
         if params.get('image x_lim') is not None:
             validate_limits(params['image x_lim'], "'image x_lim'")
+        from ..visualization.histograms import validate_image_type
+        validate_image_type(params.get('image type', params.get('image_type', 'png')))
 
         return
     

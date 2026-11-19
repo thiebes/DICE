@@ -233,3 +233,17 @@ class TestLoadAndPlotFromCsv:
                 str(exported_csv), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, estimator='nope')
         assert plotted == []
         assert interface.last_result is None
+
+
+class TestRunValidation:
+
+    def test_unknown_image_type_fails_before_the_simulation(self, tmp_path, monkeypatch):
+        import ast
+        params = ast.literal_eval(
+            (Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt').read_text())
+        params.update({'image type': 'bmp', 'number of runs': 2, 'multiprocessing': False})
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(RuntimeError, match="Simulation failed: Unknown image type 'bmp'"):
+            DiceInterface().run_simulation(params)
+        assert list(tmp_path.iterdir()) == []
+

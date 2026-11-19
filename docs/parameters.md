@@ -243,7 +243,7 @@ Optional parameters for the accuracy histogram.
 
 The file format of the plot.
 
-**Options:** `'png'`, `'jpg'`, `'svg'`, `'tif'`, `'pdf'`
+**Options:** any format that matplotlib can write, for example `'png'`, `'jpg'`, `'svg'`, `'tif'`, `'pdf'`, or `'eps'`. The case does not matter. DICE rejects another value before the simulation, with an error that lists the valid types. The GUI offers png, jpg, svg, and tif.
 
 **Default:** `'png'`
 

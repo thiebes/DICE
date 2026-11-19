@@ -446,3 +446,34 @@ class TestHistogramOptions:
         assert len(ax.patches) == 11
         assert ax.xaxis.label.get_fontsize() == 7
         plt.close(fig)
+
+
+class TestImageType:
+    """'image type' is checked against the formats matplotlib can write, before any simulation."""
+
+    def test_documented_types_are_supported(self):
+        from dice.visualization.histograms import supported_image_types
+        assert {'png', 'jpg', 'svg', 'tif', 'pdf'} <= set(supported_image_types())
+
+    @pytest.mark.parametrize('image_type', ['png', 'PNG', 'jpeg', 'eps', 'svgz'])
+    def test_supported_type_is_returned_unchanged(self, image_type):
+        from dice.visualization.histograms import validate_image_type
+        assert validate_image_type(image_type) == image_type
+
+    @pytest.mark.parametrize('image_type', ['bmp', 'gif', '', 5, None])
+    def test_unsupported_type_is_rejected_with_the_supported_list(self, image_type):
+        from dice.visualization.histograms import supported_image_types, validate_image_type
+        with pytest.raises(ValueError) as error:
+            validate_image_type(image_type)
+        assert str(error.value) == (
+            f"Unknown image type '{image_type}'. Valid types: {', '.join(supported_image_types())}")
+
+    @pytest.mark.parametrize('image_type', ['png', 'jpg', 'svg', 'tif', 'pdf', 'eps'])
+    def test_supported_type_is_written(self, tmp_path, image_type):
+        """Every listed type the docs name gives a file, so the list matches what savefig writes."""
+        result = {'collated results': {'d_est_over_d_nom': [0.9, 1.0, 1.1, 1.0]}}
+        target = tmp_path / f'histogram.{image_type}'
+        fig = plot_accuracy_histogram(simulation_result=result, filename=str(target), image_type=image_type)
+        plt.close(fig)
+        assert target.stat().st_size > 0
+

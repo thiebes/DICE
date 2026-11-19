@@ -262,6 +262,7 @@ class TestDryRun:
         ({'noise value': 'loud'}, "Invalid noise value loud"),
         ({'number of runs': 0}, "Number of runs must be positive"),
         ({'length unit': 'um'}, "Unknown length unit 'um'"),
+        ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
     ]
 
     def test_valid_example_exits_zero_without_output(self, tmp_path, capsys):
@@ -606,6 +607,15 @@ class TestOutputOptions:
         assert ax.get_xlim() == (0.5, 1.5)
         assert len(ax.patches) == 11
         assert run.histogram_file.exists()
+
+    def test_unknown_image_type_rejected_before_simulation(self, tmp_path, capsys):
+        run = self._run(tmp_path, 'bitmap', overrides={'image type': 'bmp'})
+        assert run.exit_code == 1
+        out = capsys.readouterr().out
+        assert "Error: Unknown image type 'bmp'. Valid types: " in out
+        assert "png" in out.splitlines()[-1] and "svg" in out.splitlines()[-1]
+        assert "Starting DICE simulation" not in out
+        assert not (tmp_path / 'output').exists()
 
     def test_malformed_x_lim_rejected_before_simulation(self, tmp_path, capsys):
         run = self._run(tmp_path, 'bad_limits', overrides={'image x_lim': [1.5, 0.5]})
