@@ -5,14 +5,25 @@ The fixtures parse data/examples/quick_test.txt and run a short serial
 simulation, so the writers receive the same objects the CLI passes them.
 """
 
+import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from dice.analysis.simulation import run_monte_carlo_simulation
 from dice.analysis.statistics import analyze_simulation_results
 from dice.io.parameters import open_parameters
-from dice.io.results import export_legacy_format, print_and_append, write_summary_file
+from dice.io.results import (
+    export_collated_results,
+    export_legacy_format,
+    export_to_json,
+    load_multiple_results,
+    load_results_csv,
+    print_and_append,
+    write_summary_file,
+)
+from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput
 from dice.utils.legacy_compatibility import create_parameters_from_legacy
 
@@ -105,3 +116,155 @@ class TestZeroNoise:
         export_legacy_format(noise_free, {'parameters': quick_test_parameters},
                              tmp_path / 'legacy.csv', summary_file)
         assert "Initial contrast-to-noise ratio (CNR): inf\n" in summary_file.read_text(encoding='utf-8')
+
+
+def simulate_quick_test(params: dict, time_axis, num_runs: int, **options) -> MonteCarloOutput:
+    sim_params = create_parameters_from_legacy(
+        params, params['nominal diffusion coefficient'],
+        params['nominal lifetime (tau)'], params['nominal diffusion length'])
+    return run_monte_carlo_simulation(
+        sim_params, params['x array'], time_axis, params['noise series'],
+        num_runs=num_runs, multiprocessing=False, seed=3, **options)
+
+
+class TestAnalysisToSummarySchema:
+    """The analysis dictionary carries every field write_summary_file reads."""
+
+    def test_analysis_fields(self, quick_test_analysis):
+        assert {'summary', 'precision', 'accuracy'} <= set(quick_test_analysis)
+        assert 'nominal_diffusion_coefficient' in quick_test_analysis['summary']
+        for method in ('wls', 'ols'):
+            assert {'std', 'mean', 'bias', 'rmse'} <= set(quick_test_analysis['accuracy'][method])
+        assert list(quick_test_analysis['precision']) == ['5%', '10%', '20%', '50%']
+        for fractions in quick_test_analysis['precision'].values():
+            assert set(fractions) == {'wls', 'ols'}
+
+    def test_summary_without_analysis(self, tmp_path, quick_test_simulation, quick_test_parameters):
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(quick_test_simulation, summary_file, quick_test_parameters)
+        text = summary_file.read_text(encoding='utf-8')
+        assert "Analysis Results:" not in text
+        assert text.endswith("Simulation completed successfully.\n")
+
+    def test_summary_without_precision(self, tmp_path, quick_test_simulation,
+                                       quick_test_parameters, quick_test_analysis):
+        analysis = {key: value for key, value in quick_test_analysis.items() if key != 'precision'}
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(quick_test_simulation, summary_file, quick_test_parameters, analysis)
+        text = summary_file.read_text(encoding='utf-8')
+        assert "Weighted Least Squares:" in text
+        assert "Precision at standard thresholds:" not in text
+
+
+class TestExportCollatedResults:
+    """CSV export: returned frame, unit labels, and the columns present per run type."""
+
+    def test_returned_frame_matches_file(self, tmp_path, quick_test_simulation):
+        csv_file = tmp_path / 'results.csv'
+        exported = export_collated_results(quick_test_simulation, csv_file)
+        reloaded = load_results_csv(csv_file)
+        assert list(reloaded.columns) == list(exported.columns)
+        np.testing.assert_allclose(reloaded.to_numpy(dtype=float), exported.to_numpy(dtype=float), rtol=1e-12)
+        assert len(exported) == FIXTURE_RUNS
+
+    def test_output_units_relabel_and_convert(self, tmp_path, quick_test_simulation):
+        micrometer_per_ns = OutputUnitPreferences(diffusion_length='micrometer', diffusion_time='nanosecond')
+        exported = export_collated_results(quick_test_simulation, tmp_path / 'results.csv',
+                                           output_units=micrometer_per_ns)
+        label = 'weighted fit diffusion coeff [μm²/ns]'
+        assert label in exported.columns
+        assert not any('cm²/s' in column for column in exported.columns)
+        assert exported[label].to_numpy() == pytest.approx(
+            exported['weighted fit diffusion slope'].to_numpy() / 2, rel=1e-12)
+        assert exported['nominal diffusion coeff [μm²/ns]'].to_numpy() == pytest.approx(0.01)
+
+    def test_single_frame_runs_have_no_fit_columns(self, tmp_path, quick_test_parameters):
+        single_frame = simulate_quick_test(
+            quick_test_parameters, quick_test_parameters['time series'][:1], num_runs=2)
+        exported = export_collated_results(single_frame, tmp_path / 'results.csv')
+        assert list(exported.columns) == [
+            'run number', 'nominal diffusion coeff', 'nominal lifetime', 'nominal diffusion length',
+            'nominal CNR', 'estimated CNR', 'nominal sigma^2_0', 'estimated sigma^2_0',
+            'nominal diffusion coeff [cm²/s]',
+        ]
+
+
+class TestLoadMultipleResults:
+    """Result CSVs in one directory concatenate, with unreadable files skipped."""
+
+    def test_concatenates_and_skips_unreadable(self, tmp_path, quick_test_simulation, capsys):
+        export_collated_results(quick_test_simulation, tmp_path / 'a.csv')
+        export_collated_results(quick_test_simulation, tmp_path / 'b.csv')
+        (tmp_path / 'c_empty.csv').write_text('')
+        combined = load_multiple_results(tmp_path)
+        assert len(combined) == 2 * FIXTURE_RUNS
+        assert sorted(combined['source_file'].unique()) == ['a.csv', 'b.csv']
+        assert "c_empty.csv" in capsys.readouterr().out
+
+    def test_no_files_and_no_valid_files(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="No files matching"):
+            load_multiple_results(tmp_path)
+        (tmp_path / 'empty.csv').write_text('')
+        with pytest.raises(ValueError, match="No valid CSV files"):
+            load_multiple_results(tmp_path)
+
+
+class TestExportToJson:
+    """JSON export schema, with and without retained profiles."""
+
+    RUN_KEYS = {'run_id', 'noise_sigma', 'cnr_0_estimate', 'estimated_sigma2_0',
+                'ols_slope', 'ols_slope_stderr', 'wls_slope', 'wls_slope_stderr'}
+
+    def test_schema(self, tmp_path, quick_test_simulation):
+        json_file = tmp_path / 'results.json'
+        export_to_json(quick_test_simulation, json_file)
+        exported = json.loads(json_file.read_text())
+        assert set(exported) == {'parameters', 'runs'}
+        assert set(exported['parameters']) == {
+            'num_runs', 'noise_values', 'diffusion_coefficient', 'lifetime',
+            'diffusion_length', 'sigma2_0', 'amplitude_0', 'mu_0'}
+        assert exported['parameters']['num_runs'] == FIXTURE_RUNS
+        assert [set(run) for run in exported['runs']] == [self.RUN_KEYS] * FIXTURE_RUNS
+
+    def test_retained_profiles_exported(self, tmp_path, quick_test_parameters):
+        time_axis = quick_test_parameters['time series']
+        retained = simulate_quick_test(quick_test_parameters, time_axis, num_runs=2,
+                                       retain_profile_data=True)
+        json_file = tmp_path / 'profiles.json'
+        export_to_json(retained, json_file, include_profile_data=True)
+        runs = json.loads(json_file.read_text())['runs']
+        expected_shape = (len(time_axis), len(quick_test_parameters['x array']))
+        for run, result in zip(runs, retained.run_results):
+            assert set(run) == self.RUN_KEYS | {'nominal_profiles', 'noisy_profiles'}
+            assert np.shape(run['noisy_profiles']) == expected_shape
+            np.testing.assert_allclose(run['noisy_profiles'], result.noisy_profiles)
+
+
+class TestLegacyExport:
+    """export_legacy_format writes the modern CSV and the legacy summary layout."""
+
+    def test_csv_and_summary(self, tmp_path, quick_test_simulation, quick_test_parameters):
+        csv_file, summary_file = tmp_path / 'legacy.csv', tmp_path / 'legacy_summary.txt'
+        export_legacy_format(quick_test_simulation, {'parameters': quick_test_parameters},
+                             csv_file, summary_file)
+        modern = export_collated_results(quick_test_simulation, tmp_path / 'modern.csv')
+        assert list(load_results_csv(csv_file).columns) == list(modern.columns)
+        text = summary_file.read_text(encoding='utf-8')
+        assert text.startswith(f"Running {FIXTURE_RUNS} simulations with the following parameters (rounded):\n")
+        assert "Initial contrast-to-noise ratio (CNR): 50.000\n" in text
+        assert text.endswith("Done!\n")
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "Known defect since the proximity refactor: estimates_precision returns "
+        "{'% fits within proximity': {'weighted fit': pct, 'unweighted fit': pct}}, but "
+        "export_legacy_format now expects one nested dictionary per level and skips the flat one."))
+    def test_proximity_lines_from_estimates_precision(self, tmp_path, quick_test_simulation,
+                                                      quick_test_parameters):
+        from dice.analysis.statistics import estimates_precision
+        frame = export_collated_results(quick_test_simulation, tmp_path / 'results.csv')
+        analysis = estimates_precision(frame, 0.1)
+        summary_file = tmp_path / 'legacy_summary.txt'
+        export_legacy_format(quick_test_simulation,
+                             {'parameters': quick_test_parameters, 'analysis': analysis},
+                             tmp_path / 'legacy.csv', summary_file)
+        assert "-- Weighted fit:" in summary_file.read_text(encoding='utf-8')
