@@ -76,7 +76,8 @@ hiddenimports = [
     'matplotlib.backends.backend_qtagg',
 ]
 
-# Example parameter files, loaded by the GUI's example menu.
+# Example parameter files for the GUI's example menu, which falls back to
+# embedded copies (dice_gui/example_parameters.py) when it cannot find them.
 datas = [
     (str(root_path / 'data'), 'data'),
 ]
