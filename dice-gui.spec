@@ -78,8 +78,10 @@ hiddenimports = [
     'matplotlib.backends.backend_qtagg',
 ]
 
-# Example parameter files for the GUI's example menu, which falls back to
-# embedded copies (dice_gui/example_parameters.py) when it cannot find them.
+# Example parameter files, which the application finds in sys._MEIPASS
+# (dice.utils.runtime.examples_directory) for the GUI's example menu. The
+# menu falls back to embedded copies (dice_gui/example_parameters.py) when it
+# cannot find them, as in a wheel installation.
 datas = [
     (str(root_path / 'data'), 'data'),
 ]

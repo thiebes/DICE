@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
 
 from dice import __version__
+from dice.utils.runtime import examples_directory
 from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
     validate_time_range, validate_time_series,
@@ -1357,7 +1358,7 @@ class DiceGUI(QMainWindow):
 
         # Prefer the bundled file; fall back to the embedded copy
         params = EXAMPLE_PARAMETERS.get(example_name)
-        example_file = Path(__file__).parent.parent / "data" / "examples" / f"{example_name}.txt"
+        example_file = examples_directory() / f"{example_name}.txt"
         if example_file.exists():
             try:
                 params = self._read_parameter_file(str(example_file))
