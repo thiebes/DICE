@@ -184,7 +184,7 @@ done
 
 ### Parameter scan
 
-To vary one parameter, write one parameters file for each value and run each file. This example varies the noise level of `quick_test.txt`:
+To vary one parameter, write one parameters file for each value and run each file. The following example varies the noise level of `quick_test.txt`:
 
 ```python
 import ast

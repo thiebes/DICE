@@ -1,6 +1,6 @@
 # DICE Maintenance Scripts
 
-This directory contains scripts for maintaining the DICE project.
+The `scripts/` directory contains scripts for maintaining the DICE project.
 
 ## Version management
 

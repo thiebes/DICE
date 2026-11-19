@@ -1,6 +1,6 @@
 # DICE Parameter Reference
 
-This page describes every parameter of a DICE simulation. You set the parameters in a parameters file for the command-line interface (CLI) or in the tabs of the graphical user interface (GUI). The GUI can save and open the same parameters files.
+Every parameter of a DICE simulation is described below. You set the parameters in a parameters file for the command-line interface (CLI) or in the tabs of the graphical user interface (GUI). The GUI can save and open the same parameters files.
 
 ## Overview
 

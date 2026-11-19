@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file.
 - Behavior change: CNR estimation uses the
   [fft-cnr](https://pypi.org/project/fft-cnr/) package, version 0.4.1 or
-  later, in place of the built-in implementation. This applies to the
+  later, in place of the built-in implementation. The change applies to the
   `estimated CNR` column of the results file, to `estimate noise from data`,
   and to the web app. The reported CNR values shift slightly.
 - The summary file lists the dispersion statistics of the estimates first,

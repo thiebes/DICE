@@ -1,6 +1,6 @@
 # Contrast-to-Noise Ratio (CNR) Estimation Web App
 
-This web application estimates the contrast-to-noise ratio (CNR) of a one-dimensional profile, for example an excited state population profile, entered as a list of values. The estimate comes from the [fft-cnr](https://pypi.org/project/fft-cnr/) package, which DICE also uses.
+The web application in `webapp/` estimates the contrast-to-noise ratio (CNR) of a one-dimensional profile, for example an excited state population profile, entered as a list of values. The estimate comes from the [fft-cnr](https://pypi.org/project/fft-cnr/) package, which DICE also uses.
 
 A hosted copy is available at <https://dice-thiebes.pythonanywhere.com/>. No installation is needed to use it.
 
