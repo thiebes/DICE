@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PyInstaller when a GitHub release is published. The standalone executables
   run simulations on one CPU core; parallel processing requires an
   installation with Python.
+- Python interface: an estimator registry (`dice.models.estimators`) with the
+  ordinary and weighted least-squares fits as its entries.
+  `RunResult.slope_fit()`, `RunResult.accuracy()`, and
+  `MonteCarloOutput.d_estimates()` address an estimator by its key (`'ols'`
+  or `'wls'`).
 - `CHANGELOG.md`, contributor guidelines, a code of conduct, issue templates,
   and user guides in `docs/` (installation, parameters, command-line
   interface, glossary).
