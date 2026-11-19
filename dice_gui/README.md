@@ -113,6 +113,7 @@ The [CLI Guide](../docs/cli-guide.md#output-files) describes the contents of the
 ## Code structure
 
 - `__main__.py`: entry point with the splash screen
+- `standalone.py`: entry point of the standalone (PyInstaller) application, which runs worker processes and `--self-test` before it imports Qt
 - `dice_gui.py`: main window (`DiceGUI`), menus, and control panel
 - `tabs/`: one module for each tab
 - `dice_interface.py`: `DiceInterface`, which converts the GUI inputs to parameters and runs the simulation
