@@ -5,6 +5,9 @@ This module provides the core simulation functionality for running Monte Carlo
 simulations of diffusion measurements with noise.
 """
 
+import multiprocessing as mp
+import sys
+from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 from joblib import Parallel, delayed, effective_n_jobs
@@ -17,7 +20,7 @@ from ..core.fitting import gauss_fitting, calculate_wls_weights
 from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
 from ..models.parameters import SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
-from ..utils.runtime import parallel_processing_supported
+from ..utils.runtime import joblib_workers_supported
 from ..utils.legacy_compatibility import (
     LegacySimulationParameters,
     create_parameters_from_legacy,
@@ -26,6 +29,15 @@ from ..utils.legacy_compatibility import (
 
 # Most batches a parallel simulation is split into; the progress callback reports after each.
 MAX_PROGRESS_BATCHES = 10
+
+# Worker pools for a parallel simulation: joblib's default (loky) backend, or
+# the standard library's ProcessPoolExecutor, which a standalone build uses.
+JOBLIB_BACKEND = 'joblib'
+PROCESS_POOL_BACKEND = 'process_pool'
+PARALLEL_BACKENDS = (JOBLIB_BACKEND, PROCESS_POOL_BACKEND)
+
+# ProcessPoolExecutor rejects more workers than this on Windows.
+MAX_WINDOWS_POOL_WORKERS = 61
 
 
 def run_single_simulation(
@@ -140,6 +152,7 @@ def run_monte_carlo_simulation(
     progress_callback: Optional[callable] = None,
     seed: Seed = None,
     n_jobs: int = -1,
+    parallel_backend: Optional[str] = None,
 ) -> MonteCarloOutput:
     """
     Run Monte Carlo simulation with multiple noise values.
@@ -167,13 +180,25 @@ def run_monte_carlo_simulation(
         gives identical results serially or in parallel. None draws fresh
         entropy for every run.
     n_jobs : int
-        Number of joblib workers when multiprocessing; -1 uses all cores.
+        Number of worker processes when multiprocessing; -1 uses all cores.
+    parallel_backend : str, optional
+        Worker pool when multiprocessing: 'joblib' or 'process_pool' (the
+        standard library's ProcessPoolExecutor). None selects joblib, or the
+        process pool in a standalone build, where joblib cannot start workers.
+        Both give the same results as a serial run with the same seed.
 
     Returns
     -------
     MonteCarloOutput
         Aggregated simulation results.
     """
+    if parallel_backend is None:
+        parallel_backend = default_parallel_backend()
+    elif parallel_backend not in PARALLEL_BACKENDS:
+        raise ValueError(
+            f"Unknown parallel backend {parallel_backend!r}; expected one of {PARALLEL_BACKENDS}"
+        )
+
     run_seeds = spawn_run_seeds(seed, len(noise_values) * num_runs)
 
     # Create parameter sets for all runs
@@ -195,12 +220,10 @@ def run_monte_carlo_simulation(
     
     total_runs = len(run_parameters)
 
-    # A standalone build cannot start worker processes, so it runs serially.
-    # The per-run seeds make the results the same either way.
-    multiprocessing = multiprocessing and parallel_processing_supported()
-
     # Run simulations
-    if multiprocessing:
+    if multiprocessing and parallel_backend == PROCESS_POOL_BACKEND:
+        results = run_in_process_pool(run_parameters, effective_n_jobs(n_jobs), progress_callback)
+    elif multiprocessing:
         # Run in batches so the progress callback can report between them;
         # joblib reuses its worker pool from one batch to the next.
         results = []
@@ -269,6 +292,63 @@ def split_into_batches(run_count: int, worker_count: int) -> List[range]:
         batches.append(range(start, stop))
         start = stop
     return batches
+
+
+def default_parallel_backend() -> str:
+    """The worker pool of a parallel simulation that names none.
+
+    joblib, except in a standalone build, where joblib cannot start workers
+    and the standard library's process pool takes its place.
+    """
+    return JOBLIB_BACKEND if joblib_workers_supported() else PROCESS_POOL_BACKEND
+
+
+def run_in_process_pool(
+    run_parameters: List[tuple],
+    worker_count: int,
+    progress_callback: Optional[callable] = None,
+) -> List[RunResult]:
+    """Run each set of run_single_simulation arguments in a pool of worker processes.
+
+    The workers start with the 'spawn' method on every platform, because a
+    forked copy of the GUI process would inherit its threads. A standalone
+    build calls multiprocessing.freeze_support() first thing in its entry
+    script, so that each worker it spawns runs simulations instead of the
+    application. As in the joblib path, the progress callback reports after
+    each batch; an exception it raises (the GUI's Stop raises
+    InterruptedError) propagates once the workers have exited.
+
+    Returns
+    -------
+    List[RunResult]
+        One result per set of arguments, in the same order.
+    """
+    total_runs = len(run_parameters)
+    if sys.platform == 'win32':
+        worker_count = min(worker_count, MAX_WINDOWS_POOL_WORKERS)
+    worker_count = max(1, min(worker_count, total_runs))
+
+    results = []
+    with ProcessPoolExecutor(max_workers=worker_count, mp_context=mp.get_context('spawn')) as executor:
+        for batch in split_into_batches(total_runs, worker_count):
+            # Several runs per message to a worker, and still several
+            # messages per worker, so that workers that finish early take more.
+            chunk_size = max(1, len(batch) // (4 * worker_count))
+            results.extend(executor.map(
+                _run_single_simulation_from_arguments,
+                (run_parameters[run_index] for run_index in batch),
+                chunksize=chunk_size,
+            ))
+
+            if progress_callback:
+                progress_callback(batch.stop, total_runs)
+
+    return results
+
+
+def _run_single_simulation_from_arguments(arguments: tuple) -> RunResult:
+    """run_single_simulation for one argument tuple; a pool worker can unpickle it by name."""
+    return run_single_simulation(*arguments)
 
 
 def scan_runner_compatibility(

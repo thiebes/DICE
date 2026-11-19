@@ -5,7 +5,7 @@ Tests for dice.utils.runtime: what a standalone (frozen) build changes.
 import sys
 from pathlib import Path
 
-from dice.utils.runtime import examples_directory, is_standalone_build
+from dice.utils.runtime import examples_directory, is_standalone_build, joblib_workers_supported
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -16,10 +16,12 @@ class TestStandaloneBuild:
     def test_regular_install(self, monkeypatch):
         monkeypatch.delattr(sys, 'frozen', raising=False)
         assert is_standalone_build() is False
+        assert joblib_workers_supported() is True
 
     def test_standalone_build(self, monkeypatch):
         monkeypatch.setattr(sys, 'frozen', True, raising=False)
         assert is_standalone_build() is True
+        assert joblib_workers_supported() is False
 
 
 class TestExamplesDirectory:

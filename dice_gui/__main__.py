@@ -73,9 +73,11 @@ def main():
         """Pre-import simulation dependencies in worker processes."""
         from dice.analysis.simulation import run_single_simulation  # noqa: F401
 
-    from dice.utils.runtime import parallel_processing_supported
+    # A standalone build cannot start joblib workers; its simulations use a
+    # process pool that starts with each simulation, so there is nothing to warm.
+    from dice.utils.runtime import joblib_workers_supported
 
-    if parallel_processing_supported():
+    if joblib_workers_supported():
         Parallel(n_jobs=-1)(
             delayed(_warmup_worker)() for _ in range(os.cpu_count() or 1)
         )

@@ -123,7 +123,7 @@ class TestDefaultValues:
 
 
 class TestStandaloneBuild:
-    """In a standalone (frozen) build the parallel-processing option is off and locked."""
+    """A standalone (frozen) build offers parallel processing like a regular installation."""
 
     @pytest.fixture
     def frozen_window(self, qtbot, monkeypatch):
@@ -135,20 +135,26 @@ class TestStandaloneBuild:
         qtbot.addWidget(gui)
         return gui
 
-    def test_checkbox_is_off_disabled_and_explained(self, frozen_window):
+    def test_checkbox_is_on_and_enabled(self, frozen_window):
         checkbox = frozen_window.multiprocessing_check
-        assert not checkbox.isChecked()
-        assert not checkbox.isEnabled()
-        assert "not available in the standalone application" in checkbox.toolTip()
+        assert checkbox.isChecked()
+        assert checkbox.isEnabled()
+        assert checkbox.toolTip() == "Use multiple CPU cores to speed up simulation"
 
-    def test_loaded_file_cannot_turn_parallel_processing_on(self, frozen_window):
+    def test_loaded_file_sets_parallel_processing(self, frozen_window, tmp_path):
         from pathlib import Path
 
         example = Path(__file__).parent.parent.parent / "data" / "examples" / "parameters.txt"
-        frozen_window.load_parameters_from_file(str(example))
+        serial_copy = tmp_path / "serial.txt"
+        serial_copy.write_text(example.read_text().replace("'multiprocessing': True", "'multiprocessing': False"))
 
+        frozen_window.load_parameters_from_file(str(serial_copy))
         assert not frozen_window.multiprocessing_check.isChecked()
         assert frozen_window.collect_parameters()["multiprocessing"] is False
+
+        frozen_window.load_parameters_from_file(str(example))
+        assert frozen_window.multiprocessing_check.isChecked()
+        assert frozen_window.collect_parameters()["multiprocessing"] is True
 
     def test_regular_install_keeps_the_option(self, window):
         assert window.multiprocessing_check.isEnabled()

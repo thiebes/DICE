@@ -1614,9 +1614,7 @@ class DiceGUI(QMainWindow):
                 self.time_series_input.setPlainText(time_series_str)
 
             # Performance
-            # A disabled checkbox means parallel processing is unavailable
-            # (standalone build); a loaded file must not turn it on.
-            if 'multiprocessing' in params and self.multiprocessing_check.isEnabled():
+            if 'multiprocessing' in params:
                 self.multiprocessing_check.setChecked(params['multiprocessing'])
             if 'retain profile data' in params:
                 self.retain_profile_check.setChecked(params['retain profile data'])

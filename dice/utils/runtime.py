@@ -20,14 +20,14 @@ def is_standalone_build() -> bool:
     return bool(getattr(sys, 'frozen', False))
 
 
-def parallel_processing_supported() -> bool:
+def joblib_workers_supported() -> bool:
     """
-    Report whether simulations can run in parallel worker processes.
+    Report whether joblib can start parallel worker processes.
 
-    The simulation runs in parallel through joblib's default (loky) backend,
-    which cannot start workers from a standalone build: each worker re-runs
-    the program's entry script instead of the simulation. PyInstaller marks a
-    standalone build by setting sys.frozen.
+    joblib's default (loky) backend cannot start workers from a standalone
+    build: each worker re-runs the program's entry script instead of the
+    simulation. A standalone build runs its parallel simulations in the
+    standard library's process pool instead.
 
     Returns
     -------
