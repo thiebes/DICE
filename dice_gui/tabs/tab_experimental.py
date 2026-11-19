@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import calculate_pixel_size
+from dice_gui.output_location import output_root
 
 if TYPE_CHECKING:
     from dice_gui.dice_gui import DiceGUI
@@ -461,10 +462,11 @@ def update_pixel_size(main_window: "DiceGUI") -> None:
 
 def browse_noise_file(main_window: "DiceGUI") -> None:
     """Open file dialog to select noise data file."""
+    # Start where the parameter dialogs start; a Finder start's working folder is "/".
     file_path, _ = QFileDialog.getOpenFileName(
         main_window,
         "Select Noise Data File",
-        "",
+        str(output_root().parent),
         "CSV Files (*.csv);;All Files (*)"
     )
     if file_path:

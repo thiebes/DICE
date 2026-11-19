@@ -101,6 +101,8 @@ class TestGuiStartedFromTheRoot:
         trigger_menu_action(window, "&File", "&Open Parameters...")
         trigger_menu_action(window, "&File", "Save Parameters &As...")
         trigger_menu_action(window, "&File", "Load &Results...")
+        window.noise_estimate_radio.setChecked(True)
+        window.noise_browse_button.click()
 
-        assert dialogs.texts("open-file") == [str(dice_folder), str(dice_folder / "output")]
+        assert dialogs.texts("open-file") == [str(dice_folder), str(dice_folder / "output"), str(dice_folder)]
         assert dialogs.texts("save-file") == [str(dice_folder / "parameters.txt")]
