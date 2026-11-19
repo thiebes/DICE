@@ -86,8 +86,11 @@ def _analysis_json(output: MonteCarloOutput, path: Path) -> None:
     path.write_text(json.dumps(analysis, indent=1, default=float), encoding='utf-8')
 
 
-def _summary(output: MonteCarloOutput, path: Path) -> None:
-    write_summary_file(output, path, SUMMARY_PARAMETERS, analyze_simulation_results(output))
+def _summary(output: MonteCarloOutput, path: Path, **options) -> None:
+    write_summary_file(output, path, SUMMARY_PARAMETERS, analyze_simulation_results(output), **options)
+
+
+CM2_PER_S = OutputUnitPreferences(diffusion_length='centimeter', diffusion_time='second')
 
 
 def _csv(**options) -> Callable[[MonteCarloOutput, Path], None]:
@@ -98,6 +101,8 @@ def _csv(**options) -> Callable[[MonteCarloOutput, Path], None]:
 CASES: Dict[str, Tuple[Callable[[], MonteCarloOutput], Callable[[MonteCarloOutput, Path], None]]] = {
     'edge_cases_analysis.json': (edge_case_output, _analysis_json),
     'edge_cases_summary.txt': (edge_case_output, _summary),
+    'edge_cases_output_units_summary.txt': (
+        edge_case_output, lambda output, path: _summary(output, path, output_units=CM2_PER_S)),
     'edge_cases_default.csv': (edge_case_output, _csv()),
     'edge_cases_output_units.csv': (edge_case_output, _csv(output_units=OutputUnitPreferences(
         diffusion_length='micrometer', diffusion_time='nanosecond'))),
@@ -172,6 +177,27 @@ def test_summary_rejects_an_unknown_estimator_key(tmp_path):
     with pytest.raises(KeyError, match="unknown estimator 'wsl'"):
         write_summary_file(edge_case_output(), tmp_path / 'summary.txt', SUMMARY_PARAMETERS,
                            analysis)
+
+
+def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
+    """1 micrometer^2/ns is 10 cm^2/s: the nominal D and four statistics scale, nothing else changes."""
+    output = edge_case_output()
+    analysis = analyze_simulation_results(output)
+    _summary(output, tmp_path / 'global.txt')
+    _summary(output, tmp_path / 'cm2_per_s.txt', output_units=CM2_PER_S)
+    global_lines = (tmp_path / 'global.txt').read_text(encoding='utf-8').splitlines()
+    converted_lines = (tmp_path / 'cm2_per_s.txt').read_text(encoding='utf-8').splitlines()
+
+    changed = [(a, b) for a, b in zip(global_lines, converted_lines) if a != b]
+    assert len(global_lines) == len(converted_lines)
+    assert all(a.endswith(' micrometer^2/nanosecond') and b.endswith(' centimeter^2/second')
+               for a, b in changed)
+    # The nominal value and std, mean, bias, RMSE of both estimators.
+    assert len(changed) == 1 + 4 * 2
+    assert "    0.10000 centimeter^2/second" in converted_lines
+    wls = analysis['accuracy']['wls']
+    for key in ('std', 'mean', 'bias', 'rmse'):
+        assert f"        {wls[key] * 10:.5f} centimeter^2/second" in converted_lines
 
 
 def test_csv_columns_follow_first_appearance(tmp_path):

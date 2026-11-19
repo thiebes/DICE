@@ -19,6 +19,7 @@ from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.validators import validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
+    validate_output_units,
 )
 from fft_cnr import fft_cnr
 from ..core.diffusion import calculate_diffusion_length
@@ -557,6 +558,7 @@ def validate_parameters(params) -> None:
         # before the simulation runs rather than when the results are written.
         validate_length_unit(global_length_unit(params))
         validate_time_unit(global_time_unit(params))
+        validate_output_units(params)
 
         # The histogram is drawn after the simulation, so reject malformed
         # limits and an image type it cannot be written as here instead of

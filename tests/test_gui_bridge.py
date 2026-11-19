@@ -122,6 +122,15 @@ class TestDiffusionCoefficientUnit:
         interface.last_parameters |= parameters
         assert interface.diffusion_coefficient_unit() == (1.0, expected)
 
+    def test_run_results_follow_the_summary_output_unit(self):
+        interface = _interface_with(_output(WLS_SLOPES, OLS_SLOPES))
+        interface.last_parameters |= {
+            'length unit': 'micrometer', 'time unit': 'nanosecond',
+            'output_diffusion_length_unit': 'centimeter', 'output_diffusion_time_unit': 'second'}
+        scale, unit = interface.diffusion_coefficient_unit()
+        assert unit == 'cm\u00b2/s'
+        assert scale == pytest.approx(10, rel=1e-12)
+
 
 class TestLoadAndPlotFromCsv:
 
@@ -235,15 +244,36 @@ class TestLoadAndPlotFromCsv:
         assert interface.last_result is None
 
 
+def _quick_test_parameters(**overrides) -> dict:
+    import ast
+    params = ast.literal_eval(
+        (Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt').read_text())
+    params.update({'number of runs': 2, 'multiprocessing': False}, **overrides)
+    return params
+
+
 class TestRunValidation:
 
-    def test_unknown_image_type_fails_before_the_simulation(self, tmp_path, monkeypatch):
-        import ast
-        params = ast.literal_eval(
-            (Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt').read_text())
-        params.update({'image type': 'bmp', 'number of runs': 2, 'multiprocessing': False})
+    @pytest.mark.parametrize('overrides, message', [
+        ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
+        ({'output_length_unit': 'nanometer'}, "'output_length_unit' is not supported"),
+    ])
+    def test_invalid_output_setting_fails_before_the_simulation(
+            self, tmp_path, monkeypatch, overrides, message):
         monkeypatch.chdir(tmp_path)
-        with pytest.raises(RuntimeError, match="Simulation failed: Unknown image type 'bmp'"):
-            DiceInterface().run_simulation(params)
+        with pytest.raises(RuntimeError, match=f"Simulation failed: {message}"):
+            DiceInterface().run_simulation(_quick_test_parameters(**overrides))
         assert list(tmp_path.iterdir()) == []
+
+    def test_output_diffusion_units_reach_the_csv_and_summary(self, tmp_path, monkeypatch):
+        """The GUI export path converts like the CLI, though the GUI form has no control for the keys."""
+        monkeypatch.chdir(tmp_path)
+        params = _quick_test_parameters(**{
+            'output_diffusion_length_unit': 'nanometer', 'output_diffusion_time_unit': 'picosecond'})
+        DiceInterface().run_simulation(params)
+        output_dir = tmp_path / 'output' / 'quick_test'
+        frame = pd.read_csv(output_dir / 'quick_test.csv')
+        assert frame['nominal diffusion coeff [nm\u00b2/ps]'].to_numpy() == pytest.approx(10.0, rel=1e-12)
+        summary = (output_dir / 'quick_test_summary.txt').read_text(encoding='utf-8')
+        assert "Nominal diffusion coefficient:\n    10.00000 nanometer^2/picosecond\n" in summary
 

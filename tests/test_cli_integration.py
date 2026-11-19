@@ -157,6 +157,54 @@ class TestGlobalUnitsReachOutputs:
         assert not (tmp_path / 'output').exists()
 
 
+class TestOutputDiffusionUnits:
+    """'output_diffusion_length_unit' and 'output_diffusion_time_unit' set the D unit of the CSV and summary."""
+
+    @pytest.fixture(scope='class')
+    def nm2_per_ps_run(self, tmp_path_factory) -> CliRun:
+        workdir = tmp_path_factory.mktemp('output_units')
+        params_file = write_quick_test_variant(workdir, 'out_nm_ps', {
+            'number of runs': 6, 'output_diffusion_length_unit': 'nanometer',
+            'output_diffusion_time_unit': 'picosecond'})
+        return run_cli(workdir, params_file, 'out_nm_ps', '--no-plots', '--seed', '2')
+
+    def test_csv_columns_in_the_output_unit(self, nm2_per_ps_run):
+        assert nm2_per_ps_run.exit_code == 0
+        df = nm2_per_ps_run.read_csv()
+        assert list(df.columns) == [c.replace('cm²/s', 'nm²/ps') for c in CSV_COLUMNS]
+        # 0.01 micrometer^2/ns = 0.01 x 1e6 nm^2 / 1e3 ps = 10 nm^2/ps
+        assert df['nominal diffusion coeff [nm²/ps]'].to_numpy() == pytest.approx(10.0, rel=1e-12)
+        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+
+    def test_summary_diffusion_coefficients_agree_with_the_csv(self, nm2_per_ps_run):
+        df = nm2_per_ps_run.read_csv()
+        values = summary_label_to_values(nm2_per_ps_run.read_summary())
+        unit = 'nanometer^2/picosecond'
+        assert values['Nominal diffusion coefficient'] == [f"10.00000 {unit}"]
+        estimates = {'wls': df['weighted fit diffusion coeff [nm²/ps]'].to_numpy(),
+                     'ols': df['unweighted fit diffusion coeff [nm²/ps]'].to_numpy()}
+        assert values['Mean estimate'] == [f"{estimates[m].mean():.5f} {unit}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{estimates[m].std():.5f} {unit}" for m in ('wls', 'ols')]
+        # Lengths, times, and the unitless ratios stay as they were.
+        assert values['Nominal diffusion length'] == ['0.100 micrometer']
+        assert values['Relative standard error'] == [
+            f"{estimates[m].std() / 10.0:.3f}" for m in ('wls', 'ols')]
+
+    @pytest.mark.parametrize('overrides, message', [
+        ({'output_time_unit': 'picosecond'}, "'output_time_unit' is not supported"),
+        ({'output_diffusion_time_unit': 'second'},
+         "Give both 'output_diffusion_length_unit' and 'output_diffusion_time_unit', or neither."),
+        ({'output_diffusion_length_unit': 'centimeter', 'output_diffusion_time_unit': 'sec'},
+         "Unknown time unit 'sec' for 'output_diffusion_time_unit'"),
+    ])
+    def test_rejected_before_simulation(self, tmp_path, capsys, overrides, message):
+        params_file = write_quick_test_variant(tmp_path, 'bad_output_unit', overrides)
+        run = run_cli(tmp_path, params_file, 'bad_output_unit')
+        assert run.exit_code == 1
+        assert message in capsys.readouterr().out
+        assert not (tmp_path / 'output').exists()
+
+
 class TestSeedReproducibility:
     """--seed N reproduces the CSV exactly, serially or in parallel; no seed does not.
 
@@ -263,6 +311,9 @@ class TestDryRun:
         ({'number of runs': 0}, "Number of runs must be positive"),
         ({'length unit': 'um'}, "Unknown length unit 'um'"),
         ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
+        ({'output_length_unit': 'nanometer'}, "'output_length_unit' is not supported"),
+        ({'output_diffusion_length_unit': 'furlong', 'output_diffusion_time_unit': 'second'},
+         "Unknown length unit 'furlong' for 'output_diffusion_length_unit'"),
     ]
 
     def test_valid_example_exits_zero_without_output(self, tmp_path, capsys):

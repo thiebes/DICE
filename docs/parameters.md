@@ -42,7 +42,7 @@ The number of runs (Monte Carlo iterations). More runs give more precise statist
 
 ### `length unit` and `time unit`
 
-The global units of the simulation. All values with a length or time dimension are in these units, unless a per-parameter unit key (see below) gives another unit. The summary file and the results file report values in these units, except for the results-file columns marked `[cm²/s]`, which DICE converts to cm²/s.
+The global units of the simulation. All values with a length or time dimension are in these units, unless a per-parameter unit key (see below) gives another unit. The summary file and the results file report values in these units, except for the results-file columns marked `[cm²/s]`, which DICE converts to cm²/s. The output unit keys (see below) change the unit of the diffusion coefficients in both files.
 
 - **Length units:** meter, centimeter, millimeter, micrometer, nanometer, angstrom, picometer
 - **Time units:** second, millisecond, microsecond, nanosecond, picosecond, femtosecond, attosecond
@@ -84,6 +84,21 @@ The unit key for `mean_0` is `mu_0_unit`.
 ```
 
 DICE converts these values to 0.8 μm, 0.001 μm²/ns, and 0.5 ns.
+
+### `output_diffusion_length_unit` and `output_diffusion_time_unit`
+
+The unit of the diffusion coefficients in the output files, as a length unit and a time unit. Give both keys or neither.
+
+With the keys, the diffusion coefficients are in (length unit)² / (time unit) in both output files: in the results-file columns that are otherwise marked `[cm²/s]`, and in the summary file's nominal diffusion coefficient and the standard deviation, mean, bias, and RMSE of the estimates. Without the keys, the results file uses cm²/s and the summary file uses the global units.
+
+**Example:** to report the diffusion coefficients in cm²/s in both files:
+
+```python
+'output_diffusion_length_unit': 'centimeter',
+'output_diffusion_time_unit': 'second',
+```
+
+Other values with a length or time dimension stay in the global units. DICE rejects the keys `output_length_unit` and `output_time_unit` before the simulation. The GUI has no setting for the output units: it does not use these keys, and it leaves them out when it opens or saves a parameters file.
 
 ## Diffusion and lifetime
 
