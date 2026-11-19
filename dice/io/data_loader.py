@@ -90,24 +90,45 @@ def load_time_series_profiles(
         raise IOError(f"Error loading time series from {filename}: {e}")
 
 
+def _first_line_is_numeric(filepath: Path, delimiter: str = ',') -> bool:
+    """Whether every field of the file's first non-blank line is a number, so the line is data, not a header."""
+    # utf-8-sig drops the byte-order mark that spreadsheet programs write before the first value
+    with open(filepath, encoding='utf-8-sig') as f:
+        first_line = next((line for line in f if line.strip()), '')
+    fields = first_line.split(delimiter)
+    try:
+        for field in fields:
+            float(field)
+    except ValueError:
+        return False
+    return True
+
+
 def load_experimental_data(
     filename: Union[str, Path],
     format: str = 'auto'
 ) -> dict:
     """
     Load experimental data with automatic format detection.
-    
+
+    A CSV file has a header row only when its first non-blank line contains
+    a field that is not a number. A CSV without one, such as a measured
+    profile on a single line, is read with np.loadtxt as the noise estimate
+    reads it: one line loads as a 1D array. A CSV with a header row is read
+    with pandas.
+
     Parameters
     ----------
     filename : str or Path
         Path to data file.
     format : str
         File format ('csv', 'txt', 'npy', or 'auto' for detection).
-    
+
     Returns
     -------
     dict
-        Dictionary containing loaded data and metadata.
+        'filename', 'format', 'data', 'shape' and 'ndim'; a CSV with a header
+        row also has 'columns', the header's column names.
     """
     filepath = Path(filename)
     
@@ -133,10 +154,12 @@ def load_experimental_data(
     
     try:
         if format == 'csv':
-            # Try pandas first for more robust CSV handling
-            df = pd.read_csv(filepath)
-            result['data'] = df.values
-            result['columns'] = df.columns.tolist()
+            if _first_line_is_numeric(filepath):
+                result['data'] = np.loadtxt(filepath, delimiter=',', encoding='utf-8-sig')
+            else:
+                df = pd.read_csv(filepath)
+                result['data'] = df.values
+                result['columns'] = df.columns.tolist()
             
         elif format == 'npy':
             result['data'] = np.load(filepath)

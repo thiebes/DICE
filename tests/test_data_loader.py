@@ -167,12 +167,40 @@ class TestLoadExperimentalData:
         assert loaded['shape'] == exported.shape
         np.testing.assert_allclose(loaded['data'].astype(float), exported.to_numpy(dtype=float))
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "Known defect: pandas reads the only line of a single-line profile CSV "
-        "as a header, so the profile values become column names and no data rows remain."))
     def test_single_line_profile_csv(self):
         loaded = load_experimental_data(EXAMPLE_PROFILE)
-        assert loaded['data'].size == 41
+        assert set(loaded) == LOADED_DATA_KEYS
+        assert loaded['format'] == 'csv'
+        assert (loaded['shape'], loaded['ndim']) == ((41,), 1)
+        # The same array the noise estimate reads from the file
+        np.testing.assert_array_equal(loaded['data'], np.loadtxt(EXAMPLE_PROFILE, delimiter=','))
+
+    def test_headerless_csv_keeps_first_row(self, tmp_path, simulated_profiles):
+        profiles_csv = tmp_path / 'profiles.csv'
+        np.savetxt(profiles_csv, simulated_profiles, delimiter=',')
+        loaded = load_experimental_data(profiles_csv)
+        assert set(loaded) == LOADED_DATA_KEYS
+        np.testing.assert_array_equal(loaded['data'], simulated_profiles)
+
+    @pytest.mark.parametrize('prefix', ['﻿', '\n\n'], ids=['byte_order_mark', 'leading_blank_lines'])
+    def test_single_line_profile_csv_with_prefix(self, tmp_path, prefix):
+        profile_csv = tmp_path / 'profile.csv'
+        profile_csv.write_text(prefix + EXAMPLE_PROFILE.read_text(), encoding='utf-8')
+        loaded = load_experimental_data(profile_csv)
+        assert 'columns' not in loaded
+        np.testing.assert_array_equal(loaded['data'], load_profile_data(EXAMPLE_PROFILE))
+
+    def test_malformed_headerless_csv_raises_ioerror(self, tmp_path):
+        ragged = tmp_path / 'ragged.csv'
+        ragged.write_text(EXAMPLE_PROFILE.read_text() + "\n1,2,3\n")
+        with pytest.raises(IOError, match="Error loading csv file"):
+            load_experimental_data(ragged)
+
+    def test_empty_csv_raises_ioerror(self, tmp_path):
+        empty = tmp_path / 'empty.csv'
+        empty.write_text("")
+        with pytest.raises(IOError, match="Error loading csv file"):
+            load_experimental_data(empty)
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="absent.csv"):
