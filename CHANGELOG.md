@@ -101,6 +101,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Results in length or time units other than micrometer and nanosecond are
+  converted and labeled correctly. In 1.2.0 the command-line interface wrote
+  the results file and the summary as if the units were micrometer and
+  nanosecond: for lengths in nanometers, the diffusion coefficients in cm²/s
+  were 10^6 times too large, and the summary labeled lengths in micrometers.
+  Results from 1.2.0 in micrometers and nanoseconds are not affected, and
+  releases before 1.2.0 converted correctly.
+- The nominal CNR in the results file and the initial CNR in the summary are
+  `amplitude_0` divided by the noise standard deviation. They were the
+  reciprocal of the noise standard deviation, which is correct only for
+  `amplitude_0` = 1.
+- `estimate noise from data` sets the noise so that the initial CNR of the
+  simulated profiles equals the CNR measured from the profile, for any
+  `amplitude_0`. The noise was the reciprocal of the measured CNR, which is
+  correct only for `amplitude_0` = 1.
 - `--seed N` makes runs reproducible: repeated runs with the same parameters
   and seed give identical results, in serial and in parallel. The flag had no
   effect on the noise draws.
