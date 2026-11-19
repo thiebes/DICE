@@ -27,7 +27,8 @@ results with 1.2.0.
   the command-line interface reads, plots results files from earlier runs,
   and offers output presets for publication, presentation, and draft figures.
   It has light and dark themes, Alt-key shortcuts for the input fields, and a
-  list of the shortcuts under Help.
+  list of the shortcuts under Help. Stop ends a serial run after the current
+  run and a parallel run after the current batch of runs.
 - GUI warnings before a run for settings that make the fits unreliable: a low
   CNR at the last time point, an initial profile that is narrow compared with
   the pixel size, or very few time points.
@@ -44,10 +45,18 @@ results with 1.2.0.
 - Time range of the simulation in the summary file.
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), and `high_precision.txt` (10000 runs).
-- Standalone GUI executables for Windows, macOS, and Linux, built with
-  PyInstaller when a GitHub release is published. The standalone executables
-  run simulations on one CPU core; parallel processing requires an
-  installation with Python.
+- Standalone GUI applications for Windows (x86_64), macOS (Apple silicon
+  and Intel), and Linux (x86_64), built with PyInstaller when a GitHub
+  release is published, with SHA-256 checksums in `SHA256SUMS.txt`. They need
+  no Python installation and run simulations in parallel on all CPU cores.
+  `docs/installation.md` describes how to download, check, and start them.
+  The release workflow tests each packaged application with `--self-test`,
+  which runs a seeded simulation serially and in parallel and requires
+  identical results.
+- Python interface: `run_monte_carlo_simulation()` takes `parallel_backend`,
+  `'joblib'` or `'process_pool'` (the standard library's
+  `ProcessPoolExecutor`). Both give the serial results for the same seed. The
+  default is joblib, or the process pool in a standalone application.
 - A warning when the measured profile for `estimate noise from data` has a
   peak narrower than about 9 pixels at half maximum, where fft-cnr reads the
   CNR too low (14% to 27% low for a peak 4.6 pixels wide in simulated
