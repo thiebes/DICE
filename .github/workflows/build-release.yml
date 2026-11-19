@@ -108,12 +108,18 @@ jobs:
       - run: uv python install "$PYTHON_VERSION"
         shell: bash
 
-      # The project itself is never installed in this job: PyInstaller bundles
-      # it from the source tree, so no unpinned build backend runs here.
+      # Some tests read the installed distribution (the console entry point)
+      # or run the CLI from another directory, so the tests run against the
+      # project installed as a wheel. The wheel is built with the hash-pinned
+      # backend in .github/build-constraints.txt, so no unpinned build backend
+      # runs in this job; PyInstaller later bundles the source tree.
       - name: Run tests
         shell: bash
         run: |
           uv sync --locked --no-install-project --extra test --python "$PYTHON_VERSION" --managed-python
+          uv build --wheel --out-dir wheel --python "$PYTHON_VERSION" --managed-python \
+            --build-constraints .github/build-constraints.txt --require-hashes
+          uv pip install --no-deps wheel/dice-*.whl
           uv run --no-sync python -m pytest --tb=short
 
       # Sync again without extras so that test packages are removed and not
