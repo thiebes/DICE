@@ -487,7 +487,8 @@ class TestEstimateNoiseFromData:
         from fft_cnr import fft_cnr
         file_estimate = fft_cnr(np.loadtxt(EXAMPLE_PROFILE, delimiter=','))
 
-        params = open_parameters(self._write_parameters(tmp_path, EXAMPLE_PROFILE, amplitude_0))
+        with pytest.warns(UserWarning, match="pixels wide at half maximum"):
+            params = open_parameters(self._write_parameters(tmp_path, EXAMPLE_PROFILE, amplitude_0))
 
         assert len(params['noise series']) == 1
         noise_sigma = params['noise series'][0]
@@ -521,6 +522,38 @@ class TestEstimateNoiseFromData:
         params = {'estimate noise from data': str(EXAMPLE_PROFILE)}
         with pytest.raises(ValueError, match="amplitude_0"):
             handle_noise_parameters(params)
+
+    def test_narrow_repository_profile_warns(self, tmp_path):
+        """data/examples/example_profile.csv has a peak 4.6 pixels wide, too narrow for fft-cnr."""
+        params_file = self._write_parameters(tmp_path, EXAMPLE_PROFILE, 1.0)
+        with pytest.warns(UserWarning) as caught:
+            open_parameters(params_file)
+        messages = [str(w.message) for w in caught if 'half maximum' in str(w.message)]
+        assert len(messages) == 1
+        assert f"'{EXAMPLE_PROFILE}' is 4.6 pixels wide at half maximum" in messages[0]
+        assert "narrower than about 9 pixels" in messages[0]
+        assert "too low" in messages[0]
+
+    def test_wide_profile_does_not_warn(self, tmp_path):
+        """A measured-like profile 15 pixels wide at half maximum, from DICE's own Gaussian with noise."""
+        import warnings
+        from dice.core.profiles import gaussian
+        from dice.utils.converters import fwhm_to_sigma2
+        x = np.arange(101) - 50
+        rng = np.random.default_rng(11)
+        wide = 1000 * gaussian(x, 0.3, fwhm_to_sigma2(15.0), 1.0) + 40 + rng.normal(0, 50, x.size)
+        params_file = self._write_parameters(tmp_path, self._write_profile(tmp_path, wide), 1.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            params = open_parameters(params_file)
+        assert 0 < params['noise series'][0] < 1
+
+    def test_warning_names_nothing_for_a_profile_without_a_peak(self):
+        from dice.io.parameters import narrow_peak_warning
+        assert narrow_peak_warning(np.zeros(41), 'flat.csv') is None
+        measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
+        assert narrow_peak_warning(measured, 'measured.csv').startswith(
+            "The peak of the measured profile 'measured.csv' is 4.6 pixels wide")
 
 
 class TestRetiredProximityLevel:

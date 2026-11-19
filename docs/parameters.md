@@ -168,6 +168,8 @@ DICE estimates the CNR of the measured profile with the [fft-cnr](https://pypi.o
 
 Use a profile whose peak is at least about 9 pixels wide at half maximum, with flat background on both sides. For narrower peaks fft-cnr overestimates the noise and the CNR comes out too low. In simulated Gaussian profiles with white noise, the estimate was within 2.4% of the true CNR for peaks 9 to 14 pixels wide, and 14% to 27% too low for a peak 4.6 pixels wide. Check the summary file's initial CNR against your own estimate for the measured data.
 
+DICE warns when the peak of the measured profile is narrower than 9 pixels at half maximum. It measures the width with a least-squares fit of a Gaussian on a constant baseline. The command-line interface prints the warning before the simulation, and the GUI shows it with the other parameter warnings when you click Run. The example profile `data/examples/example_profile.csv` has a peak 4.6 pixels wide, so it gives this warning.
+
 ### `noise range, reciprocal` and `noise range, reciprocal log`
 
 **Format:** `[low, high]`, two noise standard deviations with low < high

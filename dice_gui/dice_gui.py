@@ -1046,6 +1046,19 @@ class DiceGUI(QMainWindow):
                 f"for the MSD linear fit. Fewer points increase sensitivity to noise."
             )
 
+        # Check 4: Measured peak too narrow for fft-cnr to estimate its CNR well.
+        # The parser warns too, but a Python warning is not visible in the GUI.
+        if gui_params['noise_type'] == 'estimate':
+            import numpy as np
+            from dice.io.parameters import narrow_peak_warning
+            noise_file = gui_params['noise_data_file']
+            try:
+                message = narrow_peak_warning(np.loadtxt(noise_file, delimiter=','), noise_file)
+            except (OSError, ValueError):
+                message = None  # the run itself reports a file it cannot read
+            if message:
+                messages.append(f"\u26a0 Narrow measured peak: {message}")
+
         return messages
 
     def run_simulation(self):

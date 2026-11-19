@@ -645,11 +645,51 @@ class TestOutputOptions:
             tmp_path, 'estimated',
             {'number of runs': self.OPTION_RUNS, 'estimate noise from data': str(profile_file)},
             removed=('noise value',))
-        run = run_cli(tmp_path, params_file, 'estimated', '--no-plots')
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            run = run_cli(tmp_path, params_file, 'estimated', '--no-plots')
         assert run.exit_code == 0
+        # The repository profile's peak is too narrow for fft-cnr, which the run reports.
+        assert [w.category for w in caught if 'pixels wide at half maximum' in str(w.message)] == [
+            UserWarning]
         values = summary_label_to_values(run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
         assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
+
+
+class TestNarrowPeakWarning:
+    """The CLI shows the warning for a measured profile too narrow for fft-cnr, on stderr."""
+
+    @staticmethod
+    def _dry_run(directory: Path, profile_file: Path) -> 'subprocess.CompletedProcess[str]':
+        import subprocess
+        import sys
+        params_file = write_quick_test_variant(
+            directory, 'estimated', {'estimate noise from data': str(profile_file)},
+            removed=('noise value',))
+        return subprocess.run(
+            [sys.executable, '-m', 'dice.cli.main', str(params_file), '--dry-run'],
+            cwd=directory, capture_output=True, text=True, encoding='utf-8', timeout=120,
+        )
+
+    def test_repository_profile_warns(self, tmp_path):
+        completed = self._dry_run(tmp_path, EXAMPLES_DIR / 'example_profile.csv')
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert "UserWarning: The peak of the measured profile" in completed.stderr
+        assert "is 4.6 pixels wide at half maximum" in completed.stderr
+        assert "loaded and validated" in completed.stdout
+
+    def test_wide_profile_does_not_warn(self, tmp_path):
+        from dice.core.profiles import gaussian
+        from dice.utils.converters import fwhm_to_sigma2
+        x = np.arange(101) - 50
+        rng = np.random.default_rng(5)
+        wide = 1000 * gaussian(x, 0.3, fwhm_to_sigma2(15.0), 1.0) + rng.normal(0, 50, x.size)
+        profile_file = tmp_path / 'wide_profile.csv'
+        np.savetxt(profile_file, wide.reshape(1, -1), delimiter=',', fmt='%.17g')
+        completed = self._dry_run(tmp_path, profile_file)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert "Warning" not in completed.stderr
 
 
 class TestNominalCnrUsesAmplitude:

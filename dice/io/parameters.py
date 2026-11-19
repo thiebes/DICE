@@ -10,7 +10,7 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 import ast
 import warnings
 import numpy as np
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Sequence, Union
 from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
@@ -21,7 +21,7 @@ from ..utils.units import (
 )
 from fft_cnr import fft_cnr
 from ..core.diffusion import calculate_diffusion_length
-from ..core.noise import Seed, make_noise_distribution
+from ..core.noise import MIN_CNR_PEAK_FWHM, Seed, make_noise_distribution, peak_fwhm_samples
 from ..models.parameters import SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
@@ -170,6 +170,36 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
             del parameters_dictionary[unique_time_key]
 
 
+def narrow_peak_warning(profile: Sequence[float], source: str) -> Optional[str]:
+    """
+    Warning for a measured profile whose peak is too narrow for fft-cnr to estimate its CNR well.
+
+    Parameters
+    ----------
+    profile : sequence of float
+        The measured profile, one value per pixel.
+    source : str
+        Where the profile came from (its file name), for the message.
+
+    Returns
+    -------
+    str or None
+        The message when the peak is narrower than MIN_CNR_PEAK_FWHM pixels
+        at half maximum, otherwise None.
+    """
+    width = peak_fwhm_samples(profile)
+    if not width < MIN_CNR_PEAK_FWHM:  # a nan width (no peak) is not narrow
+        return None
+    return (
+        f"The peak of the measured profile '{source}' is {width:.1f} pixels wide at half "
+        f"maximum. For peaks narrower than about {MIN_CNR_PEAK_FWHM:g} pixels, fft-cnr "
+        "overestimates the noise, so the estimated initial CNR is probably too low and the "
+        "simulated noise too high. In simulated Gaussian profiles with white noise, the "
+        "estimate was 14% to 27% too low for a peak 4.6 pixels wide, and within 2.4% of the "
+        "true CNR for peaks 9 to 14 pixels wide."
+    )
+
+
 def handle_noise_parameters(
     parameters_dictionary: Dict[str, Any], num_vals: int = 1, seed: Seed = None
 ) -> None:
@@ -225,6 +255,10 @@ def handle_noise_parameters(
                 )
             sigma_n = parameters_dictionary['amplitude_0'] / cnr_estimate
             parameters_dictionary['noise series'] = [sigma_n]
+            message = narrow_peak_warning(t0_profile_y, noise_filename)
+            if message:
+                # stacklevel 3 names the caller of parameter_parser, like the retired-key warning.
+                warnings.warn(message, stacklevel=3)
 
         elif unique_noise_key in ('noise range, reciprocal log', 'noise_range_reciprocal_log'):
             noise_range = parameters_dictionary[unique_noise_key]

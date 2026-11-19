@@ -29,6 +29,7 @@ _LAZY_IMPORTS = {
     "make_noise_distribution": ".noise",
     "fft_cnr": "fft_cnr",  # re-exported from fft-cnr package
     "estimate_noise_from_profile": ".noise",
+    "peak_fwhm_samples": ".noise",
     # fitting (scipy.optimize, statsmodels)
     "gauss_fitting": ".fitting",
     "diffusion_ols_fit": ".fitting",
@@ -64,6 +65,7 @@ __all__ = [
     "make_noise_distribution",
     "fft_cnr",
     "estimate_noise_from_profile",
+    "peak_fwhm_samples",
     # Fitting
     "gauss_fitting",
     "diffusion_ols_fit",

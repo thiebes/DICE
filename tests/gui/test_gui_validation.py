@@ -6,13 +6,14 @@ block a run before any simulation thread starts.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QFocusEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from gui_support import TAB_NAMES, enter_text, run_and_wait
+from gui_support import EXAMPLE_PROFILE_CSV, TAB_NAMES, enter_text, run_and_wait
 
 pytestmark = pytest.mark.gui
 
@@ -206,6 +207,33 @@ class TestConsistencyWarnings:
         assert window.simulation_thread is None
         assert window.run_button.isEnabled()
         assert window.status_label.text() == "Ready to run"
+
+    def test_narrow_measured_peak_warns(self, qtbot, window, dialogs):
+        """The repository profile's peak is 4.6 pixels wide, too narrow for fft-cnr's CNR estimate."""
+        window.noise_estimate_radio.setChecked(True)
+        enter_text(qtbot, window.noise_file_input, str(EXAMPLE_PROFILE_CSV))
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        _click_run(qtbot, window)
+
+        assert dialogs.titles("question") == ["Parameter Warnings"]
+        assert (f"⚠ Narrow measured peak: The peak of the measured profile "
+                f"'{EXAMPLE_PROFILE_CSV}' is 4.6 pixels wide at half maximum.") in dialogs.texts("question")[0]
+        assert window.simulation_thread is None
+
+    def test_wide_measured_peak_does_not_warn(self, qtbot, window, dialogs, work_dir):
+        from dice.core.profiles import gaussian
+        from dice.utils.converters import fwhm_to_sigma2
+        x = np.arange(101) - 50
+        rng = np.random.default_rng(5)
+        wide = 1000 * gaussian(x, 0.3, fwhm_to_sigma2(15.0), 1.0) + rng.normal(0, 50, x.size)
+        profile_file = work_dir / "wide_profile.csv"
+        np.savetxt(profile_file, wide.reshape(1, -1), delimiter=",", fmt="%.17g")
+        window.noise_estimate_radio.setChecked(True)
+        enter_text(qtbot, window.noise_file_input, str(profile_file))
+
+        assert not any("Narrow measured peak" in message
+                       for message in window._check_parameter_consistency(window.collect_parameters()))
 
     def test_short_time_series_warns(self, qtbot, window, dialogs):
         window.time_series_radio.click()
