@@ -250,3 +250,58 @@ class TestRetiredProximityLevel:
         assert [w.category for w in proximity_warnings] == [UserWarning]
         assert plain.csv_file.read_bytes() == retired.csv_file.read_bytes()
         assert plain.read_summary() == retired.read_summary()
+
+
+class TestDryRun:
+    """--dry-run loads and validates exactly as a real run does, then stops before any output."""
+
+    INVALID_VALUES = [
+        ({'noise value': 'loud'}, "Invalid noise value loud"),
+        ({'number of runs': 0}, "Number of runs must be positive"),
+        ({'length unit': 'um'}, "Unknown length unit 'um'"),
+    ]
+
+    def test_valid_example_exits_zero_without_output(self, tmp_path, capsys):
+        with contextlib.chdir(tmp_path):
+            assert main([str(QUICK_TEST), '--dry-run']) == 0
+        out = capsys.readouterr().out
+        assert "loaded and validated" in out
+        out.encode('ascii')
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize('overrides, message', INVALID_VALUES)
+    def test_invalid_value_fails_like_a_real_run(self, tmp_path, capsys, overrides, message):
+        params_file = write_quick_test_variant(tmp_path, 'invalid', overrides)
+        with contextlib.chdir(tmp_path):
+            dry_exit = main([str(params_file), '--dry-run'])
+            dry_error = capsys.readouterr().out.splitlines()[-1]
+            real_exit = main([str(params_file), '--quiet'])
+            real_error = capsys.readouterr().out.splitlines()[-1]
+        assert dry_exit == real_exit == 1
+        assert dry_error == real_error
+        assert dry_error.startswith("Error: ") and message in dry_error
+        assert not (tmp_path / 'output').exists()
+
+    def test_missing_file_fails_like_a_real_run(self, tmp_path, capsys):
+        missing = str(tmp_path / 'missing.txt')
+        with pytest.raises(SystemExit) as dry_exit:
+            main([missing, '--dry-run'])
+        dry_error = capsys.readouterr().err
+        with pytest.raises(SystemExit) as real_exit:
+            main([missing])
+        assert dry_exit.value.code == real_exit.value.code == 2
+        assert "Parameters file not found" in dry_error
+        assert dry_error == capsys.readouterr().err
+
+    def test_output_is_ascii_when_redirected(self, tmp_path):
+        import os
+        import subprocess
+        import sys
+        completed = subprocess.run(
+            [sys.executable, '-m', 'dice.cli.main', str(QUICK_TEST), '--dry-run'],
+            cwd=tmp_path, capture_output=True, timeout=120,
+            env={**os.environ, 'PYTHONIOENCODING': 'ascii:strict'},
+        )
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        completed.stdout.decode('ascii')
+        assert list(tmp_path.iterdir()) == []

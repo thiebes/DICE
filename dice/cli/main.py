@@ -329,11 +329,7 @@ def main(argv: Optional[list] = None) -> int:
     try:
         # Parse arguments
         args = parse_arguments(argv)
-        
-        # Handle special arguments
-        if handle_special_arguments(args):
-            return 0
-        
+
         # Show parameter summary if verbose
         if args.verbose and not args.quiet:
             show_parameter_summary(args)
@@ -353,7 +349,12 @@ def main(argv: Optional[list] = None) -> int:
         
         if args.verbose and not args.quiet:
             print("Parameters loaded and validated")
-        
+
+        # A dry run ends here, after the same loading and validation as a real
+        # run and before any output directory, simulation, or file.
+        if handle_special_arguments(args):
+            return 0
+
         # Setup output directory
         output_dir = setup_output_directory(args.output_dir, parameters)
         
