@@ -126,7 +126,7 @@ class TestLoadAndPlotFromCsv:
         assert plotted == [_ratios(METHOD_SLOPES[method])]
 
     @pytest.mark.parametrize('method', list(METHOD_ARGUMENTS))
-    def test_loaded_results_hold_each_columns_values_in_file_order(
+    def test_loaded_results_keep_each_row_as_one_run(
             self, method, exported_csv, plotted, tmp_path):
         interface = DiceInterface()
         interface.load_and_plot_from_csv(
@@ -134,18 +134,31 @@ class TestLoadAndPlotFromCsv:
             **METHOD_ARGUMENTS[method])
 
         runs = interface.last_result.run_results
-        stored_wls = [s for s in WLS_SLOPES if s is not None]
-        stored_ols = [s for s in OLS_SLOPES if s is not None]
-        assert interface.last_result.num_runs == len(runs) == 3
-        assert [r.wls_slope for r in runs] == stored_wls
-        assert [r.ols_slope for r in runs] == stored_ols
-        assert [r.nominal_diffusion_coefficient for r in runs] == [NOMINAL_D] * 3
+        assert interface.last_result.num_runs == len(runs) == len(WLS_SLOPES)
+        assert [r.wls_slope for r in runs] == WLS_SLOPES
+        assert [r.ols_slope for r in runs] == OLS_SLOPES
+        assert [r.nominal_diffusion_coefficient for r in runs] == [NOMINAL_D] * len(WLS_SLOPES)
         assert interface.last_parameters == {'nominal diffusion coefficient': NOMINAL_D,
                                              'filename slug': 'exported'}
         assert interface.last_result.estimator_keys == ('ols', 'wls')
         # The other fit method works from the stored slopes without reloading.
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) == 2 / 3
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['ols']) == 1 / 3
+
+    def test_gap_in_one_estimator_does_not_drop_the_others_runs(self, plotted, tmp_path):
+        # WLS has one gap and OLS none, so the two columns have different counts.
+        wls = [0.02, None, 0.03, 0.021]
+        ols = [0.019, 0.0216, 0.017, 0.026]   # D / D_nominal: 0.95, 1.08, 0.85, 1.3
+        csv_file = tmp_path / 'one_gap.csv'
+        export_collated_results(_output(wls, ols), csv_file)
+
+        interface = DiceInterface()
+        interface.load_and_plot_from_csv(
+            str(csv_file), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['wls'])
+
+        assert [r.ols_slope for r in interface.last_result.run_results] == ols
+        # Two of the four OLS estimates lie within 10% of the nominal value.
+        assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['ols']) == 2 / 4
 
     def test_missing_column_is_named(self, exported_csv, plotted, tmp_path):
         frame = pd.read_csv(exported_csv)
@@ -166,7 +179,7 @@ class TestLoadAndPlotFromCsv:
         interface.load_and_plot_from_csv(
             str(ols_only), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['ols'])
         assert plotted == [_ratios(OLS_SLOPES)]
-        assert [r.wls_slope for r in interface.last_result.run_results] == [None] * 3
+        assert [r.wls_slope for r in interface.last_result.run_results] == [None] * len(OLS_SLOPES)
         assert interface.last_result.estimator_keys == ('ols',)
         assert interface.calculate_proximity_on_demand(0.1, **METHOD_ARGUMENTS['wls']) is None
 

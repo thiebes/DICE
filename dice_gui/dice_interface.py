@@ -454,10 +454,11 @@ class DiceInterface:
                 num_bins=image_settings.get('image_numbins', 35)
             )
 
-            # Store loaded data in memory for regeneration
-            # Get every estimator's slopes whose column the CSV has, for future regeneration
+            # Store loaded data in memory for regeneration: every estimator's
+            # slopes whose column the CSV has, one entry per CSV row, so each
+            # row stays one run even where only one estimator has no slope.
             stored_slopes = {
-                spec.key: df[column].dropna().values
+                spec.key: df[column].values
                 for spec in ESTIMATORS
                 if (column := f'{spec.csv_label} diffusion slope') in df.columns
             }
@@ -465,7 +466,7 @@ class DiceInterface:
             # Create RunResult objects with those slopes
             # Use placeholder values for required fields not available in CSV
             run_results = []
-            num_runs = len(slopes)
+            num_runs = len(df)
             for i in range(num_runs):
                 run_result = RunResult(
                     run_id=i,
@@ -477,7 +478,7 @@ class DiceInterface:
                     cnr_0_estimate=0.0,
                 )
                 for key, key_slopes in stored_slopes.items():
-                    if i < len(key_slopes):
+                    if not pd.isna(key_slopes[i]):
                         run_result.set_slope_fit(key, SlopeFit(slope=key_slopes[i]))
                 run_results.append(run_result)
 
