@@ -451,6 +451,8 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
         ld = get_value('nominal diffusion length', 'diffusion_length')
         if not isinstance(ld, (int, float)):
             raise ValueError("'nominal diffusion length' must be numeric.")
+        if not ld >= 0:
+            raise ValueError(f"'nominal diffusion length' must be >= 0, got {ld}")
 
         # Set nominal values based on diffusion length
         parameters_dictionary['nominal diffusion coefficient'] = ld ** 2

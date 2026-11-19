@@ -201,6 +201,11 @@ class TestHandleDiffusionParameters:
         with pytest.raises(ValueError, match=f"{name} must be >= 0"):
             handle_diffusion_parameters(params)
 
+    def test_negative_diffusion_length_rejected(self):
+        params = {'nominal diffusion length': -0.1}
+        with pytest.raises(ValueError, match="'nominal diffusion length' must be >= 0, got -0.1"):
+            handle_diffusion_parameters(params)
+
     def test_all_parameters_provided(self):
         """Test error when all parameters are provided."""
         params = {
