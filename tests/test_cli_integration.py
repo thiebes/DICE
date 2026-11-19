@@ -305,3 +305,13 @@ class TestDryRun:
         assert completed.returncode == 0, completed.stdout + completed.stderr
         completed.stdout.decode('ascii')
         assert list(tmp_path.iterdir()) == []
+
+
+class TestQuietMode:
+    """--quiet prints nothing on a successful run, including with --seed."""
+
+    def test_quiet_seeded_run_prints_nothing(self, tmp_path, capsys):
+        params_file = write_quick_test_variant(tmp_path, 'quiet', {'number of runs': 2})
+        run = run_cli(tmp_path, params_file, 'quiet', '--seed', '1', '--no-plots')
+        assert run.exit_code == 0
+        assert capsys.readouterr().out == ''
