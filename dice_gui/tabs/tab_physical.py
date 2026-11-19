@@ -63,7 +63,7 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "from noisy measurements.\n\n"
         "Typical values: 10-1000 nm for organic semiconductors, "
         "100-10000 nm for inorganic materials.\n\n"
-        "Must be positive."
+        "Must be positive, except that it is zero when the lifetime is zero (no decay)."
     )
     main_window.diffusion_length_unit_combo = create_unit_combo('length')
     l_widget_layout.addWidget(main_window.diffusion_length_input)
@@ -87,7 +87,7 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         "Typical values:\n"
         "- Organic semiconductors: 0.001-0.1 cm\u00b2/s\n"
         "- Inorganic semiconductors: 0.1-100 cm\u00b2/s\n\n"
-        "Must be non-negative. Zero means no diffusion (only decay)."
+        "Must be positive: the accuracy analysis divides estimates by D."
     )
     main_window.diffusion_coeff_length_unit_combo = create_unit_combo(
         'length', squared=True

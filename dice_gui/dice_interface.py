@@ -186,13 +186,23 @@ class DiceInterface:
             output_dir = Path.cwd() / 'output' / slug
             output_dir.mkdir(parents=True, exist_ok=True)
 
+            # Results are in the global units resolve_units() converted to;
+            # the exporters label and convert from these (same defaults).
+            length_unit = processed_params.get('length unit', 'micrometer')
+            time_unit = processed_params.get('time unit', 'nanosecond')
+
             # Export results to CSV
             csv_file = output_dir / f"{slug}.csv"
-            export_collated_results(result, str(csv_file))
+            export_collated_results(
+                result, str(csv_file), length_unit=length_unit, time_unit=time_unit
+            )
 
             # Write summary file
             summary_file = output_dir / f"{slug}_summary.txt"
-            write_summary_file(result, str(summary_file), processed_params, analysis)
+            write_summary_file(
+                result, str(summary_file), processed_params, analysis,
+                length_unit=length_unit, time_unit=time_unit,
+            )
 
             # Create accuracy histogram
             d_estimates = []
@@ -231,6 +241,9 @@ class DiceInterface:
 
             return result, processed_params
 
+        except InterruptedError:
+            # A progress callback requested cancellation; not a failure.
+            raise
         except ImportError as e:
             raise ImportError(f"Failed to import dice module: {e}")
         except Exception as e:

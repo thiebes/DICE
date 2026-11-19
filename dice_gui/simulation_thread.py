@@ -18,6 +18,7 @@ class SimulationThread(QThread):
     iteration_progress = pyqtSignal(int, int)  # current, total
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, interface: DiceInterface, parameters: dict):
         super().__init__()
@@ -49,7 +50,7 @@ class SimulationThread(QThread):
             )
             self.finished.emit(result)
         except InterruptedError:
-            self.error.emit("Simulation cancelled by user")
+            self.cancelled.emit()
         except Exception as e:
             self.error.emit(str(e))
 

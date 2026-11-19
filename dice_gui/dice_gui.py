@@ -778,11 +778,13 @@ class DiceGUI(QMainWindow):
         if not result:
             return False, result.error_message
 
-        # Diffusion (all three fields linked; any two compute the third)
-        result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length")
+        # Diffusion (all three fields linked; any two compute the third).
+        # L is 0 when tau is 0 (no decay); D must be positive because the
+        # accuracy analysis divides estimates by the nominal D.
+        result = validate_positive_float(self.diffusion_length_input.text(), "Diffusion length", allow_zero=True)
         if not result:
             return False, result.error_message
-        result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient", allow_zero=True)
+        result = validate_positive_float(self.diffusion_coeff_input.text(), "Diffusion coefficient")
         if not result:
             return False, result.error_message
         result = validate_positive_float(self.lifetime_input.text(), "Lifetime", allow_zero=True)
@@ -1128,6 +1130,7 @@ class DiceGUI(QMainWindow):
         self.simulation_thread.iteration_progress.connect(self._update_iteration_progress)
         self.simulation_thread.finished.connect(self.simulation_finished)
         self.simulation_thread.error.connect(self.simulation_error)
+        self.simulation_thread.cancelled.connect(self.simulation_cancelled)
         self.simulation_thread.start()
 
     def stop_simulation(self):
@@ -1247,6 +1250,16 @@ class DiceGUI(QMainWindow):
         self.status_label.setText("Simulation failed")
         QMessageBox.critical(self, "Simulation Error", f"Simulation failed:\n\n{error_message}")
 
+    def simulation_cancelled(self):
+        """Handle a run that stopped at the user's request."""
+        self.reset_ui_after_simulation()
+        if self.simulation_thread is not None:
+            self.simulation_thread.deleteLater()
+            self.simulation_thread = None
+        # Set last: queued progress updates from before the stop may have
+        # overwritten the message stop_simulation() showed.
+        self.status_label.setText("Simulation stopped by user")
+
     def reset_ui_after_simulation(self):
         """Reset UI elements after simulation completes or stops."""
         self.run_button.setEnabled(True)
@@ -1313,14 +1326,7 @@ class DiceGUI(QMainWindow):
 
     def load_parameters_from_file(self, file_path: str):
         """Load parameters from a specific file path."""
-        import ast
-
-        # Read and parse the parameter file
-        with open(file_path, 'r') as f:
-            content = f.read()
-
-        # Parse the dictionary
-        params = ast.literal_eval(content)
+        params = self._read_parameter_file(file_path)
 
         # Populate GUI from parameters
         self.populate_gui_from_parameters(params)
@@ -1336,8 +1342,15 @@ class DiceGUI(QMainWindow):
             f"Parameters loaded from:\n{file_path}"
         )
 
+    def _read_parameter_file(self, file_path: str) -> dict:
+        """Parse a parameters.txt-format file into its dictionary."""
+        import ast
+
+        with open(file_path, 'r') as f:
+            return ast.literal_eval(f.read())
+
     def load_example(self, example_name: str):
-        """Load example parameters."""
+        """Load example parameters without making the bundled file the save target."""
         if self.parameters_modified:
             reply = QMessageBox.question(
                 self, "Unsaved Changes",
@@ -1347,22 +1360,17 @@ class DiceGUI(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        # Try to load from file first
+        # Prefer the bundled file; fall back to the embedded copy
+        params = EXAMPLE_PARAMETERS.get(example_name)
         example_file = Path(__file__).parent.parent / "data" / "examples" / f"{example_name}.txt"
         if example_file.exists():
             try:
-                self.load_parameters_from_file(str(example_file))
-                return
-            except Exception:
+                params = self._read_parameter_file(str(example_file))
+            except (OSError, SyntaxError, ValueError):
                 pass  # Fall back to embedded
 
-        # Use embedded parameters
-        if example_name in EXAMPLE_PARAMETERS:
-            self._populating = True
-            try:
-                self.populate_gui_from_parameters(EXAMPLE_PARAMETERS[example_name])
-            finally:
-                self._populating = False
+        if params is not None:
+            self.populate_gui_from_parameters(params)
             self.current_parameter_file = None
             self.parameters_modified = False
             self.update_window_title()
@@ -1445,7 +1453,7 @@ class DiceGUI(QMainWindow):
         ]
 
         # Filename slug
-        lines.append(f"    'filename slug': '{gui_params['filename_slug']}',")
+        lines.append(f"    'filename slug': {gui_params['filename_slug']!r},")
         lines.append("")
 
         # Number of runs
@@ -1454,20 +1462,20 @@ class DiceGUI(QMainWindow):
 
         # Units
         lines.append("    ### Units ###")
-        lines.append(f"    'length unit': '{gui_params['length_unit']}',")
-        lines.append(f"    'time unit': '{gui_params['time_unit']}',")
+        lines.append(f"    'length unit': {gui_params['length_unit']!r},")
+        lines.append(f"    'time unit': {gui_params['time_unit']!r},")
         lines.append("")
 
         # Diffusion parameters
         lines.append("    ### Nominal diffusion and lifetime parameters ###")
         lines.append(f"    'nominal diffusion coefficient': {gui_params['diffusion_coefficient']},")
         if 'diffusion_coefficient_length_unit' in gui_params:
-            lines.append(f"    'diffusion_coefficient_length_unit': '{gui_params['diffusion_coefficient_length_unit']}',")
+            lines.append(f"    'diffusion_coefficient_length_unit': {gui_params['diffusion_coefficient_length_unit']!r},")
         if 'diffusion_coefficient_time_unit' in gui_params:
-            lines.append(f"    'diffusion_coefficient_time_unit': '{gui_params['diffusion_coefficient_time_unit']}',")
+            lines.append(f"    'diffusion_coefficient_time_unit': {gui_params['diffusion_coefficient_time_unit']!r},")
         lines.append(f"    'nominal lifetime (tau)': {gui_params['lifetime']},")
         if 'lifetime_unit' in gui_params:
-            lines.append(f"    'lifetime_unit': '{gui_params['lifetime_unit']}',")
+            lines.append(f"    'lifetime_unit': {gui_params['lifetime_unit']!r},")
         lines.append("")
 
         # Initial profile
@@ -1475,15 +1483,15 @@ class DiceGUI(QMainWindow):
         if gui_params['profile_width_type'] == 'fwhm':
             lines.append(f"    'FWHM_0': {gui_params['profile_width_value']},")
             if 'fwhm_0_unit' in gui_params:
-                lines.append(f"    'FWHM_0_unit': '{gui_params['fwhm_0_unit']}',")
+                lines.append(f"    'FWHM_0_unit': {gui_params['fwhm_0_unit']!r},")
         else:
             lines.append(f"    'sigma_0': {gui_params['profile_width_value']},")
             if 'sigma_0_unit' in gui_params:
-                lines.append(f"    'sigma_0_unit': '{gui_params['sigma_0_unit']}',")
+                lines.append(f"    'sigma_0_unit': {gui_params['sigma_0_unit']!r},")
         lines.append(f"    'amplitude_0': {gui_params['amplitude_0']},")
         lines.append(f"    'mean_0': {gui_params['mean_0']},")
         if 'mu_0_unit' in gui_params:
-            lines.append(f"    'mu_0_unit': '{gui_params['mu_0_unit']}',")
+            lines.append(f"    'mu_0_unit': {gui_params['mu_0_unit']!r},")
         lines.append("")
 
         # Noise
@@ -1491,14 +1499,14 @@ class DiceGUI(QMainWindow):
         if gui_params['noise_type'] == 'fixed':
             lines.append(f"    'noise value': {gui_params['noise_value']},")
         else:
-            lines.append(f"    'estimate noise from data': '{gui_params['noise_data_file']}',")
+            lines.append(f"    'estimate noise from data': {gui_params['noise_data_file']!r},")
         lines.append("")
 
         # Spatial axis
         lines.append("    ### Spatial axis parameters ###")
         lines.append(f"    'spatial width': {gui_params['spatial_width']},")
         if 'spatial_width_unit' in gui_params:
-            lines.append(f"    'spatial_width_unit': '{gui_params['spatial_width_unit']}',")
+            lines.append(f"    'spatial_width_unit': {gui_params['spatial_width_unit']!r},")
         lines.append(f"    'pixel width': {gui_params['pixel_width']},")
         lines.append("")
 
@@ -1507,9 +1515,9 @@ class DiceGUI(QMainWindow):
         if gui_params['time_type'] == 'range':
             lines.append(f"    'time range': [{gui_params['time_start']}, {gui_params['time_stop']}, {gui_params['time_steps']}],")
             if 'time_start_unit' in gui_params:
-                lines.append(f"    'time_start_unit': '{gui_params['time_start_unit']}',")
+                lines.append(f"    'time_start_unit': {gui_params['time_start_unit']!r},")
             if 'time_stop_unit' in gui_params:
-                lines.append(f"    'time_stop_unit': '{gui_params['time_stop_unit']}',")
+                lines.append(f"    'time_stop_unit': {gui_params['time_stop_unit']!r},")
         else:
             try:
                 ts_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
@@ -1520,7 +1528,7 @@ class DiceGUI(QMainWindow):
 
         # Plot parameters
         lines.append("    ### Plot image parameters ###")
-        lines.append(f"    'image type': '{gui_params['image_type']}',")
+        lines.append(f"    'image type': {gui_params['image_type']!r},")
         lines.append(f"    'image width': {gui_params['image_width']},")
         lines.append(f"    'image height': {gui_params['image_height']},")
         lines.append(f"    'image dpi': {gui_params['image_dpi']},")
@@ -1674,8 +1682,13 @@ class DiceGUI(QMainWindow):
 
         If a _unit key is present, the corresponding combo is set and marked
         as user-modified so that subsequent global unit changes do not
-        override it.
+        override it. Combos without a key follow the global unit again, so
+        overrides from a previously loaded file do not carry over.
         """
+        for combo in self._get_all_per_param_unit_combos():
+            combo.setProperty("_user_modified", False)
+        self.sync_unit_combos()
+
         def _set_combo(combo, *keys):
             for key in keys:
                 if key in params:
@@ -1873,14 +1886,16 @@ class DiceGUI(QMainWindow):
             lambda v: validate_positive_float(v, "Spatial width")
         )
 
-        # Register diffusion fields (all three always required; any two compute the third)
+        # Register diffusion fields (all three always required; any two compute the third).
+        # L is 0 when tau is 0 (no decay); D must be positive because the
+        # accuracy analysis divides estimates by the nominal D.
         self.validation_manager.register_field(
             "diffusion_length", self.diffusion_length_input,
-            lambda v: validate_positive_float(v, "Diffusion length"),
+            lambda v: validate_positive_float(v, "Diffusion length", allow_zero=True),
         )
         self.validation_manager.register_field(
             "diffusion_coeff", self.diffusion_coeff_input,
-            lambda v: validate_positive_float(v, "Diffusion coefficient", allow_zero=True),
+            lambda v: validate_positive_float(v, "Diffusion coefficient"),
         )
         self.validation_manager.register_field(
             "lifetime", self.lifetime_input,
@@ -1962,6 +1977,8 @@ class DiceGUI(QMainWindow):
             if error_label:
                 error_label.setText("")
                 error_label.setVisible(False)
+            self._update_tab_indicators()
+            self._update_validation_status_bar()
             return
 
         apply_validation_style(field.widget, is_valid)
@@ -2075,9 +2092,9 @@ Shortcuts are scoped to the active tab.</p>
 
 <h3>Tab 4: Analysis Settings</h3>
 <table>
-<tr><td><b>Alt+P</b></td><td>Proximity Level</td></tr>
 <tr><td><b>Alt+W</b></td><td>Weighted Least Squares</td></tr>
 <tr><td><b>Alt+O</b></td><td>Ordinary Least Squares</td></tr>
+<tr><td><b>Alt+T</b></td><td>Accuracy Threshold</td></tr>
 </table>
 
 <h3>Tab 5: Output Settings</h3>
