@@ -10,6 +10,7 @@ from typing import Optional, List, Any, Tuple
 import numpy as np
 
 from .estimators import DEFAULT_ESTIMATOR_KEYS, SlopeFit
+from .parameters import NoiseRange
 
 
 @dataclass
@@ -167,16 +168,22 @@ class MonteCarloOutput:
     num_runs : int
         Total number of simulation runs completed.
     noise_values : List[float]
-        List of noise sigma values used in the simulation.
+        Noise sigma values used in the simulation: the fixed noise levels,
+        each used for the same number of runs, or, with noise_range, one
+        value for each run, in run order.
     estimator_keys : Tuple[str, ...]
         Keys of the estimators that ran, as in dice.models.estimators. The
         analysis reports each of them, even one whose every fit failed.
+    noise_range : NoiseRange, optional
+        The range from which each run drew its own noise sigma; None when
+        the runs used fixed noise levels.
     """
     parameters: Any
     run_results: List[RunResult]
     num_runs: int
     noise_values: List[float] = field(default_factory=list)
     estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
+    noise_range: Optional[NoiseRange] = None
 
     def d_estimates(self, key: str) -> np.ndarray:
         """Estimator `key`'s D estimates (slope / 2) of the runs that have a fit, in run order."""

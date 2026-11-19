@@ -209,6 +209,43 @@ class NoiseParameters:
             return cls(mode='single', value=0.01)
 
 
+@dataclass(frozen=True)
+class NoiseRange:
+    """
+    Range of noise standard deviations from which each run draws its own value.
+
+    The reciprocal 1/sigma, which is the initial CNR for an amplitude of 1, is
+    uniformly distributed between 1/high and 1/low. With logarithmic=True,
+    its base-10 logarithm is uniformly distributed instead.
+
+    Attributes
+    ----------
+    low : float
+        Smallest noise standard deviation (the highest CNR).
+    high : float
+        Largest noise standard deviation (the lowest CNR).
+    logarithmic : bool
+        Whether log10(1/sigma), rather than 1/sigma, is uniformly distributed.
+
+    Raises
+    ------
+    ValueError
+        If a bound is not a positive, finite number, or low is not less than high.
+    """
+    low: float
+    high: float
+    logarithmic: bool = False
+
+    def __post_init__(self):
+        bounds = [self.low, self.high]
+        if not all(np.isfinite(bound) and bound > 0 for bound in bounds):
+            raise ValueError(f"Invalid noise range {bounds}. Both values must be positive and finite.")
+        if self.low >= self.high:
+            raise ValueError(
+                f"Invalid noise range {bounds}. The first value (low) must be less than the second (high)."
+            )
+
+
 @dataclass
 class SpatialParameters:
     """

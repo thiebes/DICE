@@ -9,7 +9,7 @@ import multiprocessing as mp
 import sys
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any, Sequence
 from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
@@ -18,7 +18,7 @@ from fft_cnr import fft_cnr
 from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, calculate_wls_weights
 from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
-from ..models.parameters import SimulationParameters
+from ..models.parameters import NoiseRange, SimulationParameters
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import joblib_workers_supported
 from ..utils.legacy_compatibility import LegacySimulationParameters
@@ -149,10 +149,11 @@ def run_monte_carlo_simulation(
     seed: Seed = None,
     n_jobs: int = -1,
     parallel_backend: Optional[str] = None,
+    noise_range: Optional[NoiseRange] = None,
 ) -> MonteCarloOutput:
     """
-    Run Monte Carlo simulation with multiple noise values.
-    
+    Run Monte Carlo simulation at fixed noise levels, or with a noise level for each run.
+
     Parameters
     ----------
     parameters : SimulationParameters
@@ -162,9 +163,11 @@ def run_monte_carlo_simulation(
     time_axis : np.ndarray
         Time axis values.
     noise_values : List[float]
-        List of noise sigma values to simulate.
+        Noise sigma values to simulate: the fixed noise levels, or, with
+        noise_range, one value for each run, in run order.
     num_runs : int
-        Number of runs per noise value.
+        Number of runs per noise level; with noise_range, the total number
+        of runs, which must equal the number of noise values.
     multiprocessing : bool
         Whether to use parallel processing.
     retain_profile_data : bool
@@ -182,11 +185,21 @@ def run_monte_carlo_simulation(
         standard library's ProcessPoolExecutor). None selects joblib, or the
         process pool in a standalone build, where joblib cannot start workers.
         Both give the same results as a serial run with the same seed.
+    noise_range : NoiseRange, optional
+        The range from which noise_values were drawn, one for each run. The
+        result records it, so that the analysis and the outputs treat the
+        noise as varying from run to run. None for fixed noise levels.
 
     Returns
     -------
     MonteCarloOutput
         Aggregated simulation results.
+
+    Raises
+    ------
+    ValueError
+        If the parallel backend is unknown, or with noise_range, if the
+        number of noise values differs from num_runs.
     """
     if parallel_backend is None:
         parallel_backend = default_parallel_backend()
@@ -195,25 +208,15 @@ def run_monte_carlo_simulation(
             f"Unknown parallel backend {parallel_backend!r}; expected one of {PARALLEL_BACKENDS}"
         )
 
-    run_seeds = spawn_run_seeds(seed, len(noise_values) * num_runs)
+    run_noise_sigmas = noise_sigma_of_each_run(noise_values, num_runs, noise_range)
+    run_seeds = spawn_run_seeds(seed, len(run_noise_sigmas))
 
     # Create parameter sets for all runs
-    run_parameters = []
-    run_id = 0
+    run_parameters = [
+        (run_id, x_axis, time_axis, parameters, noise_sigma, retain_profile_data, run_seeds[run_id])
+        for run_id, noise_sigma in enumerate(run_noise_sigmas)
+    ]
 
-    for noise_sigma in noise_values:
-        for _ in range(num_runs):
-            run_parameters.append((
-                run_id,
-                x_axis,
-                time_axis,
-                parameters,
-                noise_sigma,
-                retain_profile_data,
-                run_seeds[run_id],
-            ))
-            run_id += 1
-    
     total_runs = len(run_parameters)
 
     # Run simulations
@@ -250,9 +253,33 @@ def run_monte_carlo_simulation(
         num_runs=total_runs,
         noise_values=noise_values,
         estimator_keys=DEFAULT_ESTIMATOR_KEYS,
+        noise_range=noise_range,
     )
 
     return simulation_result
+
+
+def noise_sigma_of_each_run(
+    noise_values: Sequence[float], num_runs: int, noise_range: Optional[NoiseRange] = None,
+) -> List[float]:
+    """The noise sigma of each run, in run order.
+
+    Fixed noise levels give num_runs runs each, level by level. With a noise
+    range, the noise values are already one per run.
+
+    Raises
+    ------
+    ValueError
+        With a noise range, if the number of noise values differs from num_runs.
+    """
+    if noise_range is None:
+        return [noise_sigma for noise_sigma in noise_values for _ in range(num_runs)]
+    if len(noise_values) != num_runs:
+        raise ValueError(
+            f"A noise range needs one noise value for each of the {num_runs} runs; "
+            f"got {len(noise_values)}."
+        )
+    return list(noise_values)
 
 
 def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:
