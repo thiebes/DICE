@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
     QProgressBar, QMessageBox, QScrollArea, QStatusBar, QMenu
 )
-from PyQt6.QtCore import Qt, QSettings
+from PyQt6.QtCore import QLocale, Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
 
 from dice import __version__
@@ -61,6 +61,10 @@ class DiceGUI(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        # Spin boxes follow the widget locale. The C locale gives them the
+        # decimal point that the text fields and parameter files use; child
+        # widgets and dialogs inherit it.
+        self.setLocale(QLocale.c())
         self.interface = DiceInterface()
         self.simulation_thread = None
         self.theme = DiceTheme()
@@ -1634,12 +1638,17 @@ class DiceGUI(QMainWindow):
 
             # Noise (mutually exclusive). A noise range has no control here and
             # leaves the noise fields as they are; load_parameters_from_file says so.
+            # The inputs of the other mode are emptied, so that none keeps a
+            # value from before the load.
             if 'noise value' in params:
                 self.noise_fixed_radio.setChecked(True)
                 self.noise_value_input.setText(str(params['noise value']))
+                self.noise_file_input.clear()
             elif 'estimate noise from data' in params:
                 self.noise_estimate_radio.setChecked(True)
                 self.noise_file_input.setText(params['estimate noise from data'])
+                self.noise_value_input.clear()
+                self.noise_cnr_input.clear()
 
             # Spatial axis
             if 'spatial width' in params:
@@ -1654,11 +1663,14 @@ class DiceGUI(QMainWindow):
                 self.time_start_input.setText(str(time_range[0]))
                 self.time_stop_input.setText(str(time_range[1]))
                 self.time_steps_input.setValue(time_range[2])
+                self.time_series_input.clear()
             elif 'time series' in params:
                 self.time_series_radio.setChecked(True)
                 # Convert list to comma-separated string
                 time_series_str = ", ".join(str(t) for t in params['time series'])
                 self.time_series_input.setPlainText(time_series_str)
+                self.time_start_input.clear()
+                self.time_stop_input.clear()
 
             # Performance
             if 'multiprocessing' in params:

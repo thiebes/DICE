@@ -98,7 +98,7 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     format_layout.addRow(height_label, height_widget)
 
     # === Column 2: Resolution & Histogram ===
-    resolution_group = QGroupBox("Resolution & Histogram")
+    resolution_group = QGroupBox("Resolution && Histogram")
     resolution_layout = QFormLayout(resolution_group)
 
     # DPI

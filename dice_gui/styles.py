@@ -44,6 +44,7 @@ class DiceTheme:
                 'info_text': QColor(160, 160, 160),  # Light gray - WCAG AA on dark backgrounds
                 'calculated_value': QColor(100, 181, 246),  # Light blue - WCAG AA contrast
                 'success': QColor(129, 199, 132),  # Light green
+                'on_success': QColor(18, 18, 18),  # Near black, for text on the light green
                 'error': QColor(239, 83, 80),  # Light red
                 'warning': QColor(255, 183, 77),  # Amber
                 'link': QColor(100, 181, 246),  # Light blue
@@ -53,6 +54,7 @@ class DiceTheme:
                 'info_text': QColor(97, 97, 97),  # Dark gray - WCAG AAA on white (7.8:1)
                 'calculated_value': QColor(13, 71, 161),  # Dark blue - WCAG AAA (8.6:1)
                 'success': QColor(27, 94, 32),  # Dark green - WCAG AAA (9.4:1)
+                'on_success': QColor(255, 255, 255),  # White, for text on the dark green
                 'error': QColor(183, 28, 28),  # Dark red - WCAG AA (6.6:1)
                 'warning': QColor(230, 81, 0),  # Dark orange - WCAG AA (5.3:1)
                 'link': QColor(13, 71, 161),  # Dark blue - WCAG AAA
@@ -142,7 +144,7 @@ class DiceTheme:
 
             QPushButton#run-button:enabled {{
                 background-color: {to_css(colors['success'])};
-                color: {'white' if self.is_dark_mode else 'white'};
+                color: {to_css(colors['on_success'])};
             }}
 
             QPushButton#run-button:hover:enabled {{

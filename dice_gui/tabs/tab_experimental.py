@@ -346,7 +346,10 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
 
 
 def toggle_noise_inputs(main_window: "DiceGUI", checked: bool) -> None:
-    """Enable/disable noise input fields based on radio selection."""
+    """Enable the noise inputs of the selected mode and disable the others.
+
+    The disabled inputs keep their values, so switching back restores them.
+    """
     use_fixed = main_window.noise_fixed_radio.isChecked()
 
     main_window.noise_value_input.setEnabled(use_fixed)
@@ -356,11 +359,8 @@ def toggle_noise_inputs(main_window: "DiceGUI", checked: bool) -> None:
 
     from dice_gui.validation_manager import clear_validation_style
     if use_fixed:
-        main_window.noise_file_input.clear()
         clear_validation_style(main_window.noise_file_input)
     else:
-        main_window.noise_value_input.clear()
-        main_window.noise_cnr_input.clear()
         clear_validation_style(main_window.noise_value_input)
 
 
@@ -423,7 +423,10 @@ def update_noise_cnr_display(main_window: "DiceGUI", source: str = 'sigma') -> N
 
 
 def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:
-    """Enable/disable time input fields based on radio selection."""
+    """Enable the time inputs of the selected mode and disable the others.
+
+    The disabled inputs keep their values, so switching back restores them.
+    """
     use_range = main_window.time_range_radio.isChecked()
 
     main_window.time_start_input.setEnabled(use_range)
@@ -431,15 +434,10 @@ def toggle_time_inputs(main_window: "DiceGUI", checked: bool) -> None:
     main_window.time_steps_input.setEnabled(use_range)
     main_window.time_series_input.setEnabled(not use_range)
 
-    # Clear values when disabled
+    from dice_gui.validation_manager import clear_validation_style
     if use_range:
-        main_window.time_series_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
         clear_validation_style(main_window.time_series_input)
     else:
-        main_window.time_start_input.clear()
-        main_window.time_stop_input.clear()
-        from dice_gui.validation_manager import clear_validation_style
         clear_validation_style(main_window.time_start_input)
         clear_validation_style(main_window.time_stop_input)
 

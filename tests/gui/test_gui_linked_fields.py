@@ -104,17 +104,22 @@ class TestSpatialSampling:
 
 class TestModeSwitches:
 
-    def test_noise_mode_switch_enables_one_input_set_and_clears_the_other(self, qtbot, window):
+    def test_noise_mode_switch_enables_one_input_set_and_keeps_the_other(self, qtbot, window):
+        enter_text(qtbot, window.noise_value_input, "0.04")
         window.noise_estimate_radio.click()
         assert window.noise_file_input.isEnabled() and window.noise_browse_button.isEnabled()
         assert not window.noise_value_input.isEnabled() and not window.noise_cnr_input.isEnabled()
-        assert (window.noise_value_input.text(), window.noise_cnr_input.text()) == ("", "")
 
         enter_text(qtbot, window.noise_file_input, str(EXAMPLE_PROFILE_CSV))
         window.noise_fixed_radio.click()
-        assert window.noise_value_input.isEnabled()
-        assert not window.noise_file_input.isEnabled()
-        assert window.noise_file_input.text() == ""
+        assert window.noise_value_input.isEnabled() and window.noise_cnr_input.isEnabled()
+        assert not window.noise_file_input.isEnabled() and not window.noise_browse_button.isEnabled()
+        assert window.noise_value_input.text() == "0.04"
+        assert float_text(window.noise_cnr_input) == pytest.approx(25.0)
+        assert window.run_button.isEnabled()
+
+        window.noise_estimate_radio.click()
+        assert window.noise_file_input.text() == str(EXAMPLE_PROFILE_CSV)
 
     def test_browse_fills_the_noise_file(self, qtbot, window, dialogs):
         window.noise_estimate_radio.click()
@@ -125,13 +130,42 @@ class TestModeSwitches:
         assert dialogs.titles("open-file") == ["Select Noise Data File"]
         assert window.noise_file_input.text() == str(EXAMPLE_PROFILE_CSV)
 
-    def test_time_mode_switch_enables_one_input_set_and_clears_the_other(self, qtbot, window):
+    def test_time_mode_switch_enables_one_input_set_and_keeps_the_other(self, qtbot, window):
+        enter_text(qtbot, window.time_start_input, "0.5")
+        enter_text(qtbot, window.time_stop_input, "3")
+        window.time_steps_input.setValue(7)
         window.time_series_radio.click()
         assert window.time_series_input.isEnabled()
         assert not any(w.isEnabled() for w in (window.time_start_input, window.time_stop_input, window.time_steps_input))
-        assert (window.time_start_input.text(), window.time_stop_input.text()) == ("", "")
 
         window.time_series_input.setPlainText("0, 1, 2")
         window.time_range_radio.click()
-        assert window.time_start_input.isEnabled()
-        assert window.time_series_input.toPlainText() == ""
+        assert all(w.isEnabled() for w in (window.time_start_input, window.time_stop_input, window.time_steps_input))
+        assert not window.time_series_input.isEnabled()
+        assert (window.time_start_input.text(), window.time_stop_input.text()) == ("0.5", "3")
+        assert window.time_steps_input.value() == 7
+        assert window.run_button.isEnabled()
+
+        window.time_series_radio.click()
+        assert window.time_series_input.toPlainText() == "0, 1, 2"
+
+    def test_only_the_selected_modes_reach_the_run(self, qtbot, window):
+        """A value kept in a disabled input is shown, not used."""
+        window.noise_estimate_radio.click()
+        enter_text(qtbot, window.noise_file_input, str(EXAMPLE_PROFILE_CSV))
+        window.time_series_radio.click()
+        window.time_series_input.setPlainText("0, 1, 2")
+
+        collected = window.collect_parameters()
+        assert (collected["noise_type"], collected["noise_data_file"]) == ("estimate", str(EXAMPLE_PROFILE_CSV))
+        assert (collected["time_type"], collected["time_series"]) == ("series", "0, 1, 2")
+        assert not {"noise_value", "time_start", "time_stop", "time_steps"} & set(collected)
+
+        window.noise_fixed_radio.click()
+        window.time_range_radio.click()
+
+        collected = window.collect_parameters()
+        assert (collected["noise_type"], collected["noise_value"]) == ("fixed", 0.05)
+        assert collected["time_type"] == "range"
+        assert (collected["time_start"], collected["time_stop"], collected["time_steps"]) == (0.0, 2.0, 10)
+        assert not {"noise_data_file", "time_series"} & set(collected)

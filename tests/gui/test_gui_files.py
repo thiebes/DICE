@@ -374,6 +374,79 @@ class TestRelativeNoiseDataPath:
         assert window._error_labels["noise_file"].isHidden()
 
 
+class TestLoadedFileEmptiesTheOtherMode:
+    """A file selects one noise mode and one time mode; the inputs of the other mode keep nothing from before."""
+
+    @staticmethod
+    def _write(work_dir: Path, name: str, remove: str, add: dict) -> Path:
+        params = read_example("quick_test.txt")
+        del params[remove]
+        params.update(add)
+        params_file = work_dir / name
+        params_file.write_text(str(params))
+        return params_file
+
+    def test_estimate_noise_file_empties_the_fixed_noise_inputs(self, window, dialogs, work_dir):
+        params_file = self._write(work_dir, "estimate.txt", "noise value",
+                                  {"estimate noise from data": EXAMPLE_PROFILE_CSV.as_posix()})
+        assert window.noise_value_input.text() == "0.05"
+
+        _open_via_menu(window, dialogs, params_file)
+
+        assert dialogs.titles("critical") == []
+        assert window.noise_estimate_radio.isChecked()
+        assert (window.noise_value_input.text(), window.noise_cnr_input.text()) == ("", "")
+
+    def test_fixed_noise_file_empties_the_noise_file_input(self, window, dialogs, work_dir):
+        params_file = self._write(work_dir, "estimate.txt", "noise value",
+                                  {"estimate noise from data": EXAMPLE_PROFILE_CSV.as_posix()})
+        _open_via_menu(window, dialogs, params_file)
+        assert window.noise_file_input.text() != ""
+
+        _open_via_menu(window, dialogs, EXAMPLES_DIR / "quick_test.txt")
+
+        assert dialogs.titles("critical") == []
+        assert window.noise_fixed_radio.isChecked()
+        assert window.noise_file_input.text() == ""
+        assert window.noise_value_input.text() == str(read_example("quick_test.txt")["noise value"])
+
+    def test_time_series_file_empties_the_time_range_inputs(self, window, dialogs, work_dir):
+        params_file = self._write(work_dir, "series.txt", "time range", {"time series": [0, 0.5, 1, 2]})
+        assert window.time_start_input.text() == "0"
+
+        _open_via_menu(window, dialogs, params_file)
+
+        assert dialogs.titles("critical") == []
+        assert window.time_series_radio.isChecked()
+        assert window.time_series_input.toPlainText() == "0, 0.5, 1, 2"
+        assert (window.time_start_input.text(), window.time_stop_input.text()) == ("", "")
+
+    def test_time_range_file_empties_the_time_series_input(self, window, dialogs, work_dir):
+        params_file = self._write(work_dir, "series.txt", "time range", {"time series": [0, 0.5, 1, 2]})
+        _open_via_menu(window, dialogs, params_file)
+
+        _open_via_menu(window, dialogs, EXAMPLES_DIR / "quick_test.txt")
+
+        assert dialogs.titles("critical") == []
+        assert window.time_range_radio.isChecked()
+        assert window.time_series_input.toPlainText() == ""
+
+    def test_new_parameters_empties_what_the_user_kept_in_the_other_mode(self, qtbot, window, dialogs):
+        window.noise_estimate_radio.setChecked(True)
+        enter_text(qtbot, window.noise_file_input, EXAMPLE_PROFILE_CSV.as_posix())
+        window.time_series_radio.setChecked(True)
+        window.time_series_input.setPlainText("0, 1, 2")
+        window.parameters_modified = False
+
+        trigger_menu_action(window, "&File", "&New Parameters")
+
+        assert window.noise_fixed_radio.isChecked() and window.time_range_radio.isChecked()
+        assert window.noise_file_input.text() == ""
+        assert window.time_series_input.toPlainText() == ""
+        assert (window.noise_value_input.text(), window.time_start_input.text(),
+                window.time_stop_input.text()) == ("0.05", "0", "2")
+
+
 class TestNoiseRangeFile:
     """A file with a noise range opens with a warning that the GUI cannot edit or run the range."""
 

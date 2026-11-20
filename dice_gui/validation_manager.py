@@ -131,10 +131,14 @@ class ValidationManager(QObject):
             for field_id in self._condition_groups[category]:
                 field = self._fields.get(field_id)
                 if field and field.condition_group:
+                    was_active = field.is_active
                     field.is_active = (field.condition_group == active_group)
                     if not field.is_active:
                         field.last_result = ValidationResult(True)
                         self.field_validated.emit(field_id, True, "")
+                    elif not was_active and self._get_widget_value(field.widget).strip():
+                        # The field kept its value while it was inactive.
+                        self._validate_field(field_id)
 
         self._check_overall_validity()
 

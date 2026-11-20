@@ -111,6 +111,38 @@ class TestInlineFeedback:
         assert window.tabs.tabText(2) == TAB_NAMES[2]
         assert window.run_button.isEnabled()
 
+    def test_kept_invalid_value_is_flagged_again_when_its_mode_returns(self, qtbot, window):
+        enter_text(qtbot, window.noise_value_input, "-1")
+        window.noise_estimate_radio.setChecked(True)
+
+        window.noise_fixed_radio.setChecked(True)
+
+        assert window.noise_value_input.text() == "-1"
+        assert _visible_error(window, "noise_value").startswith("Noise value")
+        assert window.validation_status_label.text() == "1 validation error"
+        assert window.tabs.tabText(2) == TAB_NAMES[2] + WARNING_MARK
+        assert not window.run_button.isEnabled()
+
+    def test_kept_invalid_time_series_is_flagged_again_when_its_mode_returns(self, qtbot, window):
+        window.time_series_radio.setChecked(True)
+        window.time_series_input.setPlainText("0, 1, x")
+        _leave_text_edit(window.time_series_input)
+        window.time_range_radio.setChecked(True)
+        assert window.run_button.isEnabled()
+
+        window.time_series_radio.setChecked(True)
+
+        assert _visible_error(window, "time_series") == "Time series must be comma-separated numbers"
+        assert not window.run_button.isEnabled()
+
+    def test_empty_inputs_of_a_returning_mode_are_not_flagged_before_the_user_visits_them(self, qtbot, window):
+        window.noise_estimate_radio.setChecked(True)
+        window.noise_fixed_radio.setChecked(True)
+        window.noise_estimate_radio.setChecked(True)
+
+        assert _visible_error(window, "noise_file") is None
+        assert window.validation_status_label.text() == ""
+
 
 class TestRunIsBlocked:
 

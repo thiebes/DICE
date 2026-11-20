@@ -7,7 +7,9 @@ from __future__ import annotations
 import re
 
 import pytest
-from PyQt6.QtWidgets import QAbstractButton, QLabel, QWidget
+from PyQt6.QtCore import QLocale
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import QAbstractButton, QDoubleSpinBox, QGroupBox, QLabel, QWidget
 
 from dice import __version__
 from dice.utils.units import length_abbreviation
@@ -40,6 +42,25 @@ def _shortcuts_by_tab(dialog_html: str) -> list[dict[str, str]]:
         dict(re.findall(r"<td><b>(Alt\+\w)</b></td><td>([^<]+)</td>", section))
         for section in sections
     ]
+
+
+def _relative_luminance(color: QColor) -> float:
+    """Relative luminance as the Web Content Accessibility Guidelines (WCAG) define it."""
+    def linear(channel: int) -> float:
+        value = channel / 255
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+    return 0.2126 * linear(color.red()) + 0.7152 * linear(color.green()) + 0.0722 * linear(color.blue())
+
+
+def _contrast_ratio(first: QColor, second: QColor) -> float:
+    darker, lighter = sorted((_relative_luminance(first), _relative_luminance(second)))
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _run_button_colors(stylesheet: str, state: str) -> list[QColor]:
+    """The colors that the stylesheet rule for one Run button state sets, in the order written."""
+    rule = re.search(r"QPushButton#run-button" + re.escape(state) + r"\s*\{([^}]*)\}", stylesheet).group(1)
+    return [QColor(*map(int, channels)) for channels in re.findall(r"rgba\((\d+), (\d+), (\d+), \d+\)", rule)]
 
 
 class TestMainWindow:
@@ -201,3 +222,46 @@ class TestAuxiliaryDialogs:
             f"Shortcuts listed but not wired on '{TAB_NAMES[tab_index]}': "
             f"{ {key: listed[key] for key in set(listed) - set(actual)} }; actual mnemonics: {actual}"
         )
+
+
+class TestAppearance:
+
+    def test_numbers_show_a_decimal_point_when_the_system_uses_a_decimal_comma(self, qtbot):
+        """Text fields and parameter files use a decimal point, so the spin boxes do as well."""
+        from dice_gui.dice_gui import DiceGUI
+
+        system_locale = QLocale()
+        QLocale.setDefault(QLocale(QLocale.Language.German, QLocale.Country.Germany))
+        try:
+            outside_the_window = QDoubleSpinBox()
+            qtbot.addWidget(outside_the_window)
+            outside_the_window.setValue(16.0)
+            assert outside_the_window.cleanText() == "16,00"
+
+            gui = DiceGUI()
+            qtbot.addWidget(gui)
+            assert gui.image_width_spin.cleanText() == "16.00"
+            assert gui.image_height_spin.cleanText() == "10.00"
+            assert gui.proximity_spin.cleanText() == "0.10"
+        finally:
+            QLocale.setDefault(system_locale)
+
+    def test_group_titles_show_their_ampersands(self, window):
+        """Qt reads a single ampersand as a shortcut marker and does not draw it."""
+        titles = [group.title() for group in window.findChildren(QGroupBox)]
+        assert "Resolution && Histogram" in titles
+        assert [title for title in titles if "& " in title.replace("&&", "")] == []
+
+    @pytest.mark.parametrize("dark", [False, True], ids=["light theme", "dark theme"])
+    @pytest.mark.parametrize("state", [":enabled", ":hover:enabled", ":pressed:enabled"])
+    def test_run_button_text_is_readable_in_each_theme(self, qapp, dark, state):
+        """WCAG level AA asks for a contrast of at least 4.5:1 between text and its background."""
+        from dice_gui.styles import DiceTheme
+
+        theme = DiceTheme()
+        theme.is_dark_mode = dark
+        stylesheet = theme.get_stylesheet()
+        text = _run_button_colors(stylesheet, ":enabled")[1]
+        background = _run_button_colors(stylesheet, state)[0]
+
+        assert _contrast_ratio(text, background) >= 4.5
