@@ -1,0 +1,65 @@
+DICE Simulation Summary
+==================================================
+
+Simulation Parameters:
+------------------------------
+Number of runs:
+    2
+Spatial width:
+    5 micrometer
+Pixel width:
+    100 pixels
+Time frames:
+    3 frames
+Time range:
+    0.000 to 1.000 nanosecond
+Noise standard deviation values:
+    [0.02]
+Initial CNR (Contrast-to-Noise Ratio):
+    50.000
+Initial profile squared width (sigma^2):
+    0.180 micrometer^2
+Nominal diffusion length:
+    0.100 micrometer
+Nominal diffusion coefficient:
+    0.01000 micrometer^2/nanosecond
+Nominal lifetime:
+    1.0 nanosecond
+
+Analysis Results:
+------------------------------
+Diffusion Coefficient Estimate Statistics:
+  Weighted Least Squares:
+    Standard deviation:
+        nan micrometer^2/nanosecond
+    Relative standard error:
+        nan
+    Mean estimate:
+        nan micrometer^2/nanosecond
+    Bias (mean - nominal):
+        nan micrometer^2/nanosecond
+    Root Mean Square Error:
+        nan micrometer^2/nanosecond
+  Ordinary (unweighted) Least Squares:
+    Standard deviation:
+        nan micrometer^2/nanosecond
+    Relative standard error:
+        nan
+    Mean estimate:
+        nan micrometer^2/nanosecond
+    Bias (mean - nominal):
+        nan micrometer^2/nanosecond
+    Root Mean Square Error:
+        nan micrometer^2/nanosecond
+
+Precision at standard thresholds:
+  Fraction within ±5% of nominal:
+    WLS: 0.00%    OLS: 0.00%
+  Fraction within ±10% of nominal:
+    WLS: 0.00%    OLS: 0.00%
+  Fraction within ±20% of nominal:
+    WLS: 0.00%    OLS: 0.00%
+  Fraction within ±50% of nominal:
+    WLS: 0.00%    OLS: 0.00%
+
+Simulation completed successfully.

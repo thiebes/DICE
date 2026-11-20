@@ -5,10 +5,19 @@ This module provides functions for analyzing the precision and accuracy
 of diffusion coefficient estimates from Monte Carlo simulations.
 """
 
+import dataclasses
+
 import numpy as np
-import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union
-from ..models.results import SimulationResult
+from ..core.noise import nominal_cnr
+from ..models.estimators import in_column_order
+from ..models.results import MonteCarloOutput, RunResult
+
+# A simulation with a noise range is analyzed in bins of nominal CNR with equal
+# numbers of runs: MAX_CNR_BINS bins, or fewer so that each has at least
+# MIN_RUNS_PER_CNR_BIN runs (see cnr_bin_count).
+MAX_CNR_BINS = 5
+MIN_RUNS_PER_CNR_BIN = 20
 
 
 def calculate_precision(
@@ -101,64 +110,8 @@ def calculate_accuracy_metrics(
     }
 
 
-def estimates_precision(
-    df: pd.DataFrame,
-    proximity_level: float
-) -> Dict:
-    """
-    Calculate precision of diffusion coefficient estimates.
-    
-    Legacy compatibility function that works with DataFrame format.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame containing simulation results.
-    proximity_level : float
-        Acceptable proximity level (e.g., 0.1 for ±10%).
-    
-    Returns
-    -------
-    dict
-        Dictionary with precision percentages.
-    """
-    if len(df) == 0:
-        raise ValueError("The DataFrame is empty.")
-    
-    p_low = 1 - proximity_level
-    p_high = 1 + proximity_level
-    
-    # Calculate ratios for WLS and OLS
-    if 'weighted fit diffusion coeff [cm^2/s]' in df.columns:
-        df['d_wls_over_d_nom'] = (
-            df['weighted fit diffusion coeff [cm^2/s]'] / 
-            df['nominal diffusion coeff [cm^2/s]']
-        )
-        wls_within = df['d_wls_over_d_nom'].between(p_low, p_high)
-        wls_portion_pct = 100 * wls_within.sum() / len(df)
-    else:
-        wls_portion_pct = 0.0
-    
-    if 'unweighted fit diffusion coeff [cm^2/s]' in df.columns:
-        df['d_ols_over_d_nom'] = (
-            df['unweighted fit diffusion coeff [cm^2/s]'] / 
-            df['nominal diffusion coeff [cm^2/s]']
-        )
-        ols_within = df['d_ols_over_d_nom'].between(p_low, p_high)
-        ols_portion_pct = 100 * ols_within.sum() / len(df)
-    else:
-        ols_portion_pct = 0.0
-    
-    return {
-        '% fits within proximity': {
-            'weighted fit': wls_portion_pct,
-            'unweighted fit': ols_portion_pct,
-        }
-    }
-
-
 def analyze_simulation_results(
-    result: SimulationResult,
+    result: MonteCarloOutput,
     proximity_levels: Optional[List[float]] = None
 ) -> Dict:
     """
@@ -166,7 +119,7 @@ def analyze_simulation_results(
     
     Parameters
     ----------
-    result : SimulationResult
+    result : MonteCarloOutput
         Simulation results to analyze.
     proximity_levels : List[float], optional
         List of proximity levels to test. If None, uses [0.05, 0.1, 0.2, 0.5].
@@ -174,138 +127,178 @@ def analyze_simulation_results(
     Returns
     -------
     dict
-        Dictionary containing comprehensive analysis.
+        Dictionary containing comprehensive analysis. For a simulation with a
+        noise range, the key 'cnr_bins' adds the statistics of each bin of
+        nominal CNR (analyze_cnr_bins); the other statistics pool all runs.
     """
     if proximity_levels is None:
         proximity_levels = [0.05, 0.1, 0.2, 0.5]
-    # Extract OLS and WLS estimates
-    ols_slopes = []
-    wls_slopes = []
-    
-    for run in result.run_results:
-        if run.ols_slope is not None:
-            ols_slopes.append(run.ols_slope)
-        if run.wls_slope is not None:
-            wls_slopes.append(run.wls_slope)
-    
-    ols_slopes = np.array(ols_slopes)
-    wls_slopes = np.array(wls_slopes)
-    
-    # Convert slopes to diffusion coefficients (divide by 2 for 1D)
-    ols_d_estimates = ols_slopes / 2
-    wls_d_estimates = wls_slopes / 2
+
+    # Estimators that ran, in column order. An estimator whose every fit failed is kept.
+    keys = [spec.key for spec in in_column_order(result.estimator_keys)]
     nominal_d = result.parameters.physics.diffusion_coefficient
-    
-    # Calculate precision at different levels
-    precision_results = {}
-    for level in proximity_levels:
-        precision_results[f'{int(level*100)}%'] = {
-            'ols': calculate_precision(ols_d_estimates, nominal_d, level),
-            'wls': calculate_precision(wls_d_estimates, nominal_d, level)
-        }
-    
-    # Calculate accuracy metrics
-    ols_accuracy = calculate_accuracy_metrics(ols_d_estimates, nominal_d)
-    wls_accuracy = calculate_accuracy_metrics(wls_d_estimates, nominal_d)
-    
-    # Analyze by noise level if multiple noise values
+    estimates = estimate_statistics(result, keys, proximity_levels)
+
+    # Analyze by noise level if multiple fixed noise levels
     noise_analysis = {}
-    if len(result.noise_values) > 1:
+    if len(result.noise_values) > 1 and result.noise_range is None:
+        amplitude_0 = result.parameters.profile.amplitude_0
         for noise_val in result.noise_values:
             # Filter runs for this noise value
             noise_runs = [r for r in result.run_results if r.noise_sigma == noise_val]
-            
-            noise_ols = np.array([r.ols_slope/2 for r in noise_runs 
-                                 if r.ols_slope is not None])
-            noise_wls = np.array([r.wls_slope/2 for r in noise_runs 
-                                 if r.wls_slope is not None])
-            
-            noise_analysis[f'noise_{noise_val}'] = {
-                'cnr': 1.0 / noise_val if noise_val > 0 else np.inf,
+            noise_result = dataclasses.replace(
+                result, run_results=noise_runs, num_runs=len(noise_runs))
+            noise_d = {key: noise_result.d_estimates(key) for key in keys}
+
+            # Every estimator's precision, then every estimator's bias
+            entry = {
+                'cnr': nominal_cnr(amplitude_0, noise_val),
                 'num_runs': len(noise_runs),
-                'ols_precision_10%': calculate_precision(noise_ols, nominal_d, 0.1),
-                'wls_precision_10%': calculate_precision(noise_wls, nominal_d, 0.1),
-                'ols_bias': np.mean(noise_ols) - nominal_d if len(noise_ols) > 0 else np.nan,
-                'wls_bias': np.mean(noise_wls) - nominal_d if len(noise_wls) > 0 else np.nan,
             }
-    
-    return {
+            for key in keys:
+                entry[f'{key}_precision_10%'] = calculate_precision(noise_d[key], nominal_d, 0.1)
+            for key in keys:
+                entry[f'{key}_bias'] = (
+                    np.mean(noise_d[key]) - nominal_d if len(noise_d[key]) > 0 else np.nan)
+            noise_analysis[f'noise_{noise_val}'] = entry
+
+    analysis = {
         'summary': {
             'total_runs': result.num_runs,
             'nominal_diffusion_coefficient': nominal_d,
             'nominal_lifetime': result.parameters.physics.lifetime,
             'nominal_diffusion_length': result.parameters.physics.diffusion_length,
         },
-        'precision': precision_results,
-        'accuracy': {
-            'ols': ols_accuracy,
-            'wls': wls_accuracy
-        },
+        'precision': estimates['precision'],
+        'accuracy': estimates['accuracy'],
         'noise_analysis': noise_analysis,
-        'statistics': {
-            'ols': {
-                'num_successful': len(ols_d_estimates),
-                'num_failed': result.num_runs - len(ols_d_estimates),
-                'success_rate': len(ols_d_estimates) / result.num_runs if result.num_runs > 0 else 0
-            },
-            'wls': {
-                'num_successful': len(wls_d_estimates),
-                'num_failed': result.num_runs - len(wls_d_estimates),
-                'success_rate': len(wls_d_estimates) / result.num_runs if result.num_runs > 0 else 0
-            }
-        }
+        'statistics': estimates['statistics'],
     }
+    if result.noise_range is not None:
+        analysis['cnr_bins'] = analyze_cnr_bins(result, keys, proximity_levels)
+    return analysis
 
 
-def precision_counts(
-    df: pd.DataFrame,
-    cnr_bins: np.ndarray,
-    proximity_levels: List[float]
-) -> Dict:
+def estimate_statistics(
+    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float]
+) -> Dict[str, Dict]:
     """
-    Count precision at different CNR bins and proximity levels.
-    
+    Precision, accuracy, and fit success of the D estimates of each estimator.
+
     Parameters
     ----------
-    df : pd.DataFrame
-        DataFrame with simulation results.
-    cnr_bins : np.ndarray
-        CNR bin edges.
+    result : MonteCarloOutput
+        The runs to analyze.
+    keys : List[str]
+        Estimator keys, in the order of the output.
     proximity_levels : List[float]
-        Proximity levels to test.
-    
+        Fractional proximity levels for the precision (0.1 for ±10%).
+
     Returns
     -------
     dict
-        Precision counts by CNR and proximity level.
+        'precision': the fraction of each estimator's estimates within each
+        proximity level, keyed by percentage ('10%', '2.5%'), then estimator;
+        'accuracy': calculate_accuracy_metrics of each estimator;
+        'statistics': each estimator's number of successful and failed fits
+        and its success rate.
     """
-    results = {}
-    
-    # Bin the data by CNR
-    df['cnr_bin'] = pd.cut(df['nominal CNR'], bins=cnr_bins)
-    
-    for proximity in proximity_levels:
-        prox_key = f'proximity_{int(proximity*100)}%'
-        results[prox_key] = {}
-        
-        for cnr_bin in df['cnr_bin'].unique():
-            if pd.isna(cnr_bin):
-                continue
-            
-            bin_data = df[df['cnr_bin'] == cnr_bin]
-            if len(bin_data) == 0:
-                continue
-            
-            # Calculate precision for this bin
-            precision = estimates_precision(bin_data, proximity)
-            
-            results[prox_key][str(cnr_bin)] = {
-                'count': len(bin_data),
-                'ols_precision': precision['% fits within proximity']['unweighted fit'],
-                'wls_precision': precision['% fits within proximity']['weighted fit']
-            }
-    
-    return results
+    # Diffusion coefficient estimates (slope / 2 in 1D) of each estimator
+    d_estimates = {key: result.d_estimates(key) for key in keys}
+    nominal_d = result.parameters.physics.diffusion_coefficient
+
+    # Calculate precision at different levels, keyed by percentage ('10%', '2.5%').
+    # Formatted, not truncated: 0.29 * 100 is 28.999... in floating point.
+    precision_results = {}
+    for level in proximity_levels:
+        precision_results[f'{level * 100:g}%'] = {
+            key: calculate_precision(d_estimates[key], nominal_d, level) for key in keys
+        }
+
+    # Calculate accuracy metrics
+    accuracy = {key: calculate_accuracy_metrics(d_estimates[key], nominal_d) for key in keys}
+
+    statistics = {
+        key: {
+            'num_successful': len(d_estimates[key]),
+            'num_failed': result.num_runs - len(d_estimates[key]),
+            'success_rate': len(d_estimates[key]) / result.num_runs if result.num_runs > 0 else 0
+        }
+        for key in keys
+    }
+
+    return {'precision': precision_results, 'accuracy': accuracy, 'statistics': statistics}
+
+
+def cnr_bin_count(run_count: int) -> int:
+    """
+    Number of CNR bins for a simulation with a noise range of run_count runs.
+
+    MAX_CNR_BINS bins, or fewer so that each bin has at least
+    MIN_RUNS_PER_CNR_BIN runs; one bin when there are fewer than
+    2 * MIN_RUNS_PER_CNR_BIN runs.
+    """
+    return max(1, min(MAX_CNR_BINS, run_count // MIN_RUNS_PER_CNR_BIN))
+
+
+def runs_by_cnr_bin(result: MonteCarloOutput) -> List[List[RunResult]]:
+    """
+    The runs grouped into cnr_bin_count bins of increasing nominal CNR.
+
+    The runs are sorted by nominal CNR (amplitude_0 / noise sigma), runs of
+    equal CNR in run order, and split into consecutive bins whose numbers of
+    runs differ by at most one; the first bins take the extra runs. No runs
+    give no bins.
+    """
+    amplitude_0 = result.parameters.profile.amplitude_0
+    ordered = sorted(result.run_results, key=lambda run: nominal_cnr(amplitude_0, run.noise_sigma))
+    if not ordered:
+        return []
+    return [
+        [ordered[index] for index in indices]
+        for indices in np.array_split(np.arange(len(ordered)), cnr_bin_count(len(ordered)))
+    ]
+
+
+def analyze_cnr_bins(
+    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float]
+) -> List[Dict]:
+    """
+    Statistics of the D estimates in each bin of nominal CNR (runs_by_cnr_bin).
+
+    For a simulation with a noise range, in which the statistics of all runs
+    together would mix noise regimes.
+
+    Parameters
+    ----------
+    result : MonteCarloOutput
+        The runs to analyze.
+    keys : List[str]
+        Estimator keys, in the order of the output.
+    proximity_levels : List[float]
+        Fractional proximity levels for the precision (0.1 for ±10%).
+
+    Returns
+    -------
+    list of dict
+        One entry per bin, in order of increasing CNR: 'cnr_min' and
+        'cnr_max', the lowest and highest nominal CNR of the bin's runs;
+        'num_runs'; and the 'precision', 'accuracy', and 'statistics' of
+        estimate_statistics for the bin's runs.
+    """
+    amplitude_0 = result.parameters.profile.amplitude_0
+    bins = []
+    for runs in runs_by_cnr_bin(result):
+        bin_result = dataclasses.replace(
+            result, run_results=runs, num_runs=len(runs), noise_values=[run.noise_sigma for run in runs])
+        cnr = [nominal_cnr(amplitude_0, run.noise_sigma) for run in runs]
+        bins.append({
+            'cnr_min': min(cnr),
+            'cnr_max': max(cnr),
+            'num_runs': len(runs),
+            **estimate_statistics(bin_result, keys, proximity_levels),
+        })
+    return bins
 
 
 def calculate_confidence_intervals(
@@ -338,53 +331,3 @@ def calculate_confidence_intervals(
         np.percentile(estimates, lower_percentile),
         np.percentile(estimates, upper_percentile)
     )
-
-
-def analyze_cnr_dependence(
-    df: pd.DataFrame,
-    cnr_column: str = 'nominal CNR',
-    d_est_column: str = 'weighted fit diffusion coeff [cm^2/s]',
-    d_nom_column: str = 'nominal diffusion coeff [cm^2/s]'
-) -> Dict:
-    """
-    Analyze how estimation accuracy depends on CNR.
-    
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame with simulation results.
-    cnr_column : str
-        Column name for CNR values.
-    d_est_column : str
-        Column name for estimated diffusion coefficients.
-    d_nom_column : str
-        Column name for nominal diffusion coefficient.
-    
-    Returns
-    -------
-    dict
-        Analysis of CNR dependence.
-    """
-    # Group by unique CNR values
-    cnr_groups = df.groupby(cnr_column)
-    
-    results = {}
-    for cnr, group in cnr_groups:
-        d_estimates = group[d_est_column].values
-        d_nominal = group[d_nom_column].iloc[0]
-        
-        # Calculate metrics for this CNR
-        accuracy = calculate_accuracy_metrics(d_estimates, d_nominal)
-        precision_10 = calculate_precision(d_estimates, d_nominal, 0.1)
-        ci_lower, ci_upper = calculate_confidence_intervals(d_estimates / d_nominal)
-        
-        results[float(cnr)] = {
-            'num_runs': len(group),
-            'mean_ratio': accuracy['mean'] / d_nominal if d_nominal != 0 else np.nan,
-            'std_ratio': accuracy['std'] / d_nominal if d_nominal != 0 else np.nan,
-            'precision_10%': precision_10,
-            'ci_95%_lower': ci_lower,
-            'ci_95%_upper': ci_upper
-        }
-    
-    return results

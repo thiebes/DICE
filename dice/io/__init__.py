@@ -20,10 +20,8 @@ from .results import (
     print_and_append,
     export_collated_results,
     write_summary_file,
-    export_to_json,
     load_results_csv,
     load_multiple_results,
-    export_legacy_format,
 )
 
 from .data_loader import (
@@ -48,10 +46,8 @@ __all__ = [
     'print_and_append',
     'export_collated_results',
     'write_summary_file',
-    'export_to_json',
     'load_results_csv',
     'load_multiple_results',
-    'export_legacy_format',
     # Data loader functions
     'load_profile_data',
     'load_time_series_profiles',

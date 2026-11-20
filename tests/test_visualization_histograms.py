@@ -26,7 +26,7 @@ class TestPlotAccuracyHistogram:
         # Create mock simulation result
         result = {
             'collated results': {
-                'd_wls_over_d_nom': [0.95, 1.02, 0.98, 1.05, 0.92, 1.08, 0.97, 1.01]
+                'd_est_over_d_nom': [0.95, 1.02, 0.98, 1.05, 0.92, 1.08, 0.97, 1.01]
             }
         }
         
@@ -36,7 +36,6 @@ class TestPlotAccuracyHistogram:
         try:
             fig = plot_accuracy_histogram(
                 simulation_result=result,
-                proximity=0.1,
                 filename=temp_filename,
                 width=8.0,
                 height=6.0
@@ -47,7 +46,7 @@ class TestPlotAccuracyHistogram:
             
             # Check basic plot elements
             assert ax.get_xlabel() == '$D_{est}/D_{nom}$'
-            assert ax.get_ylabel() == 'Probability density'
+            assert ax.get_ylabel() == 'Probability'
             assert len(ax.patches) > 0  # Histogram bars
             assert len(ax.lines) > 0   # Normal distribution overlay
             
@@ -68,74 +67,55 @@ class TestPlotAccuracyHistogram:
         with pytest.raises(ValueError, match="'collated results' not found"):
             plot_accuracy_histogram(result1, 0.1, "test.png")
         
-        # Missing 'd_wls_over_d_nom'
+        # Missing 'd_est_over_d_nom'
         result2 = {'collated results': {}}
         
-        with pytest.raises(ValueError, match="'d_wls_over_d_nom' not found"):
+        with pytest.raises(ValueError, match="'d_est_over_d_nom' not found"):
             plot_accuracy_histogram(result2, 0.1, "test.png")
     
-    def test_custom_parameters(self):
+    def test_custom_parameters(self, tmp_path):
         """Test with custom plotting parameters."""
         result = {
             'collated results': {
-                'd_wls_over_d_nom': np.random.normal(1.0, 0.1, 100).tolist()
+                'd_est_over_d_nom': np.random.normal(1.0, 0.1, 100).tolist()
             }
         }
-        
-        # Create output directory for tests
-        output_dir = Path.cwd() / 'output' / 'tests'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        test_file = output_dir / "test_custom_parameters.png"
-        
-        try:
-            fig = plot_accuracy_histogram(
-                simulation_result=result,
-                proximity=0.05,
-                filename=str(test_file),
-                image_type='svg',
-                width=12.0,
-                height=8.0,
-                dpi=150,
-                font_size=14,
-                num_bins=25,
-                x_lim=[0.7, 1.3]
-            )
-            
-            assert isinstance(fig, plt.Figure)
-            ax = fig.axes[0]
-            assert ax.get_xlim() == (0.7, 1.3)
-            
-            plt.close(fig)
-            
-        finally:
-            # Clean up test file
-            if test_file.exists():
-                test_file.unlink()
-    
-    def test_perfect_data(self):
+
+        test_file = tmp_path / "test_custom_parameters.png"
+
+        fig = plot_accuracy_histogram(
+            simulation_result=result,
+            filename=str(test_file),
+            image_type='svg',
+            width=12.0,
+            height=8.0,
+            dpi=150,
+            font_size=14,
+            num_bins=25,
+            x_lim=[0.7, 1.3]
+        )
+
+        assert isinstance(fig, plt.Figure)
+        ax = fig.axes[0]
+        assert ax.get_xlim() == (0.7, 1.3)
+
+        plt.close(fig)
+
+    def test_perfect_data(self, tmp_path):
         """Test with perfect data (all values = 1.0)."""
         result = {
             'collated results': {
-                'd_wls_over_d_nom': [1.0] * 50
+                'd_est_over_d_nom': [1.0] * 50
             }
         }
-        
-        # Create output directory for tests
-        output_dir = Path.cwd() / 'output' / 'tests'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        test_file = output_dir / "test_perfect_data.png"
-        
-        try:
-            fig = plot_accuracy_histogram(result, 0.1, str(test_file))
-            
-            assert isinstance(fig, plt.Figure)
-            assert test_file.exists()
-            plt.close(fig)
-            
-        finally:
-            # Clean up test file
-            if test_file.exists():
-                test_file.unlink()
+
+        test_file = tmp_path / "test_perfect_data.png"
+
+        fig = plot_accuracy_histogram(result, filename=str(test_file))
+
+        assert isinstance(fig, plt.Figure)
+        assert test_file.exists()
+        plt.close(fig)
 
 
 class TestPlotDiffusionCoefficientHistogram:
@@ -155,7 +135,7 @@ class TestPlotDiffusionCoefficientHistogram:
         assert len(ax.patches) > 0  # Histogram bars
         assert len(ax.lines) >= 2  # Normal fit + nominal line
         assert ax.get_xlabel() == 'Diffusion Coefficient'
-        assert ax.get_ylabel() == 'Probability Density'
+        assert ax.get_ylabel() == 'Probability'
         
         plt.close(fig)
     
@@ -228,7 +208,7 @@ class TestPlotCNRHistogram:
         assert len(ax.patches) > 0  # Histogram bars
         assert len(ax.lines) >= 2   # Mean and median lines
         assert ax.get_xlabel() == 'Contrast-to-Noise Ratio'
-        assert ax.get_ylabel() == 'Probability Density'
+        assert ax.get_ylabel() == 'Probability'
         
         plt.close(fig)
     
@@ -361,15 +341,42 @@ class TestEdgeCases:
     def test_single_value(self):
         """Test with single value."""
         single_value = np.array([1.0])
-        
+
         fig1 = plot_diffusion_coefficient_histogram(single_value, 1.0)
         assert isinstance(fig1, plt.Figure)
         plt.close(fig1)
-        
+
         fig2 = plot_cnr_histogram(single_value)
         assert isinstance(fig2, plt.Figure)
         plt.close(fig2)
-    
+
+    def test_accuracy_histogram_single_value(self, tmp_path):
+        """Test accuracy histogram with a single D estimate."""
+        result = {
+            'collated results': {
+                'd_est_over_d_nom': [1.05]
+            }
+        }
+        fig = plot_accuracy_histogram(
+            simulation_result=result,
+            filename=str(tmp_path / "test.png")
+        )
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_accuracy_histogram_empty(self, tmp_path):
+        """Test accuracy histogram with empty D estimates raises error."""
+        result = {
+            'collated results': {
+                'd_est_over_d_nom': []
+            }
+        }
+        with pytest.raises((ValueError, IndexError)):
+            plot_accuracy_histogram(
+                simulation_result=result,
+                filename=str(tmp_path / "test.png")
+            )
+
     def test_identical_values(self):
         """Test with identical values."""
         identical_values = np.ones(10)
@@ -385,3 +392,172 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestHistogramOptions:
+    """Parameter-file image keys become plot_accuracy_histogram keyword arguments."""
+
+    def test_every_image_key_maps_to_its_keyword(self):
+        import inspect
+        from dice.visualization.histograms import histogram_options
+
+        parameters = {
+            'image type': 'svg', 'image width': 12, 'image height': 8, 'image dpi': 150,
+            'image font size': 7, 'image tick length': 3, 'image tick width': 1.5,
+            'image numbins': 11, 'image x_lim': [0.5, 1.5],
+            'number of runs': 4,  # unrelated keys are ignored
+        }
+
+        options = histogram_options(parameters)
+
+        assert options == {
+            'image_type': 'svg', 'width': 12, 'height': 8, 'dpi': 150, 'font_size': 7,
+            'tick_length': 3, 'tick_width': 1.5, 'num_bins': 11, 'x_lim': [0.5, 1.5],
+        }
+        accepted = set(inspect.signature(plot_accuracy_histogram).parameters)
+        assert set(options) <= accepted
+
+    def test_absent_and_none_keys_are_left_to_the_plot_defaults(self):
+        from dice.visualization.histograms import histogram_options
+
+        assert histogram_options({}) == {}
+        assert histogram_options({'image numbins': None, 'image dpi': 200}) == {'dpi': 200}
+
+    @pytest.mark.parametrize('x_lim', [
+        [1.5, 0.5], [1.0, 1.0], [0.5], [0.5, 1.0, 1.5], 'wide', [0.5, 'high'], [0.5, float('nan')],
+    ])
+    def test_malformed_x_lim_is_rejected_by_name(self, x_lim):
+        from dice.visualization.histograms import histogram_options
+
+        with pytest.raises(ValueError, match="'image x_lim' must be two increasing finite numbers"):
+            histogram_options({'image x_lim': x_lim})
+
+    def test_options_reach_the_figure(self, tmp_path):
+        from dice.visualization.histograms import histogram_options
+
+        rng = np.random.default_rng(0)
+        result = {'collated results': {'d_est_over_d_nom': rng.normal(1.0, 0.1, 200).tolist()}}
+        options = histogram_options({'image numbins': 11, 'image x_lim': (0.6, 1.4), 'image font size': 7})
+
+        fig = plot_accuracy_histogram(
+            simulation_result=result, filename=str(tmp_path / 'options.png'), **options)
+
+        ax = fig.axes[0]
+        assert ax.get_xlim() == (0.6, 1.4)
+        assert len(ax.patches) == 11
+        assert ax.xaxis.label.get_fontsize() == 7
+        plt.close(fig)
+
+
+class TestImageType:
+    """'image type' is checked against the formats matplotlib can write, before any simulation."""
+
+    def test_documented_types_are_supported(self):
+        from dice.visualization.histograms import supported_image_types
+        assert {'png', 'jpg', 'svg', 'tif', 'pdf'} <= set(supported_image_types())
+
+    @pytest.mark.parametrize('image_type', ['png', 'PNG', 'jpeg', 'eps', 'svgz'])
+    def test_supported_type_is_returned_unchanged(self, image_type):
+        from dice.visualization.histograms import validate_image_type
+        assert validate_image_type(image_type) == image_type
+
+    @pytest.mark.parametrize('image_type', ['bmp', 'gif', '', 5, None])
+    def test_unsupported_type_is_rejected_with_the_supported_list(self, image_type):
+        from dice.visualization.histograms import supported_image_types, validate_image_type
+        with pytest.raises(ValueError) as error:
+            validate_image_type(image_type)
+        assert str(error.value) == (
+            f"Unknown image type '{image_type}'. Valid types: {', '.join(supported_image_types())}")
+
+    @pytest.mark.parametrize('image_type', ['png', 'jpg', 'svg', 'tif', 'pdf', 'eps'])
+    def test_supported_type_is_written(self, tmp_path, image_type):
+        """Every listed type the docs name gives a file, so the list matches what savefig writes."""
+        result = {'collated results': {'d_est_over_d_nom': [0.9, 1.0, 1.1, 1.0]}}
+        target = tmp_path / f'histogram.{image_type}'
+        fig = plot_accuracy_histogram(simulation_result=result, filename=str(target), image_type=image_type)
+        plt.close(fig)
+        assert target.stat().st_size > 0
+
+
+
+class TestAccuracyVsCnr:
+    """A simulation with a noise range plots each run's D_est/D_nom against its initial CNR."""
+
+    @staticmethod
+    def _data(count=60):
+        rng = np.random.default_rng(4)
+        cnr = rng.uniform(20, 100, count)
+        return cnr, 1 + rng.normal(0, 1, count) / cnr
+
+    def test_points_reference_line_and_labels(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr, ratios = self._data()
+        target = tmp_path / 'scatter.png'
+        fig = plot_accuracy_vs_cnr(cnr, ratios, str(target))
+
+        ax = fig.axes[0]
+        np.testing.assert_array_equal(ax.collections[0].get_offsets(), np.column_stack([cnr, ratios]))
+        [reference] = ax.lines
+        assert list(reference.get_ydata()) == [1.0, 1.0]
+        assert (ax.get_xlabel(), ax.get_ylabel()) == ('Initial CNR', '$D_{est}/D_{nom}$')
+        assert ax.get_xscale() == 'linear'
+        assert ax.get_ylim() == pytest.approx((ratios.mean() - 3 * ratios.std(), ratios.mean() + 3 * ratios.std()))
+        assert target.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
+        plt.close(fig)
+
+    @pytest.mark.parametrize('low, high, labels', [
+        (10, 100, ['10', '20', '50', '100']),
+        (1, 10000, ['1', '10', '100', '1000', '10000']),
+    ])
+    def test_logarithmic_cnr_axis_labels_plain_numbers(self, tmp_path, low, high, labels):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr = np.geomspace(low, high, 50)
+        fig = plot_accuracy_vs_cnr(cnr, np.ones_like(cnr), str(tmp_path / 'scatter.png'), log_cnr=True)
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        left, right = ax.get_xlim()
+        assert ax.get_xscale() == 'log'
+        assert [label.get_text() for label in ax.get_xticklabels()
+                if left <= label.get_position()[0] <= right] == labels
+        plt.close(fig)
+
+    def test_non_finite_ratios_do_not_set_the_limits(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        cnr, ratios = self._data()
+        with_nan = np.append(ratios, np.nan)
+        fig = plot_accuracy_vs_cnr(np.append(cnr, 50.0), with_nan, str(tmp_path / 'scatter.png'))
+        assert np.isfinite(fig.axes[0].get_ylim()).all()
+        plt.close(fig)
+
+    def test_lengths_must_match(self, tmp_path):
+        from dice.visualization.histograms import plot_accuracy_vs_cnr
+        with pytest.raises(ValueError, match="differ in length: 3 and 2"):
+            plot_accuracy_vs_cnr([20, 30, 40], [1.0, 1.1], str(tmp_path / 'scatter.png'))
+
+    def test_image_keys_apply_with_x_lim_on_the_accuracy_axis(self, tmp_path):
+        import inspect
+        from dice.visualization.histograms import accuracy_scatter_options, plot_accuracy_vs_cnr
+        parameters = {
+            'image type': 'svg', 'image width': 12, 'image height': 8, 'image dpi': 150,
+            'image font size': 7, 'image tick length': 3, 'image tick width': 1.5,
+            'image numbins': 11, 'image x_lim': [0.5, 1.5],
+        }
+
+        options = accuracy_scatter_options(parameters)
+
+        assert options == {
+            'image_type': 'svg', 'width': 12, 'height': 8, 'dpi': 150, 'font_size': 7,
+            'tick_length': 3, 'tick_width': 1.5, 'y_lim': [0.5, 1.5],
+        }
+        assert set(options) <= set(inspect.signature(plot_accuracy_vs_cnr).parameters)
+        cnr, ratios = self._data()
+        target = tmp_path / 'scatter.svg'
+        fig = plot_accuracy_vs_cnr(cnr, ratios, str(target), **options)
+        assert fig.axes[0].get_ylim() == (0.5, 1.5)
+        assert fig.axes[0].xaxis.label.get_fontsize() == 7
+        assert target.read_text(encoding='utf-8').lstrip().startswith('<?xml')
+        plt.close(fig)
+
+    def test_malformed_x_lim_is_rejected_by_name(self):
+        from dice.visualization.histograms import accuracy_scatter_options
+        with pytest.raises(ValueError, match="'image x_lim' must be two increasing finite numbers"):
+            accuracy_scatter_options({'image x_lim': [1.5, 0.5]})

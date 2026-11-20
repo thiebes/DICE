@@ -1,19 +1,64 @@
 """
 Result export and file I/O for DICE simulations.
 
-This module provides functions for exporting simulation results to various
-formats including CSV, text summaries, and structured data files.
+This module provides functions for exporting simulation results to CSV
+files and text summaries, and for loading result CSV files.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union, TextIO
-import json
+from typing import Dict, Any, List, Optional, Tuple, Union, TextIO
 import csv
 
-from ..models.results import SimulationResult, RunResult
+from ..core.noise import nominal_cnr
+from ..models.estimators import ESTIMATORS, in_display_order
+from ..models.results import MonteCarloOutput, RunResult
+from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
+from ..utils.units import (
+    convert_diffusion_coefficient, length_abbreviation, time_abbreviation,
+    diffusion_coefficient_label, OUTPUT_DIFFUSION_LENGTH_UNIT_KEY, OUTPUT_DIFFUSION_TIME_UNIT_KEY,
+)
+
+
+def output_unit_preferences(parameters: Dict[str, Any]) -> OutputUnitPreferences:
+    """
+    Output units that a parameters dictionary sets.
+
+    Only the unit of the diffusion coefficients can be set, with the keys
+    'output_diffusion_length_unit' and 'output_diffusion_time_unit';
+    dice.utils.units.validate_output_units rejects the other output unit keys.
+    """
+    return OutputUnitPreferences(
+        diffusion_length=parameters.get(OUTPUT_DIFFUSION_LENGTH_UNIT_KEY),
+        diffusion_time=parameters.get(OUTPUT_DIFFUSION_TIME_UNIT_KEY),
+    )
+
+
+def summary_diffusion_units(
+    length_unit: str, time_unit: str, output_units: Optional[OutputUnitPreferences] = None,
+) -> Tuple[str, str]:
+    """Length and time units of the summary's diffusion coefficients: the output units, else the global units."""
+    if output_units is None:
+        return length_unit, time_unit
+    return output_units.diffusion_length or length_unit, output_units.diffusion_time or time_unit
+
+
+def format_quantity(value: float, decimals: int, reference: Optional[float] = None) -> str:
+    """
+    Format a number for the summary with a fixed number of decimals, or in
+    scientific notation when fixed decimals would show fewer than two
+    significant digits of `reference` (default: the value itself).
+
+    Passing one reference for a group of values (for example the nominal
+    diffusion coefficient for all diffusion-coefficient lines) keeps the group
+    in one format. Zero, infinite and NaN references keep the fixed format.
+    """
+    reference = value if reference is None else reference
+    if np.isfinite(reference) and reference != 0 and abs(reference) < 10.0 ** (1 - decimals):
+        return f"{value:.{decimals}e}"
+    return f"{value:.{decimals}f}"
 
 
 def print_and_append(filename: Union[str, Path], message: str, print_to_console: bool = True) -> None:
@@ -32,22 +77,26 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
     if print_to_console:
         print(message)
     
-    with open(filename, 'a') as f:
+    with open(filename, 'a', encoding='utf-8') as f:
         f.write(message + '\n')
 
 
 def export_collated_results(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     filename: Union[str, Path],
     length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
+    time_unit: str = 'nanosecond',
+    output_units: Optional[OutputUnitPreferences] = None,
 ) -> pd.DataFrame:
     """
     Export collated results to CSV file.
-    
+
+    One row per run. For a simulation with a noise range, the column 'noise
+    standard deviation', before 'nominal CNR', holds each run's noise level.
+
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Simulation results to export.
     filename : str or Path
         Output CSV filename.
@@ -55,101 +104,196 @@ def export_collated_results(
         Unit of length used in simulation.
     time_unit : str
         Unit of time used in simulation.
-    
+    output_units : OutputUnitPreferences, optional
+        Preferred units for output columns. When None, diffusion
+        coefficients are exported in cm^2/s (default behavior).
+
     Returns
     -------
     pd.DataFrame
         DataFrame of collated results.
     """
+    # Determine output units for diffusion coefficient
+    out_l = 'centimeter'
+    out_t = 'second'
+    if output_units is not None:
+        if output_units.diffusion_length is not None:
+            out_l = output_units.diffusion_length
+        if output_units.diffusion_time is not None:
+            out_t = output_units.diffusion_time
+
+    # Build column label for diffusion coefficient
+    d_unit_label = diffusion_coefficient_label(out_l, out_t)
+
+    def _convert_slope_to_d(slope):
+        """Convert MSD slope in simulation units to D in output units."""
+        d_sim = slope / 2
+        return convert_diffusion_coefficient(
+            d_sim, length_unit, time_unit, out_l, out_t
+        )
+
+    amplitude_0 = results.parameters.profile.amplitude_0
+
     # Create list of dictionaries for DataFrame
     data_rows = []
-    
+
     for run in results.run_results:
         row = {
             'run number': run.run_id,
             'nominal diffusion coeff': run.nominal_diffusion_coefficient,
             'nominal lifetime': run.nominal_lifetime,
             'nominal diffusion length': run.nominal_diffusion_length,
-            'nominal CNR': 1.0 / run.noise_sigma if run.noise_sigma > 0 else np.inf,
+        }
+        # With a noise range each run has its own noise level, so it gets a column.
+        if results.noise_range is not None:
+            row['noise standard deviation'] = run.noise_sigma
+        row.update({
+            'nominal CNR': nominal_cnr(amplitude_0, run.noise_sigma),
             'estimated CNR': run.cnr_0_estimate,
             'nominal sigma^2_0': run.nominal_sigma2_0,
             'estimated sigma^2_0': run.estimated_sigma2_0,
-        }
-        
-        # Add OLS results if available
-        if run.ols_slope is not None:
-            row.update({
-                'unweighted fit diffusion slope': run.ols_slope,
-                'unweighted fit diffusion slope stderr': run.ols_slope_stderr,
-                'unweighted fit intercept': run.ols_intercept,
-                'unweighted fit intercept stderr': run.ols_intercept_stderr,
-                'unweighted fit diffusion coeff [cm^2/s]': slope_to_diffusion_constant(
-                    run.ols_slope, length_unit, time_unit
-                ),
-                'unweighted fit diffusion stderr [cm^2/s]': slope_to_diffusion_constant(
-                    run.ols_slope_stderr, length_unit, time_unit
-                ) if run.ols_slope_stderr else None,
-            })
-        
-        # Add WLS results if available
-        if run.wls_slope is not None:
-            row.update({
-                'weighted fit diffusion slope': run.wls_slope,
-                'weighted fit diffusion slope stderr': run.wls_slope_stderr,
-                'weighted fit intercept': run.wls_intercept,
-                'weighted fit intercept stderr': run.wls_intercept_stderr,
-                'weighted fit diffusion coeff [cm^2/s]': slope_to_diffusion_constant(
-                    run.wls_slope, length_unit, time_unit
-                ),
-                'weighted fit diffusion stderr [cm^2/s]': slope_to_diffusion_constant(
-                    run.wls_slope_stderr, length_unit, time_unit
-                ) if run.wls_slope_stderr else None,
-            })
-        
-        # Add nominal diffusion coefficient in cm^2/s
-        row['nominal diffusion coeff [cm^2/s]'] = slope_to_diffusion_constant(
-            run.nominal_diffusion_coefficient * 2,  # Convert to slope
-            length_unit, time_unit
+        })
+
+        # One block of columns per estimator with a fit for this run, in registry order
+        for spec in ESTIMATORS:
+            fit = run.slope_fit(spec.key)
+            if fit is not None:
+                label = spec.csv_label
+                row.update({
+                    f'{label} diffusion slope': fit.slope,
+                    f'{label} diffusion slope stderr': fit.slope_stderr,
+                    f'{label} intercept': fit.intercept,
+                    f'{label} intercept stderr': fit.intercept_stderr,
+                    f'{label} diffusion coeff [{d_unit_label}]': _convert_slope_to_d(fit.slope),
+                    f'{label} diffusion stderr [{d_unit_label}]': _convert_slope_to_d(fit.slope_stderr) if fit.slope_stderr else None,
+                })
+
+        # Add nominal diffusion coefficient in output units
+        row[f'nominal diffusion coeff [{d_unit_label}]'] = convert_diffusion_coefficient(
+            run.nominal_diffusion_coefficient, length_unit, time_unit, out_l, out_t
         )
-        
+
         data_rows.append(row)
-    
+
     # Create DataFrame
     df = pd.DataFrame(data_rows)
-    
+
     # Save to CSV
     df.to_csv(filename, index=False)
-    
+
     return df
 
 
 def write_summary_file(
-    results: SimulationResult,
+    results: MonteCarloOutput,
     filename: Union[str, Path],
     parameters: Dict[str, Any],
     analysis: Optional[Dict[str, Any]] = None,
     length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
+    time_unit: str = 'nanosecond',
+    output_units: Optional[OutputUnitPreferences] = None,
 ) -> None:
     """
     Write comprehensive summary file.
-    
+
+    For a simulation with a noise range, the summary reports the number of
+    noise values drawn, their range and the range of the initial CNR, and the
+    statistics of each bin of initial CNR (analysis['cnr_bins']) in place of
+    the statistics of all runs together.
+
     Parameters
     ----------
-    results : SimulationResult
+    results : MonteCarloOutput
         Simulation results.
     filename : str or Path
         Output filename.
     parameters : dict
         Simulation parameters.
     analysis : dict, optional
-        Analysis results.
+        Analysis results, as from analyze_simulation_results.
     length_unit : str
         Unit of length.
     time_unit : str
         Unit of time.
+    output_units : OutputUnitPreferences, optional
+        Unit of the diffusion coefficient values (its diffusion_length and
+        diffusion_time fields). When None, they are in the simulation units.
+        Lengths and times are always in the simulation units.
     """
-    with open(filename, 'w') as f:
+    # The unit of every diffusion coefficient value: the nominal value and the
+    # statistics of the estimates, except the unitless relative standard error.
+    d_length_unit, d_time_unit = summary_diffusion_units(length_unit, time_unit, output_units)
+    d_unit = f"{d_length_unit}^2/{d_time_unit}"
+
+    def in_d_unit(value: float) -> float:
+        """A diffusion coefficient in simulation units, converted to d_unit."""
+        return convert_diffusion_coefficient(value, length_unit, time_unit, d_length_unit, d_time_unit)
+
+    nominal_d_in_unit = in_d_unit(results.parameters.physics.diffusion_coefficient)
+
+    def d_text(value: float) -> str:
+        """A diffusion coefficient in d_unit, in the format the nominal value sets."""
+        return format_quantity(in_d_unit(value), 5, reference=nominal_d_in_unit)
+
+    amplitude_0 = results.parameters.profile.amplitude_0
+    noise_range = results.noise_range
+    # The lowest CNR of a noise range sets the format of all its CNR values.
+    lowest_cnr = nominal_cnr(amplitude_0, noise_range.high) if noise_range is not None else None
+
+    def cnr_text(value: float) -> str:
+        """An initial CNR of a simulation with a noise range, in the format its lowest CNR sets."""
+        return format_quantity(value, 3, reference=lowest_cnr)
+
+    def write_noise_range(f: TextIO) -> None:
+        """The noise sigma and initial CNR drawn for the runs, and the range they were drawn from."""
+        drawn = results.noise_values
+
+        def sigma_text(value: float) -> str:
+            return format_quantity(value, 4, reference=noise_range.low)
+
+        # CNR is amplitude_0 / sigma, so the highest noise gives the lowest CNR.
+        distribution = 'uniform in log10 of the CNR' if noise_range.logarithmic else 'uniform in CNR'
+        f.write("Noise standard deviation, drawn for each run:\n")
+        f.write(f"    {len(drawn)} values from {sigma_text(min(drawn))} to {sigma_text(max(drawn))}"
+                f" (range {sigma_text(noise_range.low)} to {sigma_text(noise_range.high)})\n")
+        f.write("Initial CNR (Contrast-to-Noise Ratio), drawn for each run:\n")
+        f.write(f"    {cnr_text(nominal_cnr(amplitude_0, max(drawn)))} to "
+                f"{cnr_text(nominal_cnr(amplitude_0, min(drawn)))} (range {cnr_text(lowest_cnr)} to "
+                f"{cnr_text(nominal_cnr(amplitude_0, noise_range.low))}, {distribution})\n")
+
+    nominal_d = (analysis or {}).get('summary', {}).get('nominal_diffusion_coefficient', None)
+
+    def write_estimate_statistics(f: TextIO, statistics: Dict[str, Any], indent: str) -> None:
+        """The accuracy and precision of each estimator's D estimates, each line after `indent`."""
+        if 'accuracy' in statistics:
+            f.write(f"{indent}Diffusion Coefficient Estimate Statistics:\n")
+            for spec in in_display_order(statistics['accuracy']):
+                metrics = statistics['accuracy'][spec.key]
+                f.write(f"{indent}  {spec.summary_name}:\n")
+                f.write(f"{indent}    Standard deviation:\n")
+                f.write(f"{indent}        {d_text(metrics['std'])} {d_unit}\n")
+                if nominal_d and nominal_d != 0:
+                    rse = metrics['std'] / nominal_d
+                    f.write(f"{indent}    Relative standard error:\n")
+                    f.write(f"{indent}        {rse:.3f}\n")
+                f.write(f"{indent}    Mean estimate:\n")
+                f.write(f"{indent}        {d_text(metrics['mean'])} {d_unit}\n")
+                f.write(f"{indent}    Bias (mean - nominal):\n")
+                f.write(f"{indent}        {d_text(metrics['bias'])} {d_unit}\n")
+                f.write(f"{indent}    Root Mean Square Error:\n")
+                f.write(f"{indent}        {d_text(metrics['rmse'])} {d_unit}\n")
+
+        if 'precision' in statistics:
+            f.write(f"\n{indent}Precision at standard thresholds:\n")
+            for level, values in statistics['precision'].items():
+                f.write(f"{indent}  Fraction within ±{level} of nominal:\n")
+                # One line in display order, e.g. "    WLS: 19.00%    OLS: 15.00%"
+                f.write(indent + "".join(
+                    f"    {spec.short_name}: {values[spec.key]:.2%}"
+                    for spec in in_display_order(values)
+                ) + "\n")
+
+    with open(filename, 'w', encoding='utf-8') as f:
         # Write header
         f.write("DICE Simulation Summary\n")
         f.write("=" * 50 + "\n\n")
@@ -163,18 +307,27 @@ def write_summary_file(
         f.write(f"    {parameters.get('spatial width', 'N/A')} {length_unit}\n")
         f.write(f"Pixel width:\n")
         f.write(f"    {parameters.get('pixel width', 'N/A')} pixels\n")
+        time_series = parameters.get('time series', [])
         f.write(f"Time frames:\n")
-        f.write(f"    {len(parameters.get('time series', []))} frames\n")
-        f.write(f"Noise standard deviation values:\n")
-        f.write(f"    {results.noise_values}\n")
-        f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
-        f.write(f"    {1.0/results.noise_values[0] if results.noise_values[0] > 0 else 'inf':.3f}\n")
+        f.write(f"    {len(time_series)} frames\n")
+        if len(time_series) > 0:
+            f.write(f"Time range:\n")
+            time_scale = max(abs(time_series[0]), abs(time_series[-1]))
+            f.write(f"    {format_quantity(time_series[0], 3, time_scale)} to "
+                    f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}\n")
+        if noise_range is None:
+            f.write(f"Noise standard deviation values:\n")
+            f.write(f"    {results.noise_values}\n")
+            f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
+            f.write(f"    {nominal_cnr(amplitude_0, results.noise_values[0]):.3f}\n")
+        else:
+            write_noise_range(f)
         f.write(f"Initial profile squared width (sigma^2):\n")
-        f.write(f"    {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
+        f.write(f"    {format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2\n")
         f.write(f"Nominal diffusion length:\n")
-        f.write(f"    {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
+        f.write(f"    {format_quantity(results.parameters.physics.diffusion_length, 3)} {length_unit}\n")
         f.write(f"Nominal diffusion coefficient:\n")
-        f.write(f"    {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2/{time_unit}\n")
+        f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
         f.write(f"    {results.parameters.physics.lifetime} {time_unit}\n")
         f.write("\n")
@@ -183,91 +336,21 @@ def write_summary_file(
         if analysis:
             f.write("Analysis Results:\n")
             f.write("-" * 30 + "\n")
-            
-            if 'precision' in analysis:
-                f.write("Precision of Diffusion Coefficient Estimates:\n")
-                for level, values in analysis['precision'].items():
-                    f.write(f" Fraction of estimates within +/-{level} of nominal:\n")
-                    f.write(f"    Ordinary (unweighted) Least Squares:\n")
-                    f.write(f"        {values['ols']:.2%}\n")
-                    f.write(f"    Weighted Least Squares:\n")
-                    f.write(f"        {values['wls']:.2%}\n")
-            
-            if 'accuracy' in analysis:
-                f.write("\nStatistical Accuracy of Diffusion Coefficient Estimates:\n")
-                for method in ['ols', 'wls']:
-                    if method in analysis['accuracy']:
-                        metrics = analysis['accuracy'][method]
-                        method_name = "Ordinary (unweighted) Least Squares" if method == 'ols' else "Weighted Least Squares"
-                        f.write(f"  {method_name}:\n")
-                        f.write(f"    Mean diffusion coefficient estimate:\n")
-                        f.write(f"        {metrics.get('mean', 'N/A'):.5f}\n")
-                        f.write(f"    Standard deviation:\n")
-                        f.write(f"        {metrics.get('std', 'N/A'):.5f}\n")
-                        f.write(f"    Mean error:\n")
-                        f.write(f"        {metrics.get('bias', 'N/A'):.5f}\n")
-                        f.write(f"    Root Mean Square Error:\n")
-                        f.write(f"        {metrics.get('rmse', 'N/A'):.5f}\n")
-            
+
+            if noise_range is None:
+                write_estimate_statistics(f, analysis, indent="")
+            else:
+                # Statistics pooled over a range of CNR would mix noise regimes.
+                f.write("Statistics in bins of initial CNR with equal numbers of runs:\n")
+                for cnr_bin in analysis['cnr_bins']:
+                    f.write(f"\nInitial CNR {cnr_text(cnr_bin['cnr_min'])} to "
+                            f"{cnr_text(cnr_bin['cnr_max'])} ({cnr_bin['num_runs']} runs):\n")
+                    write_estimate_statistics(f, cnr_bin, indent="  ")
+
             f.write("\n")
         
         # Write completion message
         f.write("Simulation completed successfully.\n")
-
-
-def export_to_json(
-    results: SimulationResult,
-    filename: Union[str, Path],
-    include_profile_data: bool = False
-) -> None:
-    """
-    Export results to JSON format.
-    
-    Parameters
-    ----------
-    results : SimulationResult
-        Simulation results.
-    filename : str or Path
-        Output JSON filename.
-    include_profile_data : bool
-        Whether to include profile data.
-    """
-    # Convert results to dictionary
-    data = {
-        'parameters': {
-            'num_runs': results.num_runs,
-            'noise_values': results.noise_values,
-            'diffusion_coefficient': results.parameters.physics.diffusion_coefficient,
-            'lifetime': results.parameters.physics.lifetime,
-            'diffusion_length': results.parameters.physics.diffusion_length,
-            'sigma2_0': results.parameters.profile.sigma2_0,
-            'amplitude_0': results.parameters.profile.amplitude_0,
-            'mu_0': results.parameters.profile.mu_0,
-        },
-        'runs': []
-    }
-    
-    for run in results.run_results:
-        run_data = {
-            'run_id': run.run_id,
-            'noise_sigma': run.noise_sigma,
-            'cnr_0_estimate': run.cnr_0_estimate,
-            'estimated_sigma2_0': run.estimated_sigma2_0,
-            'ols_slope': run.ols_slope,
-            'ols_slope_stderr': run.ols_slope_stderr,
-            'wls_slope': run.wls_slope,
-            'wls_slope_stderr': run.wls_slope_stderr,
-        }
-        
-        if include_profile_data and hasattr(run, 'nominal_profiles'):
-            run_data['nominal_profiles'] = run.nominal_profiles.tolist() if isinstance(run.nominal_profiles, np.ndarray) else run.nominal_profiles
-            run_data['noisy_profiles'] = run.noisy_profiles.tolist() if isinstance(run.noisy_profiles, np.ndarray) else run.noisy_profiles
-        
-        data['runs'].append(run_data)
-    
-    # Write JSON file
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
 
 
 def load_results_csv(filename: Union[str, Path]) -> pd.DataFrame:
@@ -327,69 +410,3 @@ def load_multiple_results(
     
     # Concatenate all DataFrames
     return pd.concat(dfs, ignore_index=True)
-
-
-def export_legacy_format(
-    results: SimulationResult,
-    result_dictionary: Dict[str, Any],
-    csv_filename: Union[str, Path],
-    summary_filename: Union[str, Path],
-    length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond'
-) -> None:
-    """
-    Export results in legacy DICE format for backward compatibility.
-    
-    Parameters
-    ----------
-    results : SimulationResult
-        Modern format results.
-    result_dictionary : dict
-        Legacy format result dictionary.
-    csv_filename : str or Path
-        Output CSV filename.
-    summary_filename : str or Path
-        Output summary filename.
-    length_unit : str
-        Unit of length.
-    time_unit : str
-        Unit of time.
-    """
-    # Export CSV using the modern method
-    df = export_collated_results(results, csv_filename, length_unit, time_unit)
-    
-    # Write legacy summary format
-    with open(summary_filename, 'w') as f:
-        f.write(f"Running {results.num_runs} simulations with the following parameters (rounded):\n")
-        f.write("\n")
-        
-        # Extract parameters from result_dictionary for legacy format
-        params = result_dictionary.get('parameters', {})
-        f.write(f"Spatial width: {params.get('spatial width', 'N/A')} {length_unit}\n")
-        f.write(f"Pixel width: {params.get('pixel width', 'N/A')} pixels\n")
-        f.write(f"Number of time frames: {len(params.get('time series', []))} frames\n")
-        f.write(f"Noise stdev: {results.noise_values[0]:.3f}\n")
-        f.write(f"Initial contrast-to-noise ratio (CNR): {1.0/results.noise_values[0]:.3f}\n")
-        f.write(f"Initial profile sigma^2: {results.parameters.profile.sigma2_0:.3f} {length_unit}^2\n")
-        f.write(f"Nominal diffusion length: {results.parameters.physics.diffusion_length:.3f} {length_unit}\n")
-        f.write(f"Nominal diffusion coeff: {results.parameters.physics.diffusion_coefficient:.5f} {length_unit}^2 per {time_unit}\n")
-        f.write(f"Nominal lifetime: {results.parameters.physics.lifetime} {time_unit}\n")
-        f.write("\n")
-        
-        # Add analysis results if available
-        if 'analysis' in result_dictionary:
-            analysis = result_dictionary['analysis']
-            if '% fits within proximity' in analysis:
-                proximity = params.get('proximity level', 0.1)
-                f.write(f"Portion of fits where D_estimate / D_nominal = 1 ± {proximity}:\n")
-                f.write(f"-- Unweighted fit: {analysis['% fits within proximity']['unweighted fit']:.2f}\n")
-                f.write(f"-- Weighted fit: {analysis['% fits within proximity']['weighted fit']:.2f}\n")
-                f.write("\n")
-        
-        f.write("Simulation completed. Collating results.\n")
-        f.write("\n")
-        f.write("Exporting result data and histogram.\n")
-        f.write(f"-- Summary file: {summary_filename}\n")
-        f.write(f"-- Collated CSV file: {csv_filename}\n")
-        f.write("\n")
-        f.write("Done!\n")

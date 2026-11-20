@@ -1,0 +1,7 @@
+run number,nominal diffusion coeff,nominal lifetime,nominal diffusion length,nominal CNR,estimated CNR,nominal sigma^2_0,estimated sigma^2_0,nominal diffusion coeff [μm²/ns],unweighted fit diffusion slope,unweighted fit diffusion slope stderr,unweighted fit intercept,unweighted fit intercept stderr,unweighted fit diffusion coeff [μm²/ns],unweighted fit diffusion stderr [μm²/ns],weighted fit diffusion slope,weighted fit diffusion slope stderr,weighted fit intercept,weighted fit intercept stderr,weighted fit diffusion coeff [μm²/ns],weighted fit diffusion stderr [μm²/ns]
+0,0.01,1.0,0.1,50.0,50.0,0.18033688,0.18,0.01,,,,,,,,,,,,
+1,0.01,1.0,0.1,50.0,50.25,0.18033688,0.181,0.01,0.0213,0.0011,0.0004,0.0002,0.01065,0.00055,0.0208,0.0009,0.0003,0.0001,0.0104,0.00045
+2,0.01,1.0,0.1,50.0,50.5,0.18033688,0.182,0.01,0.0191,0.0,-0.0002,0.0003,0.00955,,0.0199,,0.0001,0.0002,0.00995,
+3,0.01,1.0,0.1,20.0,20.75,0.18033688,0.183,0.01,,,,,,,0.0261,0.0033,0.0009,0.0006,0.01305,0.00165
+4,0.01,1.0,0.1,20.0,21.0,0.18033688,0.184,0.01,0.0233,0.0038,0.0012,0.0008,0.01165,0.0019,,,,,,
+5,0.01,1.0,0.1,20.0,21.25,0.18033688,0.185,0.01,0.0177,0.0029,-0.0006,0.0005,0.00885,0.00145,0.0189,0.0024,-0.0004,0.0004,0.00945,0.0012

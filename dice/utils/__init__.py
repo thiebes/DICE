@@ -7,6 +7,7 @@ from .converters import (
     sigma2_to_fwhm,
     fwhm_to_sigma,
     fwhm_to_sigma2,
+    calculate_pixel_size,
     slope_to_diffusion_constant,
 )
 from .validators import (
@@ -29,6 +30,7 @@ __all__ = [
     "sigma2_to_fwhm",
     "fwhm_to_sigma",
     "fwhm_to_sigma2",
+    "calculate_pixel_size",
     "slope_to_diffusion_constant",
     # Validators
     "validate_numeric",

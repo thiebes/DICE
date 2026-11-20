@@ -9,7 +9,7 @@ from dice.core.fitting import (
     fit_gaussian_profile,
     diffusion_ols_fit,
     diffusion_wls_fit,
-    calculate_fit_weights,
+    calculate_wls_weights,
 )
 from dice.core.profiles import gaussian
 
@@ -118,6 +118,46 @@ class TestGaussFitting:
         )
 
 
+class TestGaussFittingScaleInvariance:
+    """The same profiles in another length unit or intensity scale give the same fits, rescaled.
+
+    The quick_test geometry (FWHM 1 over a 5-wide window of 50 pixels) with
+    white noise at a CNR of 50, in micrometers with amplitude 1 as reference.
+    In meters, sigma^2 is about 2e-13; with amplitude 1e-5, the profile values
+    are about 1e-5.
+    """
+
+    @staticmethod
+    def _noisy_profiles() -> tuple:
+        from dice.utils.axes import make_x_axis
+        from dice.utils.converters import fwhm_to_sigma2
+
+        x = make_x_axis(5, 50)
+        rng = np.random.default_rng(0)
+        clean = gaussian(x, mu=0.0, sig2=fwhm_to_sigma2(1.0), amp=1.0)
+        return x, np.array([clean + rng.normal(0, 0.02, x.size) for _ in range(20)])
+
+    @pytest.mark.parametrize('length_scale, amplitude_scale', [
+        (1e-6, 1.0),    # meters
+        (1e-4, 1.0),    # centimeters
+        (1e-3, 1.0),    # millimeters
+        (1e3, 1.0),     # nanometers
+        (1.0, 1e-5),    # a small signal, such as a change in transmission
+        (1.0, 1e-3),
+        (1e-6, 1e-5),
+    ])
+    def test_fits_scale_with_the_units(self, length_scale, amplitude_scale):
+        x, profiles = self._noisy_profiles()
+        reference = gauss_fitting(x, profiles)
+
+        scaled = gauss_fitting(x * length_scale, profiles * amplitude_scale)
+
+        for key in ('sigma^2_t estimates', 'sigma^2_t standard errors'):
+            np.testing.assert_allclose(
+                np.array(scaled[key]) / length_scale ** 2, reference[key], rtol=1e-6, err_msg=key)
+        assert scaled['fit_failures'] == reference['fit_failures'] == 0
+
+
 class TestFitGaussianProfile:
     """Test single Gaussian profile fitting."""
     
@@ -169,6 +209,7 @@ class TestFitGaussianProfile:
         with pytest.raises(ValueError, match="same length"):
             fit_gaussian_profile(x, y)
     
+    @pytest.mark.filterwarnings("ignore::scipy.optimize.OptimizeWarning")
     def test_failed_fit(self):
         """Test handling of fit failure."""
         x = np.linspace(-5, 5, 10)
@@ -185,6 +226,8 @@ class TestFitGaussianProfile:
 
 class TestDiffusionOLSFit:
     """Test OLS fitting for diffusion coefficient estimation."""
+
+
     
     def test_perfect_linear_msd(self):
         """Test with perfect linear MSD data."""
@@ -220,18 +263,19 @@ class TestDiffusionOLSFit:
         # Should be close to true value
         assert np.isclose(result['MSD_t slope estimate'], 2 * D_true, rtol=0.1)
         assert result['r_squared'] > 0.9  # Good fit despite noise
-    
+
+    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     def test_minimum_points(self):
         """Test with minimum number of points."""
         time_axis = np.array([0, 1])
         sigma2_t = np.array([1.0, 2.0])
-        
+
         result = diffusion_ols_fit(time_axis, sigma2_t)
-        
+
         # With 2 points, should fit perfectly
         assert np.isclose(result['MSD_t slope estimate'], 1.0)  # MSD slope
         assert np.isclose(result['r_squared'], 1.0)
-    
+
     def test_insufficient_points_error(self):
         """Test error with insufficient points."""
         with pytest.raises(ValueError, match="at least 2 points"):
@@ -322,69 +366,90 @@ class TestDiffusionWLSFit:
         
         with pytest.raises(ValueError, match="same length"):
             diffusion_wls_fit(time_axis, sigma2_t, weights=weights)
-    
+
+    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     def test_minimum_points(self):
         """Test with minimum number of points."""
         time_axis = np.array([0, 1])
         sigma2_t = np.array([1.0, 2.0])
-        
+
         result = diffusion_wls_fit(time_axis, sigma2_t)
-        
+
         assert result['MSD_t slope estimate'] == 1.0
         assert result['r_squared'] == 1.0
 
 
-class TestCalculateFitWeights:
+class TestCalculateWlsWeights:
     """Test weight calculation for WLS fitting."""
-    
-    def test_inverse_variance_weights(self):
-        """Test inverse variance weighting."""
-        errors = np.array([0.1, 0.2, 0.5, 1.0])
-        
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
+
+    def test_basic_weights(self):
+        """Test basic weight calculation."""
+        values = np.array([1.0, 2.0, 3.0, 4.0])
+        errors = np.array([0.1, 0.2, 0.3, 0.4])
+
+        weights = calculate_wls_weights(values, errors)
+
         assert len(weights) == 4
-        # Smaller errors should have larger weights
-        assert weights[0] > weights[1] > weights[2] > weights[3]
-        
-        # Check normalization
-        assert np.isclose(np.mean(weights), 1.0)
-    
-    def test_uniform_weights(self):
-        """Test uniform weighting."""
-        errors = np.array([0.1, 0.2, 0.5, 1.0])
-        
-        weights = calculate_fit_weights(errors, method='uniform')
-        
-        assert len(weights) == 4
-        assert np.all(weights == 1.0)
-    
+        # All have same relative error (10%), so weights should be equal
+        assert np.allclose(weights, 1.0)
+
+    def test_varying_relative_error(self):
+        """Test weights with varying relative errors."""
+        values = np.array([1.0, 1.0, 1.0])
+        errors = np.array([0.1, 0.2, 0.4])  # 10%, 20%, 40% relative error
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # Smaller relative errors should have larger weights
+        assert weights[0] > weights[1] > weights[2]
+        # Check normalization: sum equals N
+        assert np.isclose(np.sum(weights), 3.0)
+
     def test_zero_error_handling(self):
         """Test handling of zero errors."""
+        values = np.array([1.0, 2.0, 3.0])
         errors = np.array([0.0, 0.1, 0.2])
-        
-        # Should not crash with zero error
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
+
+        weights = calculate_wls_weights(values, errors)
+
         assert len(weights) == 3
+        # First weight should be 0 due to zero error
+        assert weights[0] == 0
         assert not np.any(np.isnan(weights))
         assert not np.any(np.isinf(weights))
-    
-    def test_invalid_method_error(self):
-        """Test error for invalid method."""
-        errors = np.array([0.1, 0.2])
-        
-        with pytest.raises(ValueError, match="Unknown weighting method"):
-            calculate_fit_weights(errors, method='invalid')
-    
-    def test_single_value(self):
-        """Test with single error value."""
-        errors = np.array([0.5])
-        
-        weights = calculate_fit_weights(errors, method='inverse_variance')
-        
-        assert len(weights) == 1
-        assert weights[0] == 1.0  # Normalized to 1
+
+    def test_zero_value_handling(self):
+        """Test handling of zero values."""
+        values = np.array([0.0, 2.0, 3.0])
+        errors = np.array([0.1, 0.1, 0.1])
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # First weight should be 0 due to zero value
+        assert weights[0] == 0
+
+    def test_nan_handling(self):
+        """Test handling of NaN errors."""
+        values = np.array([1.0, 2.0, 3.0])
+        errors = np.array([np.nan, 0.1, 0.2])
+
+        weights = calculate_wls_weights(values, errors)
+
+        assert len(weights) == 3
+        # First weight should be 0 due to NaN error
+        assert weights[0] == 0
+
+    def test_all_zero_fallback(self):
+        """Test fallback to uniform weights when all weights are zero."""
+        values = np.array([0.0, 0.0, 0.0])
+        errors = np.array([0.1, 0.2, 0.3])
+
+        weights = calculate_wls_weights(values, errors)
+
+        # Should fall back to uniform weights
+        assert np.all(weights == 1.0)
 
 
 if __name__ == "__main__":

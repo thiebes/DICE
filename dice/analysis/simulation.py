@@ -5,36 +5,54 @@ This module provides the core simulation functionality for running Monte Carlo
 simulations of diffusion measurements with noise.
 """
 
+import multiprocessing as mp
+import sys
+from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Any
-from joblib import Parallel, delayed
+from typing import List, Tuple, Optional, Any, Sequence
+from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
 from ..core.profiles import gaussian, make_diffusion_decay
-from ..core.noise import add_noise, fft_cnr
-from ..core.fitting import gauss_fitting, diffusion_ols_fit, diffusion_wls_fit
-from ..models.parameters import SimulationParameters
-from ..models.results import DiffusionFitResult, RunResult as BaseRunResult, SimulationResult
-from ..utils.legacy_compatibility import (
-    create_parameters_from_legacy,
-    convert_legacy_result_to_dict
-)
+from fft_cnr import fft_cnr
+from ..core.noise import Seed, add_noise
+from ..core.fitting import gauss_fitting, calculate_wls_weights
+from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
+from ..models.parameters import NoiseRange, SimulationParameters
+from ..models.results import RunResult, MonteCarloOutput
+from ..utils.runtime import joblib_workers_supported
+from ..utils.legacy_compatibility import LegacySimulationParameters
 
-# Create a simplified RunResult for this module
-class RunResult:
-    """Simplified run result for simulation module."""
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+# Most batches a parallel simulation is split into; the progress callback reports after each.
+MAX_PROGRESS_BATCHES = 10
+
+# Worker pools for a parallel simulation: joblib's default (loky) backend, or
+# the standard library's ProcessPoolExecutor, which a standalone build uses.
+JOBLIB_BACKEND = 'joblib'
+PROCESS_POOL_BACKEND = 'process_pool'
+PARALLEL_BACKENDS = (JOBLIB_BACKEND, PROCESS_POOL_BACKEND)
+
+# ProcessPoolExecutor rejects more workers than this on Windows.
+MAX_WINDOWS_POOL_WORKERS = 61
+
+# Two simulations with the same seed draw the same random numbers, and on
+# most platforms their results repeat bit for bit. The macOS wheels of NumPy
+# and SciPy for Intel processors use Apple's Accelerate library, whose
+# least-squares results can differ in the last digit from one call to the
+# next: relative differences up to about 1e-15 were seen in continuous
+# integration. Seeded results are therefore compared with this relative
+# tolerance, far below the change a different seed or different physics makes.
+SEEDED_RESULTS_RTOL = 1e-12
 
 
 def run_single_simulation(
     run_id: int,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
-    parameters: SimulationParameters,
+    parameters: LegacySimulationParameters,
     noise_sigma: float,
-    retain_profile_data: bool = False
+    retain_profile_data: bool = False,
+    seed: Seed = None,
 ) -> RunResult:
     """
     Execute a single Monte Carlo simulation run.
@@ -50,13 +68,15 @@ def run_single_simulation(
         Spatial axis values.
     time_axis : np.ndarray
         Time axis values.
-    parameters : SimulationParameters
+    parameters : LegacySimulationParameters
         Simulation parameters including initial conditions and physics.
     noise_sigma : float
         Standard deviation of noise to add.
     retain_profile_data : bool
         Whether to retain full profile data in results.
-    
+    seed : int or SeedSequence, optional
+        Seed for this run's noise; None draws fresh entropy.
+
     Returns
     -------
     RunResult
@@ -76,35 +96,21 @@ def run_single_simulation(
     
     # Add noise to the profiles
     noisy_result = add_noise(
-        nominal_profiles['y_values_t'], 
+        nominal_profiles['y_values_t'],
         noise_sigma=noise_sigma,
-        seed=None  # Random seed for each run
+        seed=seed,
     )
     noisy_profiles = noisy_result['y_values_t']
     
     # Estimate CNR at t=0
-    cnr_0_estimate = fft_cnr(noisy_profiles[0])
+    cnr_0_estimate = fft_cnr(noisy_profiles[0]).cnr
     
     # Fit Gaussians to noisy profiles
     fit_results = gauss_fitting(x_axis, noisy_profiles)
     gaussfit_sigma2_t = np.array(fit_results['sigma^2_t estimates'])
     gaussfit_sigma2_stderrs = np.array(fit_results['sigma^2_t standard errors'])
     
-    # Initialize diffusion results
-    ols_result = None
-    wls_result = None
-    weights = None
-    
-    if len(time_axis) > 1:
-        # Calculate weights for WLS fitting
-        # Weight inversely proportional to relative variance
-        weights = calculate_wls_weights(gaussfit_sigma2_t, gaussfit_sigma2_stderrs)
-        
-        # Perform OLS and WLS fits
-        ols_result = diffusion_ols_fit(time_axis, gaussfit_sigma2_t)
-        wls_result = diffusion_wls_fit(time_axis, gaussfit_sigma2_t, weights)
-    
-    # Create result object
+    # Create result object; the estimators fill in their slope fits below
     result = RunResult(
         run_id=run_id,
         nominal_diffusion_coefficient=parameters.physics.diffusion_coefficient,
@@ -114,16 +120,20 @@ def run_single_simulation(
         cnr_0_estimate=cnr_0_estimate,
         nominal_sigma2_0=parameters.profile.sigma2_0,
         estimated_sigma2_0=gaussfit_sigma2_t[0] if len(gaussfit_sigma2_t) > 0 else None,
-        ols_slope=ols_result['MSD_t slope estimate'] if ols_result else None,
-        ols_slope_stderr=ols_result['MSD_t slope std error'] if ols_result else None,
-        ols_intercept=ols_result['intercept estimate'] if ols_result else None,
-        ols_intercept_stderr=ols_result['intercept standard error'] if ols_result else None,
-        wls_slope=wls_result['MSD_t slope estimate'] if wls_result else None,
-        wls_slope_stderr=wls_result['MSD_t slope std error'] if wls_result else None,
-        wls_intercept=wls_result['intercept estimate'] if wls_result else None,
-        wls_intercept_stderr=wls_result['intercept standard error'] if wls_result else None
     )
-    
+
+    weights = None
+    if len(time_axis) > 1:
+        # WLS weights, inversely proportional to the squared relative error
+        # (kept for retained profile data; the WLS estimator computes its own)
+        weights = calculate_wls_weights(gaussfit_sigma2_t, gaussfit_sigma2_stderrs)
+
+        # Fit MSD against time with each estimator, from the same per-frame fits
+        frame_fits = FrameFits(time_axis=time_axis, sigma2=gaussfit_sigma2_t,
+                               sigma2_stderr=gaussfit_sigma2_stderrs)
+        for key in DEFAULT_ESTIMATOR_KEYS:
+            result.set_slope_fit(key, get_estimator(key).estimate(frame_fits))
+
     # Add profile data if requested
     if retain_profile_data:
         # Convert lists to numpy arrays for consistency
@@ -136,60 +146,23 @@ def run_single_simulation(
     return result
 
 
-def calculate_wls_weights(
-    sigma2_values: np.ndarray, 
-    sigma2_errors: np.ndarray
-) -> np.ndarray:
-    """
-    Calculate weights for weighted least squares fitting.
-    
-    Parameters
-    ----------
-    sigma2_values : np.ndarray
-        Fitted variance values.
-    sigma2_errors : np.ndarray
-        Standard errors of variance values.
-    
-    Returns
-    -------
-    np.ndarray
-        Normalized weights for WLS fitting.
-    """
-    # Calculate weights as inverse of relative variance
-    # Avoid division by zero
-    weights = np.zeros_like(sigma2_values)
-    
-    for i, (sig2, stderr) in enumerate(zip(sigma2_values, sigma2_errors)):
-        if sig2 != 0 and stderr != 0 and not np.isnan(stderr):
-            # Weight = 1 / (relative_variance)^2
-            relative_var = stderr / sig2
-            weights[i] = 1.0 / (relative_var ** 2)
-        else:
-            weights[i] = 0
-    
-    # Normalize weights to sum to number of points
-    if np.sum(weights) > 0:
-        weights = weights / np.sum(weights) * len(weights)
-    else:
-        # Fallback to uniform weights if all are zero
-        weights = np.ones_like(sigma2_values)
-    
-    return weights
-
-
 def run_monte_carlo_simulation(
-    parameters: SimulationParameters,
+    parameters: LegacySimulationParameters,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
     noise_values: List[float],
     num_runs: int,
     multiprocessing: bool = True,
     retain_profile_data: bool = False,
-    progress_callback: Optional[callable] = None
-):
+    progress_callback: Optional[callable] = None,
+    seed: Seed = None,
+    n_jobs: int = -1,
+    parallel_backend: Optional[str] = None,
+    noise_range: Optional[NoiseRange] = None,
+) -> MonteCarloOutput:
     """
-    Run Monte Carlo simulation with multiple noise values.
-    
+    Run Monte Carlo simulation at fixed noise levels, or with a noise level for each run.
+
     Parameters
     ----------
     parameters : SimulationParameters
@@ -199,46 +172,79 @@ def run_monte_carlo_simulation(
     time_axis : np.ndarray
         Time axis values.
     noise_values : List[float]
-        List of noise sigma values to simulate.
+        Noise sigma values to simulate: the fixed noise levels, or, with
+        noise_range, one value for each run, in run order.
     num_runs : int
-        Number of runs per noise value.
+        Number of runs per noise level; with noise_range, the total number
+        of runs, which must equal the number of noise values.
     multiprocessing : bool
         Whether to use parallel processing.
     retain_profile_data : bool
         Whether to retain full profile data.
     progress_callback : callable, optional
         Function to call with progress updates.
-    
+    seed : int or SeedSequence, optional
+        Root seed. Each run gets its own child stream, so a seeded simulation
+        gives the same results serially or in parallel, to within the rounding
+        that SEEDED_RESULTS_RTOL describes. None draws fresh entropy for every run.
+    n_jobs : int
+        Number of worker processes when multiprocessing; -1 uses all cores.
+    parallel_backend : str, optional
+        Worker pool when multiprocessing: 'joblib' or 'process_pool' (the
+        standard library's ProcessPoolExecutor). None selects joblib, or the
+        process pool in a standalone build, where joblib cannot start workers.
+        Both give the same results as a serial run with the same seed.
+    noise_range : NoiseRange, optional
+        The range from which noise_values were drawn, one for each run. The
+        result records it, so that the analysis and the outputs treat the
+        noise as varying from run to run. None for fixed noise levels.
+
     Returns
     -------
-    SimulationResult
+    MonteCarloOutput
         Aggregated simulation results.
+
+    Raises
+    ------
+    ValueError
+        If the parallel backend is unknown, or with noise_range, if the
+        number of noise values differs from num_runs.
     """
-    # Create parameter sets for all runs
-    run_parameters = []
-    run_id = 0
-    
-    for noise_sigma in noise_values:
-        for _ in range(num_runs):
-            run_parameters.append((
-                run_id,
-                x_axis,
-                time_axis,
-                parameters,
-                noise_sigma,
-                retain_profile_data
-            ))
-            run_id += 1
-    
-    total_runs = len(run_parameters)
-    
-    # Run simulations
-    if multiprocessing:
-        # Parallel execution
-        results = Parallel(n_jobs=-1)(
-            delayed(run_single_simulation)(*params) 
-            for params in run_parameters
+    if parallel_backend is None:
+        parallel_backend = default_parallel_backend()
+    elif parallel_backend not in PARALLEL_BACKENDS:
+        raise ValueError(
+            f"Unknown parallel backend {parallel_backend!r}; expected one of {PARALLEL_BACKENDS}"
         )
+
+    run_noise_sigmas = noise_sigma_of_each_run(noise_values, num_runs, noise_range)
+    run_seeds = spawn_run_seeds(seed, len(run_noise_sigmas))
+
+    # Create parameter sets for all runs
+    run_parameters = [
+        (run_id, x_axis, time_axis, parameters, noise_sigma, retain_profile_data, run_seeds[run_id])
+        for run_id, noise_sigma in enumerate(run_noise_sigmas)
+    ]
+
+    total_runs = len(run_parameters)
+
+    # Run simulations
+    if multiprocessing and parallel_backend == PROCESS_POOL_BACKEND:
+        results = run_in_process_pool(run_parameters, effective_n_jobs(n_jobs), progress_callback)
+    elif multiprocessing:
+        # Run in batches so the progress callback can report between them;
+        # joblib reuses its worker pool from one batch to the next.
+        results = []
+
+        for batch in split_into_batches(total_runs, effective_n_jobs(n_jobs)):
+            batch_results = Parallel(n_jobs=n_jobs)(
+                delayed(run_single_simulation)(*run_parameters[run_index])
+                for run_index in batch
+            )
+            results.extend(batch_results)
+
+            if progress_callback:
+                progress_callback(batch.stop, total_runs)
     else:
         # Sequential execution with optional progress updates
         results = []
@@ -249,82 +255,169 @@ def run_monte_carlo_simulation(
             if progress_callback:
                 progress_callback(i + 1, total_runs)
     
-    # Create aggregated result with simplified structure
-    # We'll create a basic object that matches what the tests expect
-    class SimpleSimulationResult:
-        def __init__(self, parameters, run_results, num_runs, noise_values):
-            self.parameters = parameters
-            self.run_results = run_results
-            self.num_runs = num_runs
-            self.noise_values = noise_values
-    
-    simulation_result = SimpleSimulationResult(
+    # Create aggregated result
+    simulation_result = MonteCarloOutput(
         parameters=parameters,
         run_results=results,
         num_runs=total_runs,
-        noise_values=noise_values
+        noise_values=noise_values,
+        estimator_keys=DEFAULT_ESTIMATOR_KEYS,
+        noise_range=noise_range,
     )
-    
+
     return simulation_result
 
 
-def scan_runner_compatibility(
-    indices: Dict,
-    parameters: Dict,
-    ld: float,
-    this_diff: float,
-    this_tau: float,
-    this_noise: float,
-    this_run: int,
-    retain_profile_data: bool
-) -> Dict:
+def noise_sigma_of_each_run(
+    noise_values: Sequence[float], num_runs: int, noise_range: Optional[NoiseRange] = None,
+) -> List[float]:
+    """The noise sigma of each run, in run order.
+
+    Fixed noise levels give num_runs runs each, level by level. With a noise
+    range, the noise values are already one per run.
+
+    Raises
+    ------
+    ValueError
+        With a noise range, if the number of noise values differs from num_runs.
     """
-    Compatibility wrapper for legacy scan_runner function.
-    
-    This function maintains backward compatibility with the original
-    monolithic dice.py implementation.
-    
+    if noise_range is None:
+        return [noise_sigma for noise_sigma in noise_values for _ in range(num_runs)]
+    if len(noise_values) != num_runs:
+        raise ValueError(
+            f"A noise range needs one noise value for each of the {num_runs} runs; "
+            f"got {len(noise_values)}."
+        )
+    return list(noise_values)
+
+
+def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:
+    """One independent child seed per run from a single root; all None when unseeded.
+
+    A SeedSequence argument is copied before spawning, so the caller's object
+    is not advanced and the same seed always yields the same children.
+    """
+    if seed is None:
+        return [None] * run_count
+    if isinstance(seed, np.random.SeedSequence):
+        root = np.random.SeedSequence(seed.entropy, spawn_key=seed.spawn_key, pool_size=seed.pool_size)
+    else:
+        root = np.random.SeedSequence(seed)
+    return root.spawn(run_count)
+
+
+def seeded_results_agree(actual: Any, desired: Any, rtol: float = SEEDED_RESULTS_RTOL) -> bool:
+    """
+    Whether two sets of seeded simulation results agree to within floating-point rounding.
+
+    Each quantity is compared relative to its largest magnitude: for a 2-D
+    array (runs by quantities) that is the largest magnitude in its column,
+    so a value near zero, such as an intercept, is held to the same standard
+    as the rest of its column, and the comparison does not depend on the units.
+    NaN equals NaN, and infinities must match exactly.
+
     Parameters
     ----------
-    indices : dict
-        Dictionary containing 'x axis' and 'time axis'.
-    parameters : dict
-        Dictionary with simulation parameters.
-    ld : float
-        Nominal diffusion length.
-    this_diff : float
-        Nominal diffusion coefficient.
-    this_tau : float
-        Nominal lifetime.
-    this_noise : float
-        Noise standard deviation.
-    this_run : int
-        Run identifier.
-    retain_profile_data : bool
-        Whether to retain profile data.
-    
+    actual, desired : array_like
+        Results of the two simulations, of the same shape.
+    rtol : float, optional
+        Largest relative difference that counts as rounding.
+
     Returns
     -------
-    dict
-        Legacy-formatted result dictionary.
+    bool
+        True if the shapes match and every value agrees.
     """
-    # Create parameters using legacy compatibility layer
-    sim_params = create_parameters_from_legacy(
-        parameters_dict=parameters,
-        diffusion_coefficient=this_diff,
-        lifetime=this_tau,
-        diffusion_length=ld
-    )
-    
-    # Run simulation
-    result = run_single_simulation(
-        run_id=this_run,
-        x_axis=indices['x axis'],
-        time_axis=indices['time axis'],
-        parameters=sim_params,
-        noise_sigma=this_noise,
-        retain_profile_data=retain_profile_data
-    )
-    
-    # Convert to legacy format using compatibility layer
-    return convert_legacy_result_to_dict(result, this_run, retain_profile_data)
+    actual = np.asarray(actual, dtype=float)
+    desired = np.asarray(desired, dtype=float)
+    if actual.shape != desired.shape:
+        return False
+    equal = (actual == desired) | (np.isnan(actual) & np.isnan(desired))
+    finite = np.isfinite(actual) & np.isfinite(desired)
+    if not np.all(equal | finite):
+        return False
+    # Compare only the finite pairs; equal infinities and NaNs were settled above.
+    actual_finite = np.where(finite, actual, 0.0)
+    desired_finite = np.where(finite, desired, 0.0)
+    magnitude = np.maximum(np.abs(actual_finite), np.abs(desired_finite))
+    scale = magnitude.max(axis=0) if actual.ndim >= 2 else magnitude.max(initial=0.0)
+    difference = np.abs(actual_finite - desired_finite)
+    return bool(np.all(equal | (difference <= rtol * scale)))
+
+
+def split_into_batches(run_count: int, worker_count: int) -> List[range]:
+    """Consecutive run-index ranges for progress reporting, each with at least one run per worker.
+
+    At most MAX_PROGRESS_BATCHES batches, with sizes that differ by at most one.
+    A batch smaller than the worker pool would leave workers idle and make
+    them start one batch at a time instead of together.
+    """
+    if run_count <= 0:
+        return []
+    batch_count = max(1, min(MAX_PROGRESS_BATCHES, run_count // max(1, worker_count)))
+    base_size, larger_batches = divmod(run_count, batch_count)
+    batches = []
+    start = 0
+    for batch_index in range(batch_count):
+        stop = start + base_size + (1 if batch_index < larger_batches else 0)
+        batches.append(range(start, stop))
+        start = stop
+    return batches
+
+
+def default_parallel_backend() -> str:
+    """The worker pool of a parallel simulation that names none.
+
+    joblib, except in a standalone build, where joblib cannot start workers
+    and the standard library's process pool takes its place.
+    """
+    return JOBLIB_BACKEND if joblib_workers_supported() else PROCESS_POOL_BACKEND
+
+
+def run_in_process_pool(
+    run_parameters: List[tuple],
+    worker_count: int,
+    progress_callback: Optional[callable] = None,
+) -> List[RunResult]:
+    """Run each set of run_single_simulation arguments in a pool of worker processes.
+
+    The workers start with the 'spawn' method on every platform, because a
+    forked copy of the GUI process would inherit its threads. A standalone
+    build calls multiprocessing.freeze_support() first thing in its entry
+    script, so that each worker it spawns runs simulations instead of the
+    application. As in the joblib path, the progress callback reports after
+    each batch; an exception it raises (the GUI's Stop raises
+    InterruptedError) propagates once the workers have exited.
+
+    Returns
+    -------
+    List[RunResult]
+        One result per set of arguments, in the same order.
+    """
+    total_runs = len(run_parameters)
+    if sys.platform == 'win32':
+        worker_count = min(worker_count, MAX_WINDOWS_POOL_WORKERS)
+    worker_count = max(1, min(worker_count, total_runs))
+
+    results = []
+    with ProcessPoolExecutor(max_workers=worker_count, mp_context=mp.get_context('spawn')) as executor:
+        for batch in split_into_batches(total_runs, worker_count):
+            # Several runs per message to a worker, and still several
+            # messages per worker, so that workers that finish early take more.
+            chunk_size = max(1, len(batch) // (4 * worker_count))
+            results.extend(executor.map(
+                _run_single_simulation_from_arguments,
+                (run_parameters[run_index] for run_index in batch),
+                chunksize=chunk_size,
+            ))
+
+            if progress_callback:
+                progress_callback(batch.stop, total_runs)
+
+    return results
+
+
+def _run_single_simulation_from_arguments(arguments: tuple) -> RunResult:
+    """run_single_simulation for one argument tuple; a pool worker can unpickle it by name."""
+    return run_single_simulation(*arguments)
+

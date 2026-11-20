@@ -1,293 +1,192 @@
 """
 Result dataclasses for DICE simulations.
 
-This module defines dataclasses for organizing simulation results,
-including individual run results and aggregated statistics.
+This module defines dataclasses for organizing simulation results: the
+result of each run and the collected output of a Monte Carlo simulation.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field, fields
+from typing import Optional, List, Any, Tuple
 import numpy as np
-import pandas as pd
 
-
-@dataclass
-class DiffusionFitResult:
-    """
-    Results from fitting MSD vs time to extract diffusion coefficient.
-    
-    Attributes
-    ----------
-    slope : float
-        Slope of the linear fit (2*D in 1D).
-    slope_error : float
-        Standard error of the slope.
-    intercept : float
-        Y-intercept of the linear fit.
-    intercept_error : float
-        Standard error of the intercept.
-    r_squared : float
-        Coefficient of determination.
-    diffusion_coefficient : float
-        Calculated diffusion coefficient (slope/2).
-    method : str
-        Fitting method used ('OLS' or 'WLS').
-    """
-    slope: float
-    slope_error: float
-    intercept: float
-    intercept_error: float
-    r_squared: float
-    diffusion_coefficient: float
-    method: str = 'OLS'
-    
-    @property
-    def relative_error(self) -> float:
-        """Calculate relative error of the slope."""
-        if self.slope != 0:
-            return abs(self.slope_error / self.slope)
-        return float('inf')
+from .estimators import DEFAULT_ESTIMATOR_KEYS, SlopeFit
+from .parameters import NoiseRange
 
 
 @dataclass
 class RunResult:
     """
     Results from a single Monte Carlo simulation run.
-    
+
+    Each estimator in dice.models.estimators stores its SlopeFit in four
+    fields named after its key: ``{key}_slope``, ``{key}_slope_stderr``,
+    ``{key}_intercept`` and ``{key}_intercept_stderr``, all None when it
+    produced no fit. Code that handles any estimator reads and writes them
+    through slope_fit() and set_slope_fit().
+
     Attributes
     ----------
-    run_number : int
+    run_id : int
         Identifier for this run.
-    nominal_diffusion : float
+    nominal_diffusion_coefficient : float
         Input diffusion coefficient.
     nominal_lifetime : float
         Input lifetime.
     nominal_diffusion_length : float
         Input diffusion length.
+    nominal_sigma2_0 : float
+        Input initial variance.
     noise_sigma : float
         Noise standard deviation used.
-    cnr_estimate : float
-        Estimated contrast-to-noise ratio.
-    sigma2_t : np.ndarray
+    cnr_0_estimate : float
+        Estimated contrast-to-noise ratio at t=0.
+    estimated_sigma2_0 : float, optional
+        Estimated initial variance from fitting.
+    ols_slope : float, optional
+        OLS fit slope (2*D).
+    ols_slope_stderr : float, optional
+        Standard error of OLS slope.
+    ols_intercept : float, optional
+        OLS fit intercept.
+    ols_intercept_stderr : float, optional
+        Standard error of OLS intercept.
+    wls_slope : float, optional
+        WLS fit slope (2*D).
+    wls_slope_stderr : float, optional
+        Standard error of WLS slope.
+    wls_intercept : float, optional
+        WLS fit intercept.
+    wls_intercept_stderr : float, optional
+        Standard error of WLS intercept.
+    nominal_profiles : np.ndarray, optional
+        Nominal profile data if retained.
+    noisy_profiles : np.ndarray, optional
+        Noisy profile data if retained.
+    fitted_sigma2_t : np.ndarray, optional
         Fitted variance values at each time point.
-    msd_t : np.ndarray
-        Mean squared displacement at each time point.
-    ols_fit : DiffusionFitResult
-        Ordinary least squares fit result.
-    wls_fit : Optional[DiffusionFitResult]
-        Weighted least squares fit result.
-    profiles : Optional[Dict]
-        Raw profile data if retained.
+    fitted_sigma2_stderrs : np.ndarray, optional
+        Standard errors of fitted variances.
+    weights : np.ndarray, optional
+        Weights used in WLS fitting.
     """
-    run_number: int
-    nominal_diffusion: float
+    # Core identifier
+    run_id: int
+
+    # Nominal physics parameters
+    nominal_diffusion_coefficient: float
     nominal_lifetime: float
     nominal_diffusion_length: float
+    nominal_sigma2_0: float
+
+    # Noise and CNR
     noise_sigma: float
-    cnr_estimate: float
-    sigma2_t: np.ndarray
-    msd_t: np.ndarray
-    ols_fit: DiffusionFitResult
-    wls_fit: Optional[DiffusionFitResult] = None
-    profiles: Optional[Dict] = None
-    
+    cnr_0_estimate: float
+
+    # Estimated values
+    estimated_sigma2_0: Optional[float] = None
+
+    # OLS fit results
+    ols_slope: Optional[float] = None
+    ols_slope_stderr: Optional[float] = None
+    ols_intercept: Optional[float] = None
+    ols_intercept_stderr: Optional[float] = None
+
+    # WLS fit results
+    wls_slope: Optional[float] = None
+    wls_slope_stderr: Optional[float] = None
+    wls_intercept: Optional[float] = None
+    wls_intercept_stderr: Optional[float] = None
+
+    # Optional profile data
+    nominal_profiles: Optional[np.ndarray] = None
+    noisy_profiles: Optional[np.ndarray] = None
+    fitted_sigma2_t: Optional[np.ndarray] = None
+    fitted_sigma2_stderrs: Optional[np.ndarray] = None
+    weights: Optional[np.ndarray] = None
+
+    def slope_fit(self, key: str) -> Optional[SlopeFit]:
+        """Estimator `key`'s fit for this run, or None if it produced none."""
+        names = _slope_fit_field_names(key)
+        if getattr(self, names[0]) is None:
+            return None
+        return SlopeFit(*(getattr(self, name) for name in names))
+
+    def set_slope_fit(self, key: str, fit: Optional[SlopeFit]) -> None:
+        """Store `fit` in estimator `key`'s fields; None clears them."""
+        for name, slope_fit_field in zip(_slope_fit_field_names(key), fields(SlopeFit)):
+            setattr(self, name, None if fit is None else getattr(fit, slope_fit_field.name))
+
+    def accuracy(self, key: str) -> float:
+        """Estimator `key`'s D estimate (slope / 2) over the nominal D; NaN when absent."""
+        fit = self.slope_fit(key)
+        if fit is not None and self.nominal_diffusion_coefficient > 0:
+            return (fit.slope / 2) / self.nominal_diffusion_coefficient
+        return float('nan')
+
     @property
     def ols_accuracy(self) -> float:
         """Calculate OLS estimate accuracy relative to nominal."""
-        if self.nominal_diffusion > 0:
-            return self.ols_fit.diffusion_coefficient / self.nominal_diffusion
-        return float('nan')
-    
+        return self.accuracy('ols')
+
     @property
     def wls_accuracy(self) -> float:
         """Calculate WLS estimate accuracy relative to nominal."""
-        if self.wls_fit and self.nominal_diffusion > 0:
-            return self.wls_fit.diffusion_coefficient / self.nominal_diffusion
-        return float('nan')
+        return self.accuracy('wls')
+
+
+def _slope_fit_field_names(key: str) -> Tuple[str, ...]:
+    """
+    The RunResult fields that hold estimator `key`'s SlopeFit, in SlopeFit field order.
+
+    Raises
+    ------
+    AttributeError
+        If RunResult has no such fields, so that a misspelled key cannot
+        create new attributes or read as "no fit".
+    """
+    names = tuple(f'{key}_{slope_fit_field.name}' for slope_fit_field in fields(SlopeFit))
+    missing = [name for name in names if name not in RunResult.__dataclass_fields__]
+    if missing:
+        raise AttributeError(f"RunResult has no fields {missing} for estimator {key!r}")
+    return names
 
 
 @dataclass
-class StatisticalAnalysis:
+class MonteCarloOutput:
     """
-    Statistical analysis of simulation results.
-    
+    Raw output from Monte Carlo simulation runs.
+
+    Contains the direct results from run_monte_carlo_simulation() before
+    any statistical analysis is performed.
+
     Attributes
     ----------
-    proximity_level : float
-        The proximity level used for analysis (e.g., 0.1 for ±10%).
-    fraction_within_proximity : float
-        Fraction of estimates within proximity of nominal.
-    mean_estimate : float
-        Mean of all diffusion estimates.
-    median_estimate : float
-        Median of all diffusion estimates.
-    std_estimate : float
-        Standard deviation of all diffusion estimates.
-    mean_relative_error : float
-        Mean of D_est/D_nom ratios.
-    percentiles : Dict[int, float]
-        Key percentiles of the distribution.
-    """
-    proximity_level: float
-    fraction_within_proximity: float
-    mean_estimate: float
-    median_estimate: float
-    std_estimate: float
-    mean_relative_error: float
-    percentiles: Dict[int, float] = field(default_factory=dict)
-    
-    def __post_init__(self):
-        # Add default percentiles if not provided
-        if not self.percentiles:
-            self.percentiles = {}
-    
-    def summary_string(self) -> str:
-        """Generate a text summary of the analysis."""
-        lines = [
-            f"Statistical Analysis Summary",
-            f"=" * 40,
-            f"Proximity Level: ±{self.proximity_level*100:.1f}%",
-            f"Fraction Within Proximity: {self.fraction_within_proximity:.3f}",
-            f"",
-            f"Diffusion Coefficient Estimates:",
-            f"  Mean: {self.mean_estimate:.6e}",
-            f"  Median: {self.median_estimate:.6e}",
-            f"  Std Dev: {self.std_estimate:.6e}",
-            f"  Mean Relative Error: {self.mean_relative_error:.3f}",
-        ]
-        
-        if self.percentiles:
-            lines.append("")
-            lines.append("Percentiles:")
-            for p, val in sorted(self.percentiles.items()):
-                lines.append(f"  {p}th: {val:.6e}")
-        
-        return "\n".join(lines)
-
-
-@dataclass
-class SimulationResults:
-    """
-    Complete results from a DICE simulation.
-    
-    Attributes
-    ----------
-    parameters : Dict[str, Any]
-        Input parameters used for the simulation.
+    parameters : Any
+        Simulation parameters object (SimulationParameters or None for CSV-loaded data).
     run_results : List[RunResult]
         Individual results from each Monte Carlo run.
-    analysis : StatisticalAnalysis
-        Statistical analysis of all runs.
-    dataframe : pd.DataFrame
-        Collated results in DataFrame format.
-    filename_slug : str
-        Base filename for output files.
+    num_runs : int
+        Total number of simulation runs completed.
+    noise_values : List[float]
+        Noise sigma values used in the simulation: the fixed noise levels,
+        each used for the same number of runs, or, with noise_range, one
+        value for each run, in run order.
+    estimator_keys : Tuple[str, ...]
+        Keys of the estimators that ran, as in dice.models.estimators. The
+        analysis reports each of them, even one whose every fit failed.
+    noise_range : NoiseRange, optional
+        The range from which each run drew its own noise sigma; None when
+        the runs used fixed noise levels.
     """
-    parameters: Dict[str, Any]
+    parameters: Any
     run_results: List[RunResult]
-    analysis: StatisticalAnalysis
-    dataframe: pd.DataFrame
-    filename_slug: str
-    
-    def __post_init__(self):
-        # Ensure consistency
-        if len(self.run_results) == 0:
-            raise ValueError("No run results provided")
-        
-        # Create dataframe if not provided
-        if self.dataframe is None:
-            self.dataframe = self._create_dataframe()
-    
-    def _create_dataframe(self) -> pd.DataFrame:
-        """Create a DataFrame from run results."""
-        data = []
-        for run in self.run_results:
-            row = {
-                'run_number': run.run_number,
-                'nominal_diffusion': run.nominal_diffusion,
-                'nominal_lifetime': run.nominal_lifetime,
-                'nominal_diffusion_length': run.nominal_diffusion_length,
-                'noise_sigma': run.noise_sigma,
-                'cnr_estimate': run.cnr_estimate,
-                'ols_diffusion': run.ols_fit.diffusion_coefficient,
-                'ols_slope': run.ols_fit.slope,
-                'ols_slope_error': run.ols_fit.slope_error,
-                'ols_intercept': run.ols_fit.intercept,
-                'ols_r_squared': run.ols_fit.r_squared,
-                'ols_accuracy': run.ols_accuracy,
-            }
-            
-            if run.wls_fit:
-                row.update({
-                    'wls_diffusion': run.wls_fit.diffusion_coefficient,
-                    'wls_slope': run.wls_fit.slope,
-                    'wls_slope_error': run.wls_fit.slope_error,
-                    'wls_intercept': run.wls_fit.intercept,
-                    'wls_r_squared': run.wls_fit.r_squared,
-                    'wls_accuracy': run.wls_accuracy,
-                })
-            
-            data.append(row)
-        
-        return pd.DataFrame(data)
-    
-    def save_csv(self, filepath: Optional[str] = None):
-        """Save results to CSV file."""
-        if filepath is None:
-            filepath = f"{self.filename_slug}_results.csv"
-        self.dataframe.to_csv(filepath, index=False)
-    
-    def save_summary(self, filepath: Optional[str] = None):
-        """Save summary to text file."""
-        if filepath is None:
-            filepath = f"{self.filename_slug}_summary.txt"
-        
-        with open(filepath, 'w') as f:
-            f.write(self.analysis.summary_string())
-            f.write("\n\n")
-            f.write(f"Total runs: {len(self.run_results)}\n")
-            f.write(f"Output files: {self.filename_slug}_*\n")
-    
-    def filter_by_cnr(self, min_cnr: float = None, 
-                     max_cnr: float = None) -> 'SimulationResults':
-        """
-        Filter results by CNR range.
-        
-        Parameters
-        ----------
-        min_cnr : float, optional
-            Minimum CNR value.
-        max_cnr : float, optional
-            Maximum CNR value.
-        
-        Returns
-        -------
-        SimulationResults
-            New SimulationResults object with filtered data.
-        """
-        mask = np.ones(len(self.run_results), dtype=bool)
-        
-        if min_cnr is not None:
-            cnrs = [run.cnr_estimate for run in self.run_results]
-            mask &= np.array(cnrs) >= min_cnr
-        
-        if max_cnr is not None:
-            cnrs = [run.cnr_estimate for run in self.run_results]
-            mask &= np.array(cnrs) <= max_cnr
-        
-        filtered_runs = [run for i, run in enumerate(self.run_results) if mask[i]]
-        
-        # Recalculate analysis for filtered data
-        # This would need the analysis calculation logic
-        # For now, return with same analysis
-        return SimulationResults(
-            parameters=self.parameters,
-            run_results=filtered_runs,
-            analysis=self.analysis,  # Should recalculate
-            dataframe=self.dataframe[mask],
-            filename_slug=self.filename_slug + "_filtered"
-        )
+    num_runs: int
+    noise_values: List[float] = field(default_factory=list)
+    estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
+    noise_range: Optional[NoiseRange] = None
 
-
-# Alias for compatibility
-SimulationResult = SimulationResults
+    def d_estimates(self, key: str) -> np.ndarray:
+        """Estimator `key`'s D estimates (slope / 2) of the runs that have a fit, in run order."""
+        _slope_fit_field_names(key)  # reject an unknown key even when there are no runs
+        return np.array([fit.slope / 2 for run in self.run_results
+                         if (fit := run.slope_fit(key)) is not None])

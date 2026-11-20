@@ -5,55 +5,116 @@ This module defines dataclasses that organize and validate simulation parameters
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Union, List, Literal
+from typing import Optional, Union, List, Literal, Dict, Any
 import numpy as np
+
+
+@dataclass
+class OutputUnitPreferences:
+    """
+    Units for output display.
+
+    When a field is None, the output uses the global simulation unit or
+    the default output convention (cm^2/s for diffusion coefficients).
+
+    Attributes
+    ----------
+    length : str, optional
+        Length unit for output display.
+    time : str, optional
+        Time unit for output display.
+    diffusion_length : str, optional
+        Length unit for diffusion coefficient output (defaults to 'centimeter').
+    diffusion_time : str, optional
+        Time unit for diffusion coefficient output (defaults to 'second').
+    """
+    length: Optional[str] = None
+    time: Optional[str] = None
+    diffusion_length: Optional[str] = None
+    diffusion_time: Optional[str] = None
 
 
 @dataclass
 class GaussianParameters:
     """
     Parameters defining the initial Gaussian profile.
-    
+
     Attributes
     ----------
-    amplitude : float
+    amplitude_0 : float
         Initial amplitude of the Gaussian (typically 1.0).
-    sigma2 : float
-        Initial variance (sigma^2) of the Gaussian.
-    mu : float
+    sigma2_0 : float
+        Initial variance (sigma^2) of the Gaussian at t=0.
+    mu_0 : float
         Mean position of the Gaussian (typically 0.0).
     """
-    amplitude: float = 1.0
-    sigma2: float = 1.0
-    mu: float = 0.0
-    
+    amplitude_0: float = 1.0
+    sigma2_0: float = 1.0
+    mu_0: float = 0.0
+
     def __post_init__(self):
-        if self.amplitude < 0:
+        if self.amplitude_0 < 0:
             raise ValueError("Amplitude must be non-negative")
-        if self.sigma2 <= 0:
-            raise ValueError("Variance (sigma2) must be positive")
-    
+        if self.sigma2_0 <= 0:
+            raise ValueError("Variance (sigma2_0) must be positive")
+
     @classmethod
-    def from_fwhm(cls, fwhm: float, amplitude: float = 1.0, mu: float = 0.0):
+    def from_fwhm(cls, fwhm: float, amplitude_0: float = 1.0, mu_0: float = 0.0):
         """Create from FWHM instead of sigma^2."""
         from ..utils.converters import fwhm_to_sigma2
-        return cls(amplitude=amplitude, sigma2=fwhm_to_sigma2(fwhm), mu=mu)
-    
+        return cls(amplitude_0=amplitude_0, sigma2_0=fwhm_to_sigma2(fwhm), mu_0=mu_0)
+
     @classmethod
-    def from_sigma(cls, sigma: float, amplitude: float = 1.0, mu: float = 0.0):
+    def from_sigma(cls, sigma: float, amplitude_0: float = 1.0, mu_0: float = 0.0):
         """Create from sigma instead of sigma^2."""
-        return cls(amplitude=amplitude, sigma2=sigma**2, mu=mu)
-    
+        return cls(amplitude_0=amplitude_0, sigma2_0=sigma**2, mu_0=mu_0)
+
     @property
     def fwhm(self) -> float:
         """Get FWHM from sigma^2."""
         from ..utils.converters import sigma2_to_fwhm
-        return sigma2_to_fwhm(self.sigma2)
-    
+        return sigma2_to_fwhm(self.sigma2_0)
+
     @property
     def sigma(self) -> float:
         """Get sigma from sigma^2."""
-        return np.sqrt(self.sigma2)
+        return np.sqrt(self.sigma2_0)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'GaussianParameters':
+        """
+        Create GaussianParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary. Can contain keys in either
+            legacy format (e.g., 'sigma^2_0') or canonical format.
+
+        Returns
+        -------
+        GaussianParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        # Handle sigma2 from various sources
+        if 'sigma2_0' in normalized:
+            sigma2 = normalized['sigma2_0']
+        elif 'sigma_0' in normalized:
+            sigma2 = normalized['sigma_0'] ** 2
+        elif 'fwhm_0' in normalized:
+            from ..utils.converters import fwhm_to_sigma2
+            sigma2 = fwhm_to_sigma2(normalized['fwhm_0'])
+        else:
+            sigma2 = 1.0
+
+        return cls(
+            amplitude_0=normalized.get('amplitude_0', 1.0),
+            sigma2_0=sigma2,
+            mu_0=normalized.get('mu_0', 0.0)
+        )
 
 
 @dataclass
@@ -102,6 +163,88 @@ class NoiseParameters:
             if self.range[0] >= self.range[1]:
                 raise ValueError("Range min must be less than max")
 
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'NoiseParameters':
+        """
+        Create NoiseParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with noise configuration.
+
+        Returns
+        -------
+        NoiseParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        if 'noise_value' in normalized:
+            return cls(mode='single', value=normalized['noise_value'])
+        elif 'estimate_noise_from_data' in normalized:
+            return cls(mode='estimate', data_file=normalized['estimate_noise_from_data'])
+        elif 'noise_range_reciprocal' in normalized:
+            range_val = normalized['noise_range_reciprocal']
+            if not isinstance(range_val, (list, tuple)) or len(range_val) < 2:
+                raise ValueError(
+                    f"noise_range_reciprocal must be a list or tuple with at least "
+                    f"2 elements, got: {range_val!r}"
+                )
+            return cls(mode='range', range=tuple(range_val[:2]),
+                       num_values=int(range_val[2]) if len(range_val) > 2 else 1)
+        elif 'noise_range_reciprocal_log' in normalized:
+            range_val = normalized['noise_range_reciprocal_log']
+            if not isinstance(range_val, (list, tuple)) or len(range_val) < 2:
+                raise ValueError(
+                    f"noise_range_reciprocal_log must be a list or tuple with at "
+                    f"least 2 elements, got: {range_val!r}"
+                )
+            return cls(mode='range', range=tuple(range_val[:2]),
+                       num_values=int(range_val[2]) if len(range_val) > 2 else 1,
+                       logarithmic=True)
+        else:
+            # Default to single mode with default value
+            return cls(mode='single', value=0.01)
+
+
+@dataclass(frozen=True)
+class NoiseRange:
+    """
+    Range of noise standard deviations from which each run draws its own value.
+
+    The reciprocal 1/sigma, which is the initial CNR for an amplitude of 1, is
+    uniformly distributed between 1/high and 1/low. With logarithmic=True,
+    its base-10 logarithm is uniformly distributed instead.
+
+    Attributes
+    ----------
+    low : float
+        Smallest noise standard deviation (the highest CNR).
+    high : float
+        Largest noise standard deviation (the lowest CNR).
+    logarithmic : bool
+        Whether log10(1/sigma), rather than 1/sigma, is uniformly distributed.
+
+    Raises
+    ------
+    ValueError
+        If a bound is not a positive, finite number, or low is not less than high.
+    """
+    low: float
+    high: float
+    logarithmic: bool = False
+
+    def __post_init__(self):
+        bounds = [self.low, self.high]
+        if not all(np.isfinite(bound) and bound > 0 for bound in bounds):
+            raise ValueError(f"Invalid noise range {bounds}. Both values must be positive and finite.")
+        if self.low >= self.high:
+            raise ValueError(
+                f"Invalid noise range {bounds}. The first value (low) must be less than the second (high)."
+            )
+
 
 @dataclass
 class SpatialParameters:
@@ -136,6 +279,30 @@ class SpatialParameters:
         """Generate the spatial axis array."""
         from ..utils.axes import make_x_axis
         return make_x_axis(self.width, self.pixels, self.center)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'SpatialParameters':
+        """
+        Create SpatialParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with spatial axis configuration.
+
+        Returns
+        -------
+        SpatialParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        return cls(
+            width=normalized['spatial_width'],
+            pixels=int(normalized['pixel_width']),
+            center=normalized.get('mu_0', 0.0)
+        )
 
 
 @dataclass
@@ -186,6 +353,37 @@ class TemporalParameters:
             from ..utils.axes import make_time_series
             return make_time_series(self.series)
 
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'TemporalParameters':
+        """
+        Create TemporalParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with temporal axis configuration.
+
+        Returns
+        -------
+        TemporalParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        if 'time_series' in normalized:
+            return cls(mode='series', series=np.asarray(normalized['time_series']))
+        elif 'time_range' in normalized:
+            time_range = normalized['time_range']
+            return cls(
+                mode='range',
+                start=time_range[0],
+                end=time_range[1],
+                frames=int(time_range[2])
+            )
+        else:
+            raise ValueError("Either 'time_series' or 'time_range' must be specified")
+
 
 @dataclass
 class OutputParameters:
@@ -224,9 +422,11 @@ class OutputParameters:
     retain_profiles: bool = False
     
     def __post_init__(self):
-        valid_image_types = ['png', 'svg', 'jpg', 'tif', 'pdf']
-        if self.image_type not in valid_image_types:
-            raise ValueError(f"Image type must be one of {valid_image_types}")
+        # Same rule as the run-time check. The common types skip the lookup,
+        # which imports matplotlib, so constructing parameters stays light.
+        if str(self.image_type).lower() not in ('png', 'svg', 'pdf', 'jpg', 'jpeg', 'tif', 'tiff'):
+            from ..visualization.histograms import validate_image_type
+            validate_image_type(self.image_type)
         
         if self.image_width <= 0 or self.image_height <= 0:
             raise ValueError("Image dimensions must be positive")
@@ -236,6 +436,36 @@ class OutputParameters:
         
         if self.num_bins <= 0:
             raise ValueError("Number of bins must be positive")
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'OutputParameters':
+        """
+        Create OutputParameters from legacy parameter dictionary.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with output configuration.
+
+        Returns
+        -------
+        OutputParameters
+            New instance with values from the dictionary.
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        return cls(
+            filename_slug=normalized.get('filename_slug', 'dice_output'),
+            image_type=normalized.get('image_type', 'png'),
+            image_width=normalized.get('image_width', 15.0),
+            image_height=normalized.get('image_height', 10.0),
+            image_dpi=normalized.get('image_dpi', 300),
+            font_size=normalized.get('image_font_size', 12),
+            num_bins=normalized.get('image_numbins', 50),
+            x_limits=normalized.get('image_x_lim'),
+            retain_profiles=normalized.get('retain_profile_data', False)
+        )
 
 
 @dataclass
@@ -261,8 +491,6 @@ class SimulationParameters:
         Temporal axis parameters.
     output : OutputParameters
         Output and visualization parameters.
-    proximity_level : float
-        Proximity level for accuracy assessment (e.g., 0.1 for ±10%).
     length_unit : str
         Unit of length (e.g., 'micrometer').
     time_unit : str
@@ -278,11 +506,11 @@ class SimulationParameters:
     spatial: SpatialParameters
     temporal: TemporalParameters
     output: OutputParameters = field(default_factory=OutputParameters)
-    proximity_level: float = 0.1
     length_unit: str = "micrometer"
     time_unit: str = "nanosecond"
     multiprocessing: bool = True
-    
+    output_units: OutputUnitPreferences = field(default_factory=OutputUnitPreferences)
+
     def __post_init__(self):
         if self.num_runs <= 0:
             raise ValueError("Number of runs must be positive")
@@ -290,20 +518,19 @@ class SimulationParameters:
             raise ValueError("Diffusion coefficient must be non-negative")
         if self.lifetime < 0:
             raise ValueError("Lifetime must be non-negative")
-        if not 0 < self.proximity_level < 1:
-            raise ValueError("Proximity level must be between 0 and 1")
     
     @property
     def diffusion_length(self) -> float:
-        """Calculate the diffusion length √(D*τ)."""
-        return np.sqrt(self.diffusion_coefficient * self.lifetime)
+        """Calculate the diffusion length √(D*τ); infinite for τ = 0 (no decay)."""
+        from ..core.diffusion import calculate_diffusion_length
+        return calculate_diffusion_length(self.diffusion_coefficient, self.lifetime)
     
     @classmethod
-    def from_diffusion_length(cls, diffusion_length: float, 
+    def from_diffusion_length(cls, diffusion_length: float,
                              lifetime: float, **kwargs):
         """
         Create parameters from diffusion length instead of coefficient.
-        
+
         Parameters
         ----------
         diffusion_length : float
@@ -315,3 +542,88 @@ class SimulationParameters:
         """
         diff_coeff = (diffusion_length ** 2) / lifetime if lifetime > 0 else 0
         return cls(diffusion_coefficient=diff_coeff, lifetime=lifetime, **kwargs)
+
+    @classmethod
+    def from_legacy(cls, params: Dict[str, Any]) -> 'SimulationParameters':
+        """
+        Create SimulationParameters from legacy dictionary format.
+
+        This method handles all legacy key naming conventions including
+        space-separated keys, special characters, and alternative names.
+
+        Parameters
+        ----------
+        params : dict
+            Legacy parameters dictionary with any mix of legacy and
+            canonical key formats.
+
+        Returns
+        -------
+        SimulationParameters
+            New instance with values from the dictionary.
+
+        Examples
+        --------
+        >>> params = {
+        ...     'number of runs': 100,
+        ...     'nominal diffusion length': 1.0,
+        ...     'sigma^2_0': 1.0,
+        ...     'amplitude_0': 1.0,
+        ...     'mean_0': 0.0,
+        ...     'spatial width': 10.0,
+        ...     'pixel width': 100,
+        ...     'time range': (0, 5, 6),
+        ...     'noise value': 0.01
+        ... }
+        >>> sim_params = SimulationParameters.from_legacy(params)
+        """
+        from .parameter_keys import normalize_parameters
+        normalized = normalize_parameters(params)
+
+        # Build nested parameter objects
+        gaussian = GaussianParameters.from_legacy(normalized)
+        noise = NoiseParameters.from_legacy(normalized)
+        spatial = SpatialParameters.from_legacy(normalized)
+        temporal = TemporalParameters.from_legacy(normalized)
+        output = OutputParameters.from_legacy(normalized)
+
+        # Extract common parameters
+        num_runs = normalized['number_of_runs']
+        length_unit = normalized.get('length_unit', 'micrometer')
+        time_unit = normalized.get('time_unit', 'nanosecond')
+        multiprocessing = normalized.get('multiprocessing', True)
+
+        # Extract diffusion parameters: the coefficient and lifetime when both are
+        # given (the parser always adds the derived length too, which is infinite
+        # for a lifetime of 0), otherwise derive them from the diffusion length.
+        if not ('diffusion_coefficient' in normalized and 'lifetime' in normalized):
+            # Derive coefficient from diffusion length
+            # Need lifetime - use default if not provided
+            lifetime = normalized.get('lifetime', 1.0)
+            return cls.from_diffusion_length(
+                diffusion_length=normalized['diffusion_length'],
+                lifetime=lifetime,
+                num_runs=num_runs,
+                gaussian=gaussian,
+                noise=noise,
+                spatial=spatial,
+                temporal=temporal,
+                output=output,
+                length_unit=length_unit,
+                time_unit=time_unit,
+                multiprocessing=multiprocessing
+            )
+        else:
+            return cls(
+                num_runs=num_runs,
+                diffusion_coefficient=normalized['diffusion_coefficient'],
+                lifetime=normalized['lifetime'],
+                gaussian=gaussian,
+                noise=noise,
+                spatial=spatial,
+                temporal=temporal,
+                output=output,
+                length_unit=length_unit,
+                time_unit=time_unit,
+                multiprocessing=multiprocessing
+            )

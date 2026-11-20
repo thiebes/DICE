@@ -1,0 +1,80 @@
+##################################################################
+# DICE Parameter Configuration
+# GitHub Repository: https://github.com/thiebes/DICE
+
+# Instructions:
+# - Modify values in the format: 'setting name': value,
+# - Include the comma at the end of each line.
+# - Comments (text following #) are ignored by the program.
+# - Uncomment a setting by removing the # at the beginning.
+# - Only one option per choice should be active (uncommented).
+# - Save changes before running the program.
+# - For detailed setting explanations, see the README at the GitHub link above.
+##################################################################
+
+{
+    ### Filename ###
+    'filename slug': 'example',  # Prefix for exported data filenames.
+
+    ### Number of runs ###
+    'number of runs': 1000,       # How many iterations of the simulation to run.
+
+    ### Units ###
+    'length unit': 'micrometer',  # Options: 'micrometer', 'angstrom', etc.
+    'time unit': 'nanosecond',    # Options: 'nanosecond', 'picosecond', etc.
+
+    ### Nominal diffusion and lifetime parameters ###
+    # Provide either diffusion length OR both diffusion coefficient and lifetime:
+    'nominal diffusion length': 0.1,
+    # 'nominal diffusion coefficient': 0.01,
+    # 'nominal lifetime (tau)': 1,
+    #
+    # Per-parameter unit overrides (optional):
+    # Each dimensioned parameter can specify its own unit, overriding the
+    # global length/time unit above. When omitted, the global unit applies.
+    # 'diffusion_length_unit': 'nanometer',
+    # 'diffusion_coefficient_length_unit': 'centimeter',
+    # 'diffusion_coefficient_time_unit': 'second',
+    # 'lifetime_unit': 'picosecond',
+
+    ### Initial profile parameters ###
+    # Initial profile width (choose one):
+    'FWHM_0': 1,                  # Full Width at Half Maximum.
+    # 'sigma_0': 0.4032,           # Standard deviation.
+    # 'FWHM_0_unit': 'nanometer',  # Per-parameter unit override for FWHM.
+
+    # Initial amplitude and mean:
+    'amplitude_0': 1,             # Initial amplitude.
+    'mean_0': 0,                  # Initial mean.
+
+    ### Noise parameter ###
+    # Choose one:
+    'noise value': 0.02,           # Standard deviation of noise.
+    # 'estimate noise from data': 'example_profile.csv',  # Path relative to the folder of this file.
+
+    ### Spatial axis parameters ###
+    'spatial width': 5,           # Spatial width across entire x-axis of profiles (units parameterized above).
+    # 'spatial_width_unit': 'nanometer',  # Per-parameter unit override.
+    'pixel width': 100,           # Pixel width across entire x-axis of profiles.
+
+    ### Time axis parameters ###
+    # Choose one:
+    'time range': [0, 1, 10],     # Format: [start, stop, steps].
+    # 'time series': [1,3,5,10,15,25,60,100],
+
+    ### Plot image parameters ###
+    'image type': 'png',         # Options: 'jpg', 'png', 'svg', 'tif'.
+    'image width': 8.5,          # Width in cm. 
+    'image height': 5,           # Height in cm. 
+    'image dpi': 300,            # Resolution in DPI. 
+    'image font size': 8,        # Font size in points.
+    'image tick length': 6,      # Axis tick length in points.
+    'image tick width': 2,       # Axis tick width in points.
+    'image numbins': 35,         # Number of histogram bins.
+    'image x_lim': None,         # X-axis limits. Default if None: 3 sigma.
+
+    ### Performance settings ###
+    'retain profile data': False, # Retaining profile data can be memory-intensive.
+    'multiprocessing': True,      # Enable/disable parallel processing.
+
+}

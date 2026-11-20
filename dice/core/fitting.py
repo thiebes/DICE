@@ -5,6 +5,8 @@ This module provides functions for fitting Gaussian profiles to noisy data
 and performing linear regression on MSD data to extract diffusion coefficients.
 """
 
+import warnings
+
 import numpy as np
 from scipy.optimize import curve_fit
 import statsmodels.api as sm
@@ -56,11 +58,23 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
     fit_dictionary = {
         'sigma^2_t estimates': [],
         'sigma^2_t standard errors': [],
+        'fit_failures': 0,
     }
     
-    # Get x-axis properties
-    xpix = len(x_axis)
+    # Fit on an x-axis centered on the window and in units of its width, and
+    # on each profile divided by its largest absolute value. curve_fit's
+    # convergence tolerances are relative to the whole parameter vector, so in
+    # the simulation's units a small sigma^2 (2e-13 in meters) or amplitude
+    # (1e-5) ended the fit near its initial guess. Scaled, every length unit
+    # and amplitude gives the same fit; sigma^2 and its standard error are
+    # scaled back below.
     xmin, xmax = np.min(x_axis), np.max(x_axis)
+    length_scale = np.abs(xmax - xmin) or 1.0
+    x_fit = (x_axis - (xmin + xmax) / 2) / length_scale
+
+    # Get x-axis properties
+    xpix = len(x_fit)
+    xmin, xmax = np.min(x_fit), np.max(x_fit)
     xwid = np.abs(xmax - xmin)
     
     for this_profile in profiles:
@@ -69,24 +83,39 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         if len(this_profile) != len(x_axis):
             raise ValueError("Profile and x_axis must have the same length")
         
-        # Get index of maximum amplitude
-        max_amp_idx = np.argmax(np.abs(this_profile))
-        
-        # Initial guesses
-        mu0 = x_axis[max_amp_idx]  # Mean at maximum
-        sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
-        a0 = this_profile[max_amp_idx]  # Amplitude guess: max value
-        
+        intensity_scale = np.max(np.abs(this_profile))
+        if not (np.isfinite(intensity_scale) and intensity_scale > 0):
+            intensity_scale = 1.0  # a zero or non-finite profile is fitted as it is
+        this_profile = this_profile / intensity_scale
+
         # Set bounds for mu (central region of the window)
         mu_margin = xwid * 0.3  # Allow mu within central 60% of window
         mu0_min = xmin + mu_margin
         mu0_max = xmax - mu_margin
-        
+
         # Ensure valid mu bounds
         if mu0_min >= mu0_max:
             # Fallback: use full range
             mu0_min = xmin
             mu0_max = xmax
+
+        # Find maximum amplitude within the mu bounds
+        valid_mask = (x_fit >= mu0_min) & (x_fit <= mu0_max)
+        valid_indices = np.where(valid_mask)[0]
+
+        if len(valid_indices) > 0:
+            # Find maximum within valid region
+            valid_profile = this_profile[valid_mask]
+            max_amp_idx_in_valid = np.argmax(np.abs(valid_profile))
+            max_amp_idx = valid_indices[max_amp_idx_in_valid]
+        else:
+            # Fallback: use global maximum
+            max_amp_idx = np.argmax(np.abs(this_profile))
+
+        # Initial guesses
+        mu0 = x_fit[max_amp_idx]  # Mean at maximum within bounds
+        sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
+        a0 = np.abs(this_profile[max_amp_idx])  # Amplitude guess: absolute max value within bounds
         
         # Set bounds for sigma^2
         sigma2_min = (xwid / xpix) ** 2  # Minimum: ~1 pixel width
@@ -108,7 +137,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         try:
             # Perform the fit
             parms, covars = curve_fit(
-                gaussian, x_axis, this_profile,
+                gaussian, x_fit, this_profile,
                 p0=p0,
                 bounds=(bounds_min, bounds_max),
                 maxfev=5000
@@ -128,12 +157,14 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             
         except (RuntimeError, ValueError) as e:
             # Fitting failed - use fallback values
-            print(f"Warning: Gaussian fitting failed: {e}")
+            warnings.warn(f"Gaussian fitting failed: {e}", stacklevel=2)
             sigma2_estimate = sigma2_0
             sigma2_stderr = np.nan
+            fit_dictionary['fit_failures'] += 1
         
-        fit_dictionary['sigma^2_t estimates'].append(sigma2_estimate)
-        fit_dictionary['sigma^2_t standard errors'].append(sigma2_stderr)
+        # Back to the units of x_axis; the profile's scale does not change sigma^2
+        fit_dictionary['sigma^2_t estimates'].append(sigma2_estimate * length_scale ** 2)
+        fit_dictionary['sigma^2_t standard errors'].append(sigma2_stderr * length_scale ** 2)
     
     return fit_dictionary
 
@@ -330,36 +361,47 @@ def diffusion_wls_fit(time_axis: np.ndarray, gaussfit_sigma2_t: np.ndarray,
     }
 
 
-def calculate_fit_weights(sigma2_errors: np.ndarray, 
-                         method: str = 'inverse_variance') -> np.ndarray:
+def calculate_wls_weights(
+    sigma2_values: np.ndarray,
+    sigma2_errors: np.ndarray
+) -> np.ndarray:
     """
     Calculate weights for weighted least squares fitting.
-    
+
+    Weights are calculated as the inverse of squared relative error,
+    which is appropriate for diffusion analysis where MSD grows with time.
+
     Parameters
     ----------
+    sigma2_values : np.ndarray
+        Fitted variance values (MSD measurements).
     sigma2_errors : np.ndarray
-        Standard errors of variance estimates.
-    method : str
-        Weighting method ('inverse_variance' or 'uniform').
-    
+        Standard errors of variance values.
+
     Returns
     -------
     np.ndarray
-        Weights for each data point.
+        Normalized weights for WLS fitting (sum = N).
     """
+    sigma2_values = validate_array_like(sigma2_values, "sigma2_values")
     sigma2_errors = validate_array_like(sigma2_errors, "sigma2_errors")
-    
-    if method == 'inverse_variance':
-        # Weight by inverse of variance (1/sigma^2)
-        # Avoid division by zero
-        safe_errors = np.maximum(sigma2_errors, 1e-10)
-        weights = 1.0 / (safe_errors ** 2)
-        # Normalize
-        weights = weights / np.mean(weights)
-    elif method == 'uniform':
-        # Equal weights
-        weights = np.ones_like(sigma2_errors)
+
+    # Calculate weights as inverse of relative variance
+    weights = np.zeros_like(sigma2_values)
+
+    for i, (sig2, stderr) in enumerate(zip(sigma2_values, sigma2_errors)):
+        if sig2 != 0 and stderr != 0 and not np.isnan(stderr):
+            # Weight = 1 / (relative_variance)^2
+            relative_var = stderr / sig2
+            weights[i] = 1.0 / (relative_var ** 2)
+        else:
+            weights[i] = 0
+
+    # Normalize weights to sum to number of points
+    if np.sum(weights) > 0:
+        weights = weights / np.sum(weights) * len(weights)
     else:
-        raise ValueError(f"Unknown weighting method: {method}")
-    
+        # Fallback to uniform weights if all are zero
+        weights = np.ones_like(sigma2_values)
+
     return weights

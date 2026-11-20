@@ -1,0 +1,322 @@
+name: Build Release
+
+on:
+  release:
+    types: [published]
+  # Pull requests to main build and smoke-test the binaries on all three
+  # operating systems and keep them as workflow artifacts. Only the publish
+  # job uploads to a release, and it runs only for release events.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label for the artifact names (for example, dev)
+        required: false
+        default: dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded pull request builds are cancelled; release builds never are.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Exact interpreter bundled into the binaries. uv downloads it from
+  # python-build-standalone and verifies it against its built-in hashes.
+  PYTHON_VERSION: "3.12.15"
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux builds on the oldest supported Ubuntu runner, so the binary
+        # also runs on older distributions: Ubuntu 22.04 has glibc 2.35, and
+        # the locked PyQt6 wheels need 2.34. macOS builds twice: macos-latest
+        # gives arm64 (Apple silicon) and macos-15-intel gives x86_64 (Intel).
+        os: [windows-latest, ubuntu-22.04, macos-latest, macos-15-intel]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Inputs reach the script through environment variables, never through
+      # expression interpolation, so they cannot inject shell code. The asset
+      # name states the version, platform, and architecture, for example
+      # DICE-2.0.0-macOS-arm64.
+      - name: Determine asset name
+        id: asset
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          case "$EVENT_NAME" in
+            release) version="${RELEASE_TAG#v}" ;;
+            pull_request) version="pr${PR_NUMBER}" ;;
+            *) version="${INPUT_VERSION:-dev}" ;;
+          esac
+          if ! [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Version label '$version' may contain only letters, digits, '.', '_', and '-'"
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = release ]; then
+            package_version=$(sed -n 's/^__version__ = "\([^"]*\)"$/\1/p' dice/__init__.py)
+            if [ "$version" != "$package_version" ]; then
+              echo "::error::Release tag '$RELEASE_TAG' does not match __version__ '$package_version' in dice/__init__.py"
+              exit 1
+            fi
+          fi
+          case "$RUNNER_ARCH" in
+            X64) arch=x86_64 ;;
+            ARM64) arch=arm64 ;;
+            *)
+              echo "::error::Unsupported runner architecture '$RUNNER_ARCH'"
+              exit 1
+              ;;
+          esac
+          echo "name=DICE-${version}-${RUNNER_OS}-${arch}" >> "$GITHUB_OUTPUT"
+
+      # uv is pinned to a version whose SHA-256 setup-uv carries in its known
+      # list, and the cache is off so a release run cannot restore a cache
+      # written by another workflow.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.0"
+          enable-cache: false
+
+      # See ci.yml for the source of this package list. PyInstaller's Qt hooks
+      # import PyQt6 at build time, and the smoke test runs the binary.
+      - name: Install Qt system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libegl1 libdbus-1-3 libfontconfig1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 x11-utils
+
+      - run: uv python install "$PYTHON_VERSION"
+        shell: bash
+
+      # Some tests read the installed distribution (the console entry point)
+      # or run the CLI from another directory, so the tests run against the
+      # project installed as a wheel. The wheel is built with the hash-pinned
+      # backend in .github/build-constraints.txt, so no unpinned build backend
+      # runs in this job; PyInstaller later bundles the source tree.
+      - name: Run tests
+        shell: bash
+        run: |
+          uv sync --locked --no-install-project --extra test --python "$PYTHON_VERSION" --managed-python
+          uv build --wheel --out-dir wheel --python "$PYTHON_VERSION" --managed-python \
+            --build-constraints .github/build-constraints.txt --require-hashes
+          uv pip install --no-deps wheel/dice-*.whl
+          uv run --no-sync python -m pytest --tb=short
+
+      # Sync again without extras so that test packages are removed and not
+      # bundled, then add PyInstaller. The final check fails the build if
+      # that install changed any package pinned in uv.lock.
+      - name: Install build environment
+        shell: bash
+        run: |
+          uv sync --locked --no-install-project --python "$PYTHON_VERSION" --managed-python
+          uv pip install --require-hashes -r .github/pyinstaller-requirements.txt
+          uv sync --locked --no-install-project --inexact --check --python "$PYTHON_VERSION" --managed-python
+
+      - name: Build with PyInstaller
+        run: uv run --no-sync pyinstaller --noconfirm --clean dice-gui.spec
+
+      # One file per platform: the Windows executable; the Linux executable
+      # in a .tar.gz, which keeps its executable bit; and the macOS app
+      # bundle zipped with ditto, which keeps the symbolic links inside the
+      # bundle that zip -r would replace with copies.
+      - name: Package
+        shell: bash
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          mkdir release
+          case "$RUNNER_OS" in
+            Windows) cp dist/DICE.exe "release/${ASSET}.exe" ;;
+            macOS) ditto -c -k --keepParent dist/DICE.app "release/${ASSET}.zip" ;;
+            Linux) tar --owner=0 --group=0 --numeric-owner -czf "release/${ASSET}.tar.gz" -C dist DICE ;;
+          esac
+          ls -l release
+
+      # The tests below run the release asset as a user unpacks it.
+      - name: Unpack
+        id: unpack
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          mkdir smoke
+          if [ "$RUNNER_OS" = macOS ]; then
+            ditto -x -k "release/${ASSET}.zip" smoke
+            app=smoke/DICE.app/Contents/MacOS/DICE
+          else
+            tar -xzf "release/${ASSET}.tar.gz" -C smoke
+            app=smoke/DICE
+          fi
+          if [ ! -x "$app" ]; then
+            echo "::error::$app is missing from the release asset or is not executable"
+            exit 1
+          fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"
+
+      # The self-test simulates the bundled quick_test example serially and in
+      # the process pool that the application's parallel simulations use,
+      # with one seed. It opens no window, prints its report, and exits with
+      # status 0 only if the results agree to within floating-point rounding
+      # and every worker process
+      # it started has ended. It runs before any other start of the
+      # application, so a DICE process left afterwards is one of its workers.
+      - name: Self-test
+        if: runner.os != 'Windows'
+        shell: bash
+        timeout-minutes: 10
+        env:
+          APP: ${{ steps.unpack.outputs.app }}
+        run: |
+          status=0
+          "$APP" --self-test || status=$?
+          # Allow a few seconds for ended processes to disappear.
+          for _ in 1 2 3 4 5; do
+            pgrep -x DICE > /dev/null || break
+            sleep 1
+          done
+          if pgrep -lx DICE; then
+            echo "::error::DICE processes were still running after the self-test"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The self-test failed with status $status"
+            exit 1
+          fi
+
+      # The same self-test on Windows. The windowed executable has no console
+      # of its own, so its report goes to redirected standard output.
+      - name: Self-test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          $proc = Start-Process -FilePath "release\$env:ASSET.exe" -ArgumentList '--self-test' `
+            -RedirectStandardOutput self-test-output.txt -RedirectStandardError self-test-errors.txt `
+            -PassThru -Wait
+          Get-Content self-test-output.txt, self-test-errors.txt
+          # Allow a few seconds for ended processes to disappear.
+          for ($i = 0; $i -lt 5 -and (Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue); $i++) {
+            Start-Sleep -Seconds 1
+          }
+          $remaining = @(Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue)
+          if ($remaining.Count -gt 0) {
+            $remaining | Stop-Process -Force
+            Write-Output "::error::$($remaining.Count) DICE processes were still running after the self-test"
+            exit 1
+          }
+          if ($proc.ExitCode -ne 0) {
+            Write-Output "::error::The self-test failed with exit code $($proc.ExitCode)"
+            exit 1
+          }
+
+      # Start the application with the offscreen Qt platform, and require it
+      # to be running a minute later. A start-up exception ends the process
+      # on Linux and macOS.
+      - name: Smoke test
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          APP: ${{ steps.unpack.outputs.app }}
+        run: |
+          "$APP" > smoke.log 2>&1 &
+          pid=$!
+          sleep 60
+          if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid"
+            wait "$pid" || true
+            cat smoke.log
+            echo "DICE was still running after 60 s"
+          else
+            status=0
+            wait "$pid" || status=$?
+            cat smoke.log
+            echo "::error::DICE exited during start-up with status $status"
+            exit 1
+          fi
+
+      # On Windows the windowed build reports a start-up exception in a
+      # dialog titled "Unhandled exception in script" and keeps running. With
+      # the offscreen Qt platform the application itself opens no visible
+      # window, so any visible window means that dialog.
+      - name: Smoke test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET: ${{ steps.asset.outputs.name }}
+        run: |
+          $proc = Start-Process -FilePath "release\$env:ASSET.exe" -PassThru
+          $null = $proc.Handle  # keeps the exit code readable after exit
+          Start-Sleep -Seconds 60
+          $windows = @(Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue | Where-Object MainWindowTitle)
+          $exited = $proc.HasExited
+          Get-Process -Name $env:ASSET -ErrorAction SilentlyContinue | Stop-Process -Force
+          if ($exited) {
+            Write-Output "::error::$env:ASSET.exe exited during start-up with code $($proc.ExitCode)"
+            exit 1
+          }
+          if ($windows.Count -gt 0) {
+            Write-Output "::error::$env:ASSET.exe opened a window titled '$($windows[0].MainWindowTitle)'"
+            exit 1
+          }
+          Write-Output "$env:ASSET.exe was still running after 60 s with no visible window"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.asset.outputs.name }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 5
+
+  # Separate from the build so that the write token is never present where
+  # project code, its dependencies, or PyInstaller run. It uses the GitHub CLI
+  # preinstalled on the runner instead of a third-party release action.
+  publish:
+    name: Upload to release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: DICE-*
+          path: release
+          merge-multiple: true
+      # SHA256SUMS.txt covers the files as published: for Linux, the .tar.gz
+      # rather than the executable inside it.
+      - name: Upload binaries and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          cd release
+          sha256sum DICE-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          # --clobber lets a rerun of this job replace assets that a failed
+          # attempt uploaded; a rerun uploads the same run's build artifacts.
+          gh release upload "$RELEASE_TAG" DICE-* SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"

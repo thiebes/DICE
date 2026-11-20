@@ -1,0 +1,59 @@
+{
+ "summary": {
+  "total_runs": 2,
+  "nominal_diffusion_coefficient": 0.01,
+  "nominal_lifetime": 1.0,
+  "nominal_diffusion_length": 0.1
+ },
+ "precision": {
+  "5%": {
+   "ols": 0.0,
+   "wls": 0.0
+  },
+  "10%": {
+   "ols": 0.0,
+   "wls": 0.0
+  },
+  "20%": {
+   "ols": 0.0,
+   "wls": 0.0
+  },
+  "50%": {
+   "ols": 0.0,
+   "wls": 0.0
+  }
+ },
+ "accuracy": {
+  "ols": {
+   "mean": NaN,
+   "median": NaN,
+   "std": NaN,
+   "bias": NaN,
+   "relative_bias": NaN,
+   "rmse": NaN,
+   "relative_rmse": NaN
+  },
+  "wls": {
+   "mean": NaN,
+   "median": NaN,
+   "std": NaN,
+   "bias": NaN,
+   "relative_bias": NaN,
+   "rmse": NaN,
+   "relative_rmse": NaN
+  }
+ },
+ "noise_analysis": {},
+ "statistics": {
+  "ols": {
+   "num_successful": 0,
+   "num_failed": 2,
+   "success_rate": 0.0
+  },
+  "wls": {
+   "num_successful": 0,
+   "num_failed": 2,
+   "success_rate": 0.0
+  }
+ }
+}
