@@ -642,10 +642,11 @@ class TestOutputOptions:
         stale.write_bytes(b'from an earlier run')
         params_file = write_quick_test_variant(tmp_path, 'no_plot', {'number of runs': 4})
 
-        with pytest.warns(UserWarning, match='Accuracy histogram could not be written to'):
-            with contextlib.chdir(tmp_path):
-                assert main([str(params_file), '--multiprocessing', '0']) == 0
+        with warnings.catch_warnings(record=True) as caught, contextlib.chdir(tmp_path):
+            warnings.simplefilter('always')
+            assert main([str(params_file), '--multiprocessing', '0']) == 0
 
+        assert any('Accuracy histogram could not be written to' in str(w.message) for w in caught)
         assert 'Accuracy histogram saved to' not in capsys.readouterr().out
         assert not stale.exists()
 
