@@ -23,6 +23,7 @@ import pandas as pd
 import pytest
 
 from dice.cli.main import main
+from seeded_results import assert_seeded_frames_agree
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 QUICK_TEST = EXAMPLES_DIR / 'quick_test.txt'
@@ -206,7 +207,7 @@ class TestOutputDiffusionUnits:
 
 
 class TestSeedReproducibility:
-    """--seed N reproduces the CSV exactly, serially or in parallel; no seed does not.
+    """--seed N reproduces the CSV to within floating-point rounding, serially or in parallel; no seed does not.
 
     Values are compared between runs, never against stored numbers, which
     depend on the numpy, scipy, and fft-cnr versions and on the platform.
@@ -226,7 +227,7 @@ class TestSeedReproducibility:
     def test_same_seed_identical(self, tmp_path_factory):
         first = self._csv(tmp_path_factory.mktemp('a'), {}, '--seed', '3')
         second = self._csv(tmp_path_factory.mktemp('b'), {}, '--seed', '3')
-        pd.testing.assert_frame_equal(first, second, check_exact=True)
+        assert_seeded_frames_agree(first, second)
 
     def test_different_seeds_differ(self, tmp_path_factory):
         first = self._csv(tmp_path_factory.mktemp('a'), {}, '--seed', '3')
@@ -243,13 +244,13 @@ class TestSeedReproducibility:
         serial = self._csv(tmp_path_factory.mktemp('serial'), {}, '--seed', '3')
         parallel = self._csv(tmp_path_factory.mktemp('parallel'), {}, '--seed', '3',
                              '--multiprocessing', '-1')
-        pd.testing.assert_frame_equal(serial, parallel, check_exact=True)
+        assert_seeded_frames_agree(serial, parallel)
 
     def test_noise_range_draw_reproducible(self, tmp_path_factory):
         first = self._csv(tmp_path_factory.mktemp('a'), self.NOISE_RANGE, '--seed', '3')
         second = self._csv(tmp_path_factory.mktemp('b'), self.NOISE_RANGE, '--seed', '3')
         other = self._csv(tmp_path_factory.mktemp('c'), self.NOISE_RANGE, '--seed', '4')
-        pd.testing.assert_frame_equal(first, second, check_exact=True)
+        assert_seeded_frames_agree(first, second)
         assert first['nominal CNR'].iloc[0] != other['nominal CNR'].iloc[0]
         # Each run draws its own noise level.
         assert first['noise standard deviation'].nunique() == self.SEED_RUNS
@@ -269,8 +270,8 @@ class TestSeedReproducibility:
         process_pool = self._csv(tmp_path_factory.mktemp('pool'), self.NOISE_RANGE, '--seed', '3',
                                  '--multiprocessing', '2')
         assert pool_calls == [2]
-        pd.testing.assert_frame_equal(serial, joblib_pool, check_exact=True)
-        pd.testing.assert_frame_equal(serial, process_pool, check_exact=True)
+        assert_seeded_frames_agree(serial, joblib_pool)
+        assert_seeded_frames_agree(serial, process_pool)
 
 
 class TestMultiprocessingFlag:
@@ -319,7 +320,7 @@ class TestRetiredProximityLevel:
         proximity_warnings = [
             w for w in caught if "'proximity level' no longer affects" in str(w.message)]
         assert [w.category for w in proximity_warnings] == [UserWarning]
-        assert plain.csv_file.read_bytes() == retired.csv_file.read_bytes()
+        assert_seeded_frames_agree(retired.read_csv(), plain.read_csv())
         assert plain.read_summary() == retired.read_summary()
 
 

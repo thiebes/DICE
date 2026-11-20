@@ -7,9 +7,9 @@ the process is for before it imports Qt or the GUI:
 - A worker process of a parallel simulation starts the application again;
   multiprocessing.freeze_support() runs the worker and exits.
 - With --self-test, the application simulates the quick_test example serially
-  and in the process pool with one seed, prints whether the results are
-  identical, and exits with status 0 if they are and 1 otherwise. It opens
-  no window.
+  and in the process pool with one seed, prints whether the results agree to
+  within floating-point rounding, and exits with status 0 if they do and 1
+  otherwise. It opens no window.
 - Otherwise it starts the GUI.
 """
 
@@ -63,7 +63,8 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     Returns
     -------
     bool
-        True if the two simulations gave identical results, the progress
+        True if the two simulations agree to within floating-point rounding
+        (dice.analysis.simulation.seeded_results_agree), the progress
         reached every run, no worker process remained afterwards, and, in a
         standalone build, the application's parallel simulations use the
         process pool.
@@ -76,8 +77,10 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     from dice import __version__
     from dice.analysis.simulation import (
         PROCESS_POOL_BACKEND,
+        SEEDED_RESULTS_RTOL,
         default_parallel_backend,
         run_monte_carlo_simulation,
+        seeded_results_agree,
     )
     from dice.io.parameters import open_parameters
     from dice.utils.legacy_compatibility import create_parameters_from_legacy
@@ -120,19 +123,20 @@ def run_self_test(output: Optional[TextIO]) -> bool:
           file=output)
 
     total_runs = len(serial)
-    identical = serial.shape == parallel.shape and np.array_equal(serial, parallel, equal_nan=True)
+    agree = seeded_results_agree(parallel, serial)
     progress_complete = bool(progress) and progress[-1] == (total_runs, total_runs)
     remaining_workers = set(multiprocessing.active_children()) - earlier_children
     application_backend = default_parallel_backend()
     backend_tested = application_backend == PROCESS_POOL_BACKEND or not is_standalone_build()
 
-    print(f"Results identical: {'yes' if identical else 'no'}", file=output)
+    print(f"Results agree to within rounding (relative {SEEDED_RESULTS_RTOL:g}): {'yes' if agree else 'no'}",
+          file=output)
     print(f"Progress reached {total_runs} of {total_runs} runs: {'yes' if progress_complete else 'no'}",
           file=output)
     print(f"Worker processes still running: {len(remaining_workers)}", file=output)
     print(f"Parallel simulations of this application use: {application_backend}", file=output)
 
-    passed = identical and progress_complete and not remaining_workers and backend_tested
+    passed = agree and progress_complete and not remaining_workers and backend_tested
     print(f"Self-test {'passed' if passed else 'failed'}", file=output)
     return passed
 

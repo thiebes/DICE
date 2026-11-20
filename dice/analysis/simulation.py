@@ -35,6 +35,15 @@ PARALLEL_BACKENDS = (JOBLIB_BACKEND, PROCESS_POOL_BACKEND)
 # ProcessPoolExecutor rejects more workers than this on Windows.
 MAX_WINDOWS_POOL_WORKERS = 61
 
+# Two simulations with the same seed draw the same random numbers, and on
+# most platforms their results repeat bit for bit. The macOS wheels of NumPy
+# and SciPy for Intel processors use Apple's Accelerate library, whose
+# least-squares results can differ in the last digit from one call to the
+# next: relative differences up to about 1e-15 were seen in continuous
+# integration. Seeded results are therefore compared with this relative
+# tolerance, far below the change a different seed or different physics makes.
+SEEDED_RESULTS_RTOL = 1e-12
+
 
 def run_single_simulation(
     run_id: int,
@@ -176,8 +185,8 @@ def run_monte_carlo_simulation(
         Function to call with progress updates.
     seed : int or SeedSequence, optional
         Root seed. Each run gets its own child stream, so a seeded simulation
-        gives identical results serially or in parallel. None draws fresh
-        entropy for every run.
+        gives the same results serially or in parallel, to within the rounding
+        that SEEDED_RESULTS_RTOL describes. None draws fresh entropy for every run.
     n_jobs : int
         Number of worker processes when multiprocessing; -1 uses all cores.
     parallel_backend : str, optional
@@ -295,6 +304,45 @@ def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedS
     else:
         root = np.random.SeedSequence(seed)
     return root.spawn(run_count)
+
+
+def seeded_results_agree(actual: Any, desired: Any, rtol: float = SEEDED_RESULTS_RTOL) -> bool:
+    """
+    Whether two sets of seeded simulation results agree to within floating-point rounding.
+
+    Each quantity is compared relative to its largest magnitude: for a 2-D
+    array (runs by quantities) that is the largest magnitude in its column,
+    so a value near zero, such as an intercept, is held to the same standard
+    as the rest of its column, and the comparison does not depend on the units.
+    NaN equals NaN, and infinities must match exactly.
+
+    Parameters
+    ----------
+    actual, desired : array_like
+        Results of the two simulations, of the same shape.
+    rtol : float, optional
+        Largest relative difference that counts as rounding.
+
+    Returns
+    -------
+    bool
+        True if the shapes match and every value agrees.
+    """
+    actual = np.asarray(actual, dtype=float)
+    desired = np.asarray(desired, dtype=float)
+    if actual.shape != desired.shape:
+        return False
+    equal = (actual == desired) | (np.isnan(actual) & np.isnan(desired))
+    finite = np.isfinite(actual) & np.isfinite(desired)
+    if not np.all(equal | finite):
+        return False
+    # Compare only the finite pairs; equal infinities and NaNs were settled above.
+    actual_finite = np.where(finite, actual, 0.0)
+    desired_finite = np.where(finite, desired, 0.0)
+    magnitude = np.maximum(np.abs(actual_finite), np.abs(desired_finite))
+    scale = magnitude.max(axis=0) if actual.ndim >= 2 else magnitude.max(initial=0.0)
+    difference = np.abs(actual_finite - desired_finite)
+    return bool(np.all(equal | (difference <= rtol * scale)))
 
 
 def split_into_batches(run_count: int, worker_count: int) -> List[range]:

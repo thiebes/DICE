@@ -57,7 +57,7 @@ class TestSelfTestRun:
         )
 
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert 'Results identical: yes' in completed.stdout
+        assert 'Results agree to within rounding (relative 1e-12): yes' in completed.stdout
         assert 'Worker processes still running: 0' in completed.stdout
         assert completed.stdout.rstrip().endswith('Self-test passed')
         assert 'PyQt6' not in completed.stderr
@@ -70,7 +70,7 @@ class TestSelfTestRun:
 
         assert standalone.run_self_test(sys.stdout) is False
         report = capsys.readouterr().out
-        assert 'Results identical: no' in report
+        assert 'Results agree to within rounding (relative 1e-12): no' in report
         assert report.rstrip().endswith('Self-test failed')
 
     def test_identical_results_pass(self, monkeypatch, capsys, ten_runs):
@@ -78,7 +78,7 @@ class TestSelfTestRun:
 
         assert standalone.run_self_test(sys.stdout) is True
         report = capsys.readouterr().out
-        assert 'Results identical: yes' in report
+        assert 'Results agree to within rounding (relative 1e-12): yes' in report
         assert 'Progress reached 10 of 10 runs: yes' in report
 
     def test_standalone_build_that_would_use_joblib_fails(self, monkeypatch, capsys, ten_runs):

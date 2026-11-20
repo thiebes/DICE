@@ -178,7 +178,8 @@ jobs:
       # The self-test simulates the bundled quick_test example serially and in
       # the process pool that the application's parallel simulations use,
       # with one seed. It opens no window, prints its report, and exits with
-      # status 0 only if the results are identical and every worker process
+      # status 0 only if the results agree to within floating-point rounding
+      # and every worker process
       # it started has ended. It runs before any other start of the
       # application, so a DICE process left afterwards is one of its workers.
       - name: Self-test

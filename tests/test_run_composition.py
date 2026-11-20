@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from fft_cnr import fft_cnr
 
-from dice.analysis.simulation import run_single_simulation
+from dice.analysis.simulation import run_single_simulation, seeded_results_agree
 from dice.core.fitting import (
     calculate_wls_weights,
     diffusion_ols_fit,
@@ -22,6 +22,7 @@ from dice.core.fitting import (
 from dice.core.noise import add_noise
 from dice.core.profiles import make_diffusion_decay
 from dice.utils.legacy_compatibility import create_parameters_from_legacy
+from seeded_results import assert_seeded_results_agree
 
 X_AXIS = np.linspace(-2.5, 2.5, 60)
 TIME_AXIS = np.linspace(0.0, 1.0, 5)
@@ -57,10 +58,10 @@ def _noisy_profiles(parameters, time_axis, seed):
 
 
 def _same(a, b) -> bool:
-    """Exact equality of two scalars, with NaN equal to NaN and the type preserved."""
+    """Equality of two scalars to within floating-point rounding, with NaN equal to NaN and the type preserved."""
     if type(a) is not type(b):
         return False
-    return bool(a == b or (np.isnan(a) and np.isnan(b)))
+    return seeded_results_agree(a, b)
 
 
 @pytest.mark.parametrize('seed', [3, 31, 2024])
@@ -83,11 +84,12 @@ def test_run_fields_equal_the_fitting_primitives(parameters, seed):
             value = getattr(result, f'{key}_{suffix}')
             assert _same(value, fit[fit_key]), (key, suffix, value, fit[fit_key])
     assert result.cnr_0_estimate == fft_cnr(noisy[0]).cnr
-    assert result.estimated_sigma2_0 == sigma2[0]
+    assert _same(result.estimated_sigma2_0, sigma2[0])
+    # The noise is drawn from the seed and must match exactly; the fits agree to within rounding.
     np.testing.assert_array_equal(result.noisy_profiles, noisy)
-    np.testing.assert_array_equal(result.fitted_sigma2_t, sigma2)
-    np.testing.assert_array_equal(result.fitted_sigma2_stderrs, sigma2_stderr)
-    np.testing.assert_array_equal(result.weights, weights)
+    assert_seeded_results_agree(result.fitted_sigma2_t, sigma2)
+    assert_seeded_results_agree(result.fitted_sigma2_stderrs, sigma2_stderr)
+    assert_seeded_results_agree(result.weights, weights)
 
 
 def test_single_frame_run_has_no_slope_fits(parameters):

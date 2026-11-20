@@ -5,6 +5,7 @@ Tests for dice.analysis.simulation module.
 import pytest
 import warnings
 import numpy as np
+from seeded_results import assert_seeded_results_agree
 from dice.analysis.simulation import (
     run_single_simulation,
     calculate_wls_weights,
@@ -314,7 +315,7 @@ class TestRunMonteCarloSimulation:
 
 
 class TestSeededSimulation:
-    """A seed reproduces a simulation exactly; without one every run draws fresh entropy."""
+    """A seed reproduces a simulation to within floating-point rounding; without one every run draws fresh entropy."""
 
     def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3, **parallel_options):
         return run_monte_carlo_simulation(
@@ -336,7 +337,7 @@ class TestSeededSimulation:
         ])
 
     def test_same_seed_identical(self):
-        np.testing.assert_array_equal(
+        assert_seeded_results_agree(
             self._estimates(self._simulate(11)), self._estimates(self._simulate(11)))
 
     def test_different_seeds_differ(self):
@@ -355,8 +356,8 @@ class TestSeededSimulation:
         from numpy.random import SeedSequence
         root = SeedSequence(11)
         first, second = self._simulate(root), self._simulate(root)
-        np.testing.assert_array_equal(self._estimates(first), self._estimates(second))
-        np.testing.assert_array_equal(self._estimates(first), self._estimates(self._simulate(11)))
+        assert_seeded_results_agree(self._estimates(first), self._estimates(second))
+        assert_seeded_results_agree(self._estimates(first), self._estimates(self._simulate(11)))
 
     def test_same_seed_identical_for_any_worker_count(self):
         # Starts joblib worker pools of two sizes, which costs tens of seconds.
@@ -373,7 +374,7 @@ class TestSeededSimulation:
                     21, noise_values=(0.02,), num_runs=num_runs, multiprocessing=True,
                     n_jobs=n_jobs, progress_callback=lambda done, total: progress_calls.append((done, total)),
                 )
-                np.testing.assert_array_equal(self._estimates(parallel), serial)
+                assert_seeded_results_agree(self._estimates(parallel), serial)
                 assert [r.run_id for r in parallel.run_results] == list(range(num_runs))
                 assert progress_calls[-1] == (num_runs, num_runs)
 
@@ -500,7 +501,7 @@ class TestProcessPoolBackend:
             progress_callback=lambda done, total: progress.append((done, total)),
         )
 
-        np.testing.assert_array_equal(self._estimates(pooled), self._estimates(serial))
+        assert_seeded_results_agree(self._estimates(pooled), self._estimates(serial))
         assert [r.run_id for r in pooled.run_results] == list(range(7))
         assert progress == [(batch.stop, 7) for batch in split_into_batches(7, 2)]
         assert len(progress) > 1
@@ -550,7 +551,7 @@ class TestProcessPoolBackend:
         )
 
         assert self.RecordingExecutor.created == [(min(effective_n_jobs(n_jobs), 5), 'spawn')]
-        np.testing.assert_array_equal(
+        assert_seeded_results_agree(
             self._estimates(pooled), self._estimates(self._simulate(num_runs=5, multiprocessing=False)))
 
     def test_windows_pool_is_capped_at_its_limit(self, monkeypatch):
@@ -588,7 +589,7 @@ class TestProcessPoolBackend:
 
         assert simulation.default_parallel_backend() == simulation.PROCESS_POOL_BACKEND
         assert pool_calls == [effective_n_jobs(3)]
-        np.testing.assert_array_equal(self._estimates(pooled), self._estimates(serial))
+        assert_seeded_results_agree(self._estimates(pooled), self._estimates(serial))
 
     def test_regular_install_runs_parallel_simulations_with_joblib(self, monkeypatch):
         import dice.analysis.simulation as simulation
@@ -647,7 +648,7 @@ class TestWorkerCountReachesJoblib:
 
         assert self.RecordingParallel.n_jobs_seen
         assert set(self.RecordingParallel.n_jobs_seen) == {n_jobs}
-        np.testing.assert_array_equal(
+        assert_seeded_results_agree(
             [(r.ols_slope, r.wls_slope) for r in parallel.run_results],
             [(r.ols_slope, r.wls_slope) for r in serial.run_results])
 
@@ -731,7 +732,7 @@ class TestNoiseLevelForEachRun:
             time_axis=np.array([0.0, 1.0, 2.0]), noise_values=[0.02], num_runs=4,
             multiprocessing=False, seed=17,
         )
-        np.testing.assert_array_equal(self._run_values(per_run), self._run_values(fixed))
+        assert_seeded_results_agree(self._run_values(per_run), self._run_values(fixed))
 
     @pytest.mark.parametrize('noise_values', [[0.02] * 6, [0.02] * 8, []])
     def test_one_value_per_run_required(self, noise_values):
@@ -746,7 +747,7 @@ class TestNoiseLevelForEachRun:
         for backend in (JOBLIB_BACKEND, PROCESS_POOL_BACKEND):
             parallel = self._simulate(self.NOISE_RANGE_SIGMAS, runs, multiprocessing=True,
                                       n_jobs=2, parallel_backend=backend)
-            np.testing.assert_array_equal(self._run_values(parallel), self._run_values(serial),
+            assert_seeded_results_agree(self._run_values(parallel), self._run_values(serial),
                                           err_msg=backend)
             assert parallel.noise_values == serial.noise_values
             assert parallel.noise_range == serial.noise_range
@@ -777,3 +778,53 @@ class TestNoiseRangeModel:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestSeededResultsAgree:
+    """Seeded results agree to within floating-point rounding, per quantity, independent of units."""
+
+    RESULTS = np.array([[45.108568, 0.969032, 2.198109e-3, 2.1e-18],
+                        [46.546530, 0.991401, 2.063041e-3, -3.0e-3]])
+
+    def test_identical_results_agree(self):
+        from dice.analysis.simulation import seeded_results_agree
+        assert seeded_results_agree(self.RESULTS, self.RESULTS.copy())
+
+    def test_last_digit_differences_agree(self):
+        # The size of difference seen on Intel Macs: one or two units in the last place.
+        from dice.analysis.simulation import seeded_results_agree
+        nudged = np.nextafter(np.nextafter(self.RESULTS, np.inf), np.inf)
+        assert seeded_results_agree(nudged, self.RESULTS)
+
+    def test_a_relative_difference_of_1e_9_does_not_agree(self):
+        from dice.analysis.simulation import seeded_results_agree
+        changed = self.RESULTS.copy()
+        changed[1, 2] *= 1 + 1e-9
+        assert not seeded_results_agree(changed, self.RESULTS)
+
+    def test_a_value_near_zero_is_judged_against_its_column(self):
+        # 2.1e-18 changing by 1e-18 is a large relative change but rounding for a column of size 3e-3.
+        from dice.analysis.simulation import seeded_results_agree
+        changed = self.RESULTS.copy()
+        changed[0, 3] += 1e-18
+        assert seeded_results_agree(changed, self.RESULTS)
+
+    @pytest.mark.parametrize('scale', [1e-12, 1.0, 1e9])
+    def test_the_comparison_does_not_depend_on_units(self, scale):
+        from dice.analysis.simulation import seeded_results_agree
+        nudged = np.nextafter(self.RESULTS * scale, np.inf)
+        assert seeded_results_agree(nudged, self.RESULTS * scale)
+        assert not seeded_results_agree(self.RESULTS * scale * (1 + 1e-9), self.RESULTS * scale)
+
+    @pytest.mark.parametrize('actual, desired, expected', [
+        ([1.0, np.nan], [1.0, np.nan], True),
+        ([1.0, np.nan], [1.0, 2.0], False),
+        ([np.inf, 1.0], [np.inf, 1.0], True),
+        ([np.inf, 1.0], [-np.inf, 1.0], False),
+        ([np.inf, 1.0], [1e300, 1.0], False),
+        ([1.0, 2.0], [1.0, 2.0, 3.0], False),
+        (0.0, 0.0, True),
+        (0.0, 1e-300, False),
+    ])
+    def test_nan_infinity_shape_and_zero(self, actual, desired, expected):
+        from dice.analysis.simulation import seeded_results_agree
+        assert seeded_results_agree(actual, desired) is expected
