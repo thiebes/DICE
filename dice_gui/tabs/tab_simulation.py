@@ -8,12 +8,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QWidget, QHBoxLayout, QFormLayout,
     QGroupBox, QSpinBox, QLineEdit, QLabel, QCheckBox
 )
 from PyQt6.QtCore import Qt
 
-from dice_gui.tabs.base import create_error_label
+from dice_gui.tabs.base import ShrinkableLabel, create_error_label, create_scrollable_tab
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
 if TYPE_CHECKING:
@@ -22,8 +22,7 @@ if TYPE_CHECKING:
 
 def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     """Create Tab 1: Simulation Setup."""
-    tab = QWidget()
-    layout = QVBoxLayout(tab)
+    tab, layout = create_scrollable_tab()
 
     # Basic settings group
     basic_group = QGroupBox("Basic Settings")
@@ -61,7 +60,8 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     basic_layout.addRow("", main_window._error_labels["filename_slug"])
 
     # Output path preview
-    main_window.output_path_preview = QLabel()
+    # The path of the output folder can be longer than the window is wide.
+    main_window.output_path_preview = ShrinkableLabel()
     main_window.output_path_preview.setProperty("class", "output-path-preview")
     main_window.output_path_preview.setWordWrap(True)
     main_window.output_path_preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

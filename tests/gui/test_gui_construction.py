@@ -9,7 +9,7 @@ import re
 import pytest
 from PyQt6.QtCore import QLocale
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QAbstractButton, QDoubleSpinBox, QGroupBox, QLabel, QWidget
+from PyQt6.QtWidgets import QAbstractButton, QDoubleSpinBox, QGroupBox, QLabel, QScrollArea, QWidget
 
 from dice import __version__
 from dice.utils.units import length_abbreviation
@@ -265,3 +265,60 @@ class TestAppearance:
         background = _run_button_colors(stylesheet, state)[0]
 
         assert _contrast_ratio(text, background) >= 4.5
+
+
+def _scroll_area_ancestors(widget: QWidget) -> list[QScrollArea]:
+    ancestors = []
+    parent = widget.parentWidget()
+    while parent is not None:
+        if isinstance(parent, QScrollArea):
+            ancestors.append(parent)
+        parent = parent.parentWidget()
+    return ancestors
+
+
+def _tab_scroll_area(window, tab_index: int) -> QScrollArea:
+    """The scroll area that holds all of a tab's content."""
+    page = window.tabs.widget(tab_index)
+    scroll_areas = [area for area in page.findChildren(QScrollArea) if area.parentWidget() is page]
+    assert len(scroll_areas) == 1
+    return scroll_areas[0]
+
+
+class TestLayout:
+
+    def test_tab_bar_and_control_panel_do_not_scroll_away(self, window):
+        """Only the content of a tab scrolls; the tab bar and the Run button stay in view."""
+        assert _scroll_area_ancestors(window.tabs) == []
+        assert _scroll_area_ancestors(window.run_button) == []
+        assert _scroll_area_ancestors(window.status_label) == []
+
+    @pytest.mark.parametrize("tab_index", range(len(TAB_NAMES)), ids=TAB_NAMES)
+    def test_each_tab_scrolls_its_own_content(self, window, tab_index):
+        page = window.tabs.widget(tab_index)
+        scroll_area = _tab_scroll_area(window, tab_index)
+
+        assert scroll_area.widgetResizable()
+        fields = [w for w in page.findChildren(QWidget)
+                  if isinstance(w, (QAbstractButton, QDoubleSpinBox, QGroupBox))]
+        assert fields, "the tab has no content to check"
+        assert all(scroll_area in _scroll_area_ancestors(field) for field in fields)
+
+    def test_long_output_path_does_not_widen_the_tab(self, window, monkeypatch, tmp_path):
+        """A folder path has no place to wrap, so the preview must not make its width a minimum."""
+        content = _tab_scroll_area(window, TAB_NAMES.index("Simulation Setup")).widget()
+        window.filename_slug_input.setText("short")
+        width_with_short_path = content.minimumSizeHint().width()
+
+        long_root = tmp_path.joinpath(*["a_folder_with_a_long_name"] * 12, "output")
+        monkeypatch.setattr("dice_gui.dice_gui.output_root", lambda: long_root)
+        window._update_output_path_preview()
+
+        assert len(str(long_root)) > 300
+        assert f"<b>Directory:</b> {long_root / 'short'}<br>" in window.output_path_preview.text()
+        assert window.output_path_preview.toolTip() == str(long_root / "short")
+        assert content.minimumSizeHint().width() == width_with_short_path
+
+    def test_output_preview_has_no_tool_tip_without_a_slug(self, window):
+        window.filename_slug_input.setText("")
+        assert window.output_path_preview.toolTip() == ""

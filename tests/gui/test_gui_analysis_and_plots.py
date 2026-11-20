@@ -99,8 +99,21 @@ class TestPrecisionSummary:
         assert window_with_results.explore_proximity_group.isEnabled()
 
     def test_run_results_are_held_in_memory_not_as_a_loaded_file(self, window_with_results):
-        assert window_with_results.status_bar.currentMessage() == "No data loaded"
+        assert window_with_results.status_bar.currentMessage() == "Simulation results: quick_test (30 runs)"
+        assert window_with_results.loaded_data_file is None
         assert window_with_results.interface.last_result.num_runs == 30
+
+    def test_status_bar_names_a_loaded_file_then_the_next_run(self, window, dialogs, completed_run, work_dir):
+        """The status bar names the results that the Analysis and Output tabs work on."""
+        loaded_csv = work_dir / "earlier_run.csv"
+        shutil.copy(completed_run.csv_path, loaded_csv)
+        dialogs.open_paths.append(str(loaded_csv))
+        window.load_results_button.click()
+        assert window.status_bar.currentMessage() == "Loaded: earlier_run.csv"
+
+        window.simulation_finished(completed_run.as_thread_result())
+
+        assert window.status_bar.currentMessage() == "Simulation results: quick_test (30 runs)"
 
 
 class TestAccuracyThresholdTool:

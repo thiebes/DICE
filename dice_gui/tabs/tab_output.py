@@ -8,11 +8,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QWidget, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QComboBox, QSpinBox, QDoubleSpinBox,
     QPushButton
 )
 
+from dice_gui.tabs.base import create_scrollable_tab
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
 if TYPE_CHECKING:
@@ -23,8 +24,7 @@ def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     """Create Tab 5: Output Settings."""
     from dice_gui.presets import PRESETS, OUTPUT_DEFAULTS, get_preset
 
-    tab = QWidget()
-    layout = QVBoxLayout(tab)
+    tab, layout = create_scrollable_tab()
 
     # === Preset Section ===
     preset_layout = QHBoxLayout()

@@ -4,9 +4,10 @@ Base Tab Utilities
 Shared utility functions for building tab UI components.
 """
 
+from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import (
     QFrame, QFormLayout, QVBoxLayout, QHBoxLayout,
-    QWidget, QLineEdit, QLabel, QComboBox
+    QWidget, QLineEdit, QLabel, QComboBox, QScrollArea
 )
 
 # Unit lists ordered from smallest to largest for combo box display.
@@ -19,6 +20,42 @@ TIME_UNITS_DISPLAY = [
     "attosecond", "femtosecond", "picosecond", "nanosecond",
     "microsecond", "millisecond", "second",
 ]
+
+
+def create_scrollable_tab() -> tuple[QWidget, QVBoxLayout]:
+    """Create a tab page whose content scrolls when the window is too small for it.
+
+    Each tab scrolls by itself, so the tab bar and the control panel stay in
+    view, and one wide tab does not widen the others.
+
+    Returns:
+        The tab page, and the layout that takes the content of the tab.
+    """
+    tab = QWidget()
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    scroll_content = QWidget()
+    content_layout = QVBoxLayout(scroll_content)
+    scroll.setWidget(scroll_content)
+
+    tab_layout = QVBoxLayout(tab)
+    tab_layout.setContentsMargins(0, 0, 0, 0)
+    tab_layout.addWidget(scroll)
+    return tab, content_layout
+
+
+class ShrinkableLabel(QLabel):
+    """A label whose text does not set a minimum width for its layout.
+
+    A word-wrapped QLabel is at least as wide as its longest unbreakable
+    word. A folder path is one such word, so a long path would widen the
+    whole form. This label can be narrower than its text; the text that does
+    not fit is cut off at the right.
+    """
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())
 
 
 def create_option_card(layout_type: str = "form") -> tuple[QFrame, QFormLayout | QVBoxLayout]:

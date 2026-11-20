@@ -10,10 +10,12 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLineEdit, QLabel, QRadioButton, QButtonGroup,
-    QScrollArea, QPushButton, QSpinBox, QTextEdit, QFileDialog
+    QPushButton, QSpinBox, QTextEdit, QFileDialog
 )
 
-from dice_gui.tabs.base import create_option_card, create_error_label, create_unit_combo
+from dice_gui.tabs.base import (
+    create_option_card, create_error_label, create_scrollable_tab, create_unit_combo
+)
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import calculate_pixel_size
 from dice_gui.output_location import output_root
@@ -24,11 +26,7 @@ if TYPE_CHECKING:
 
 def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     """Create Tab 3: Experimental Conditions."""
-    tab = QWidget()
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll_content = QWidget()
-    layout = QVBoxLayout(scroll_content)
+    tab, layout = create_scrollable_tab()
 
     # Noise group
     noise_group = QGroupBox("Noise Parameters")
@@ -337,10 +335,6 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         main_window.time_series_radio,
         main_window.time_series_input,
     ])
-
-    scroll.setWidget(scroll_content)
-    tab_layout = QVBoxLayout(tab)
-    tab_layout.addWidget(scroll)
 
     return tab
 

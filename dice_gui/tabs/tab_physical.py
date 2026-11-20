@@ -8,13 +8,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QGroupBox, QLineEdit, QLabel, QRadioButton, QButtonGroup,
-    QScrollArea
+    QWidget, QHBoxLayout, QFormLayout,
+    QGroupBox, QLineEdit, QLabel, QRadioButton, QButtonGroup
 )
 
 from dice_gui.tabs.base import (
-    create_option_card, create_error_label, create_unit_combo, combo_value,
+    create_option_card, create_error_label, create_scrollable_tab, create_unit_combo, combo_value,
 )
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import (
@@ -29,11 +28,7 @@ if TYPE_CHECKING:
 
 def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
     """Create Tab 2: Physical Parameters."""
-    tab = QWidget()
-    scroll = QScrollArea()
-    scroll.setWidgetResizable(True)
-    scroll_content = QWidget()
-    layout = QVBoxLayout(scroll_content)
+    tab, layout = create_scrollable_tab()
 
     # Diffusion parameters group
     diffusion_group = QGroupBox("Diffusion Parameters")
@@ -285,10 +280,6 @@ def create_tab_physical_parameters(main_window: "DiceGUI") -> QWidget:
         main_window.width_input,
         main_window.width_unit_combo,
     ])
-
-    scroll.setWidget(scroll_content)
-    tab_layout = QVBoxLayout(tab)
-    tab_layout.addWidget(scroll)
 
     return tab
 

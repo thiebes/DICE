@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
-    QProgressBar, QMessageBox, QScrollArea, QStatusBar, QMenu
+    QProgressBar, QMessageBox, QStatusBar, QMenu
 )
 from PyQt6.QtCore import QLocale, Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
@@ -107,14 +107,12 @@ class DiceGUI(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Create scrollable content area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(10, 10, 10, 10)
+        # Content area. Each tab scrolls its own content, so the tab bar
+        # stays in view in a small window.
+        content_area = QWidget()
+        content_layout = QVBoxLayout(content_area)
+        # No bottom margin: the control panel below has a margin of its own.
+        content_layout.setContentsMargins(10, 10, 10, 0)
 
         # Initialize hidden global unit combos (not in visible layout, but
         # other code reads/writes them for per-parameter unit syncing).
@@ -134,12 +132,10 @@ class DiceGUI(QMainWindow):
         self.tabs.addTab(self.tab4, "Analysis Settings")
         self.tabs.addTab(self.tab5, "Output Settings")
 
-        scroll_layout.addWidget(self.tabs)
+        content_layout.addWidget(self.tabs)
+        main_layout.addWidget(content_area, stretch=1)
 
-        scroll_area.setWidget(scroll_content)
-        main_layout.addWidget(scroll_area, stretch=1)
-
-        # Add sticky bottom control panel (outside scroll area)
+        # Add sticky bottom control panel (below the tabs)
         control_panel = self.create_control_panel()
         main_layout.addWidget(control_panel)
 
@@ -535,6 +531,7 @@ class DiceGUI(QMainWindow):
         slug = self.filename_slug_input.text().strip()
         if not slug:
             self.output_path_preview.setText("Enter a filename slug to see output paths")
+            self.output_path_preview.setToolTip("")
             return
 
         output_dir = output_root() / slug
@@ -545,6 +542,8 @@ class DiceGUI(QMainWindow):
             f"<b>Directory:</b> {output_dir}<br>"
             f"<b>Files:</b> {slug}.csv, {slug}_summary.txt, {slug}_accuracy_histogram.{ext}"
         )
+        # The label cuts off a path that is wider than the window.
+        self.output_path_preview.setToolTip(str(output_dir))
 
     def collect_image_settings(self) -> dict:
         """Collect current image settings and convert to standard units."""
@@ -1830,9 +1829,18 @@ class DiceGUI(QMainWindow):
         self.update_status_bar()
 
     def update_status_bar(self):
-        """Update status bar with current loaded data filename."""
+        """Show which results the Analysis and Output tabs work on.
+
+        The results are those of a loaded CSV file, those of the last
+        simulation in this session, or none.
+        """
+        result = self.interface.last_result
         if self.loaded_data_file:
             self.status_bar.showMessage(f"Loaded: {Path(self.loaded_data_file).name}")
+        elif result is not None:
+            slug = (self.interface.last_parameters or {}).get('filename slug', '')
+            name = f" {slug}" if slug else ""
+            self.status_bar.showMessage(f"Simulation results:{name} ({result.num_runs} runs)")
         else:
             self.status_bar.showMessage("No data loaded")
 

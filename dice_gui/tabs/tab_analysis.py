@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QLabel, QDoubleSpinBox, QRadioButton
 )
 
+from dice_gui.tabs.base import create_scrollable_tab
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
 from dice_gui.proximity_widget import ProximityTargetWidget
@@ -22,8 +23,7 @@ if TYPE_CHECKING:
 
 def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     """Create Tab 4: Analysis Settings."""
-    tab = QWidget()
-    layout = QVBoxLayout(tab)
+    tab, layout = create_scrollable_tab()
 
     # Fit method group
     fit_method_group = QGroupBox("Fit Method")
