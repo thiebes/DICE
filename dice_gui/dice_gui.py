@@ -1202,10 +1202,7 @@ class DiceGUI(QMainWindow):
         self.reset_ui_after_simulation()
         self.status_label.setText("Simulation completed successfully!")
 
-        # Clean up finished thread
-        if self.simulation_thread is not None:
-            self.simulation_thread.deleteLater()
-            self.simulation_thread = None
+        self._release_simulation_thread()
 
         # Clear loaded data file (new simulation overwrites)
         self.loaded_data_file = None
@@ -1255,21 +1252,31 @@ class DiceGUI(QMainWindow):
     def simulation_error(self, error_message: str):
         """Handle simulation error."""
         self.reset_ui_after_simulation()
-        # Clean up finished thread
-        if self.simulation_thread is not None:
-            self.simulation_thread.deleteLater()
-            self.simulation_thread = None
+        self._release_simulation_thread()
         self.status_label.setText("Simulation failed")
         QMessageBox.critical(self, "Simulation Error", f"Simulation failed:\n\n{error_message}")
 
     def simulation_cancelled(self):
         """Handle a run that stopped at the user's request."""
         self.reset_ui_after_simulation()
-        if self.simulation_thread is not None:
-            self.simulation_thread.deleteLater()
-            self.simulation_thread = None
+        self._release_simulation_thread()
         # Replaces the "Stopping..." that stop_simulation() showed.
         self.status_label.setText("Simulation stopped by user")
+
+    def _release_simulation_thread(self) -> None:
+        """
+        Drop the simulation thread once its run() has returned.
+
+        The finished, error and cancelled signals are emitted at the end of
+        run() and reach these slots through the event loop, so the thread can
+        still be running when they execute. Qt aborts the process when a
+        QThread is destroyed while it runs, so wait for run() to return before
+        releasing the thread; after the signal that takes only moments.
+        """
+        thread, self.simulation_thread = self.simulation_thread, None
+        if thread is not None:
+            thread.wait()
+            thread.deleteLater()
 
     def reset_ui_after_simulation(self):
         """Reset UI elements after simulation completes or stops."""

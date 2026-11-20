@@ -197,3 +197,69 @@ class TestCancellation:
         assert window.run_button.isEnabled()
         assert window.interface.last_result is None
         assert process_pool.new_children() == set()
+
+
+class TestThreadRelease:
+    """The window releases a simulation thread only after its run() has returned.
+
+    The thread emits finished, error or cancelled at the end of run(), and the
+    window's slot runs while the thread may still be finishing. Deleting a
+    running QThread aborts the whole process, which crashed CI runs on Linux,
+    macOS and Windows. These tests stretch the moments after the signal and
+    check that the thread had finished when the window released it.
+    """
+
+    @pytest.fixture
+    def released(self, monkeypatch):
+        import time
+
+        run = SimulationThread.run
+
+        def run_then_linger(thread):
+            run(thread)
+            time.sleep(0.5)  # the moments between the signal and the end of run(), stretched
+
+        threads = []
+
+        def record_release(thread):
+            # Keeping the thread alive here, instead of deleting it, lets a
+            # failing run report the problem instead of aborting the tests.
+            threads.append((thread, thread.isFinished()))
+
+        monkeypatch.setattr(SimulationThread, 'run', run_then_linger)
+        monkeypatch.setattr(SimulationThread, 'deleteLater', record_release)
+        yield threads
+        for thread, _ in threads:
+            thread.wait()
+
+    def test_finished_run_is_released_after_it_returns(self, qtbot, window, dialogs, released):
+        window.num_runs_spin.setValue(5)
+        window.multiprocessing_check.setChecked(False)
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+        assert dialogs.titles("information") == ["Simulation Complete"]
+        assert [finished for _, finished in released] == [True]
+
+    def test_stopped_run_is_released_after_it_returns(self, qtbot, window, dialogs, released):
+        window.num_runs_spin.setValue(300)
+        window.multiprocessing_check.setChecked(False)
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.progress_bar.value() >= 1, timeout=SIGNAL_TIMEOUT_MS)
+        qtbot.mouseClick(window.stop_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+        assert window.status_label.text() == "Simulation stopped by user"
+        assert [finished for _, finished in released] == [True]
+
+    def test_failed_run_is_released_after_it_returns(self, qtbot, window, dialogs, released, monkeypatch):
+        def fail(*args, **kwargs):
+            raise ValueError("a run that fails")
+
+        monkeypatch.setattr(window.interface, 'run_simulation', fail)
+        window.num_runs_spin.setValue(5)
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+        assert dialogs.titles("critical") == ["Simulation Error"]
+        assert [finished for _, finished in released] == [True]
