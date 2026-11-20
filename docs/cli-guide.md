@@ -75,13 +75,13 @@ dice [options] parameters_file
 
 ### Reproducible results
 
-With `--seed N`, repeated runs with the same parameters and the same seed give identical results. The serial and the parallel calculation also give the same results as each other. With a noise range, the seed also reproduces the noise level that each run draws. Without `--seed`, each run draws new random numbers, so the results differ slightly from one run to the next.
+With `--seed N`, repeated runs with the same parameters and the same seed give the same results. The serial and the parallel calculation also give the same results as each other. With a noise range, the seed also reproduces the noise level that each run draws. Without `--seed`, each run draws new random numbers, so the results differ slightly from one run to the next.
 
 ```bash
 dice data/examples/quick_test.txt --seed 12345
 ```
 
-Results are reproducible for the same versions of DICE and its dependencies on the same platform. Identical numbers across platforms or across dependency versions are not guaranteed. The GUI has no seed option.
+Results are reproducible for the same versions of DICE and its dependencies on the same platform. On Linux, Windows, and Macs with Apple silicon they repeat bit for bit. On Macs with Intel processors, the linear algebra library that NumPy and SciPy use there can change the last digit of a few fitted values from one run to the next; the relative differences are about 1e-15, far below any statistical effect. Identical numbers across platforms or across dependency versions are not guaranteed. The GUI has no seed option.
 
 ## Output files
 

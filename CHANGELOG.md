@@ -64,8 +64,8 @@ results with 1.2.0.
   no Python installation and run simulations in parallel on all CPU cores.
   `docs/installation.md` describes how to download, check, and start them.
   The release workflow tests each packaged application with `--self-test`,
-  which runs a seeded simulation serially and in parallel and requires
-  identical results.
+  which runs a seeded simulation serially and in parallel and requires the
+  results to agree to within floating-point rounding.
 - Python interface: `run_monte_carlo_simulation()` takes `parallel_backend`,
   `'joblib'` or `'process_pool'` (the standard library's
   `ProcessPoolExecutor`). Both give the serial results for the same seed. The
@@ -185,8 +185,11 @@ results with 1.2.0.
   `amplitude_0`. The noise was the reciprocal of the measured CNR, which is
   correct only for `amplitude_0` = 1.
 - `--seed N` makes runs reproducible: repeated runs with the same parameters
-  and seed give identical results, in serial and in parallel. The flag had no
-  effect on the noise draws.
+  and seed give the same results, in serial and in parallel. The flag had no
+  effect on the noise draws. The results repeat bit for bit on Linux, Windows,
+  and Macs with Apple silicon. On Macs with Intel processors, the linear
+  algebra library of NumPy and SciPy can change the last digit of a few fitted
+  values from one run to the next (relative differences up to about 1e-15).
 - `--multiprocessing N` sets the number of worker processes. Any value other
   than 0 used all CPU cores.
 - Gaussian fits no longer fail because the starting point lies outside the
