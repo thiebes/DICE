@@ -5,7 +5,9 @@ unsaved-changes prompts, and how load errors are reported.
 
 from __future__ import annotations
 
-from pathlib import PureWindowsPath
+import os
+import shutil
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 import pytest
@@ -149,11 +151,28 @@ class TestSaveAndReload:
         assert after == before
         assert dialogs.titles("critical") == []
 
+    @staticmethod
+    def _existing_path_with_backslashes(work_dir: Path) -> str:
+        """An existing absolute profile path whose text contains backslashes on this platform.
+
+        On Windows that is the example profile's own path. Elsewhere a Windows-style
+        string is a relative path, which a loaded file resolves against its folder,
+        so the profile is copied to a file whose name contains backslashes instead.
+        """
+        if os.name == "nt":
+            return str(PureWindowsPath(EXAMPLE_PROFILE_CSV))
+        copy = work_dir / "measured\\profile.csv"
+        shutil.copyfile(EXAMPLE_PROFILE_CSV, copy)
+        return str(copy)
+
     @pytest.mark.parametrize(("widget_name", "text"), [
         ("filename_slug_input", "Joe's_run"),
-        ("noise_file_input", str(PureWindowsPath(EXAMPLE_PROFILE_CSV))),
-    ], ids=["apostrophe-in-slug", "windows-path"])
+        ("noise_file_input", None),
+    ], ids=["apostrophe-in-slug", "path-with-backslashes"])
     def test_text_values_needing_escapes_survive(self, qtbot, window, dialogs, work_dir, widget_name, text):
+        if text is None:
+            text = self._existing_path_with_backslashes(work_dir)
+            assert "\\" in text
         window.noise_estimate_radio.setChecked(True)
         enter_text(qtbot, window.noise_file_input, EXAMPLE_PROFILE_CSV.as_posix())
         enter_text(qtbot, getattr(window, widget_name), text)
