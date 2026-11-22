@@ -72,8 +72,8 @@ and Fixed give the details.
   and of the bias, and each fraction within a proximity level with its count
   and its 95% interval, for example `19.0% (19 of 100; 12.5% to 27.8%)`. The
   GUI Analysis Settings tab shows the same for the bias and the fraction.
-  The analysis dictionary and the JSON file carry them as `count`,
-  `standard_error`, and `precision_intervals`.
+  The analysis dictionary and the JSON file carry them as `standard_error`
+  and `precision_intervals`.
 - The summary file and the JSON file record the DICE version and the seed of
   the simulation. A simulation in which no run gives an estimate says so in
   the summary, in place of "completed successfully".
@@ -133,6 +133,12 @@ and Fixed give the details.
   results file of such a simulation records each run's noise standard
   deviation, and the summary reports the drawn noise and CNR ranges instead
   of a single value.
+- Behavior change: the standard deviation of the estimates is the sample
+  standard deviation (divisor n − 1), in the summary, the JSON file, the
+  plots and the GUI. It was the population form (divisor n). The reported
+  standard deviation and relative standard error are larger by the factor
+  √(n / (n − 1)): 0.5% for 100 runs, 0.05% for 1000. The standard error of
+  the mean is this standard deviation divided by √n.
 - Behavior change: `proximity level` is no longer a simulation parameter. A
   `proximity level` key in a parameters file triggers a warning and is
   otherwise ignored. DICE reports the standard deviation, relative standard

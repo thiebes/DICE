@@ -500,7 +500,7 @@ class TestAccuracyVsCnr:
         assert list(reference.get_ydata()) == [1.0, 1.0]
         assert (ax.get_xlabel(), ax.get_ylabel()) == ('Initial CNR', '$D_{est}/D_{nom}$')
         assert ax.get_xscale() == 'linear'
-        assert ax.get_ylim() == pytest.approx((ratios.mean() - 3 * ratios.std(), ratios.mean() + 3 * ratios.std()))
+        assert ax.get_ylim() == pytest.approx((ratios.mean() - 3 * ratios.std(ddof=1), ratios.mean() + 3 * ratios.std(ddof=1)))
         assert target.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
         plt.close(fig)
 
@@ -664,7 +664,7 @@ class TestEstimatesBeyondTheAxis:
         texts = _figure_texts(fig)
         plt.close(fig)
 
-        mean, std = ratios.mean(), ratios.std()
+        mean, std = ratios.mean(), ratios.std(ddof=1)
         assert below == int(np.sum(ratios < mean - 3 * std))
         assert above == int(np.sum(ratios > mean + 3 * std))
         assert below + above > 0  # the example has estimates beyond three standard deviations

@@ -38,9 +38,9 @@ Diffusion Coefficient Estimate Statistics:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:
-        0.00139 micrometer^2/nanosecond
+        0.00161 micrometer^2/nanosecond
     Relative standard error:
-        0.139
+        0.161
     Mean estimate:
         0.01071 micrometer^2/nanosecond
     Standard error of the mean and of the bias:
@@ -53,9 +53,9 @@ Diffusion Coefficient Estimate Statistics:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:
-        0.00107 micrometer^2/nanosecond
+        0.00123 micrometer^2/nanosecond
     Relative standard error:
-        0.107
+        0.123
     Mean estimate:
         0.01018 micrometer^2/nanosecond
     Standard error of the mean and of the bias:

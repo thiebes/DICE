@@ -7,9 +7,11 @@ only one estimator, a slope stderr of 0.0 (an empty CSV cell), a NaN stderr,
 two noise values (so the per-noise analysis is filled), and a simulation in
 which every fit failed. Each output must equal its golden file in
 tests/golden/estimators/, which pins key order, column order, labels, and
-every number. The analysis dict is written with 12 significant digits: the
-interval of a fraction differs in its last digit between processors, and
-the golden files hold for all of them.
+every number. The last digit of a float differs between processors, so the
+analysis dict is written with 12 significant digits (the file is then the
+same wherever it is regenerated) and its numbers are compared with a
+relative tolerance of 1e-9; keys, their order, and the text files are
+compared exactly.
 
 The golden files were written by the code before the estimator registry was
 introduced. Regenerate them only deliberately, after a reviewed change to an
@@ -147,10 +149,41 @@ def written_text(name: str, directory: Path) -> str:
     return text.replace(f"DICE version:\n    {dice.__version__}\n", "DICE version:\n    <version>\n")
 
 
+def assert_same_values(written: Any, golden: Any, where: str = 'analysis') -> None:
+    """Equal structure and key order; floats agree to a relative 1e-9 (NaN equals NaN)."""
+    if isinstance(golden, dict):
+        assert isinstance(written, dict) and list(written) == list(golden), where
+        for key, value in golden.items():
+            assert_same_values(written[key], value, f"{where}[{key!r}]")
+    elif isinstance(golden, list):
+        assert isinstance(written, list) and len(written) == len(golden), where
+        for index, value in enumerate(golden):
+            assert_same_values(written[index], value, f"{where}[{index}]")
+    elif isinstance(golden, float):
+        assert written == pytest.approx(golden, rel=1e-9, nan_ok=True), where
+    else:
+        assert written == golden and type(written) is type(golden), where
+
+
 @pytest.mark.parametrize('name', list(CASES))
 def test_output_matches_golden(name, tmp_path):
     golden = (GOLDEN_DIR / name).read_text(encoding='utf-8')
-    assert written_text(name, tmp_path) == golden
+    written = written_text(name, tmp_path)
+    if name.endswith('.json'):
+        assert_same_values(json.loads(written), json.loads(golden))
+    else:
+        assert written == golden
+
+
+def test_comparison_of_the_analysis_tolerates_only_the_last_digits():
+    golden = {'a': [0.300641842582, float('nan')], 'n': 4}
+    assert_same_values({'a': [0.3006418425824019, float('nan')], 'n': 4}, golden)
+    for different in ({'a': [0.30064185, float('nan')], 'n': 4},   # a number
+                      {'a': [0.300641842582, float('nan')], 'n': 4.0},   # an int written as a float
+                      {'n': 4, 'a': [0.300641842582, float('nan')]},   # key order
+                      {'a': [0.300641842582], 'n': 4}):   # a missing value
+        with pytest.raises(AssertionError):
+            assert_same_values(different, golden)
 
 
 def test_analysis_keeps_estimators_whose_every_fit_failed():

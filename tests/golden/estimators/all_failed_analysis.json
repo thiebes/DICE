@@ -83,7 +83,6 @@
  },
  "accuracy": {
   "ols": {
-   "count": 0,
    "mean": NaN,
    "median": NaN,
    "std": NaN,
@@ -94,7 +93,6 @@
    "relative_rmse": NaN
   },
   "wls": {
-   "count": 0,
    "mean": NaN,
    "median": NaN,
    "std": NaN,

@@ -23,6 +23,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 from .plots import get_color_definitions
+from ..analysis.statistics import sample_standard_deviation
 from ..utils.validators import validate_limits
 
 # Parameter-file key -> keyword argument of plot_accuracy_histogram.
@@ -256,7 +257,7 @@ def plot_accuracy_histogram(
 
     # Calculate statistics
     mu_dd0 = np.mean(dest_over_d0)
-    sigma_dd0 = np.std(dest_over_d0)
+    sigma_dd0 = sample_standard_deviation(dest_over_d0)
 
     # Set labels
     ax.set_xlabel('$D_{est}/D_{nom}$', fontsize=font_size)
@@ -441,7 +442,7 @@ def plot_accuracy_vs_cnr(
     # Default y-axis limits: the 99.97% interval of a normal distribution, as for the histogram
     finite_ratios = ratios[np.isfinite(ratios)]
     if y_lim is None and finite_ratios.size > 0:
-        mean, std = np.mean(finite_ratios), np.std(finite_ratios)
+        mean, std = np.mean(finite_ratios), sample_standard_deviation(finite_ratios)
         y_lim = [mean - 3 * std, mean + 3 * std] if std > 0 else [mean - 0.1, mean + 0.1]
     if y_lim is not None:
         ax.set_ylim(y_lim)
@@ -530,7 +531,7 @@ def plot_diffusion_coefficient_histogram(
 
     # Calculate statistics
     mean_val = np.mean(diffusion_estimates)
-    std_val = np.std(diffusion_estimates)
+    std_val = sample_standard_deviation(diffusion_estimates)
     median_val = np.median(diffusion_estimates)
 
     # Calculate precision if proximity threshold provided
@@ -652,7 +653,7 @@ def plot_cnr_histogram(
     # Calculate statistics
     mean_val = np.mean(cnr_estimates)
     median_val = np.median(cnr_estimates)
-    std_val = np.std(cnr_estimates)
+    std_val = sample_standard_deviation(cnr_estimates)
 
     # Create histogram with probability on y-axis
     n, bins, patches = ax.hist(

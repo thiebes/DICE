@@ -117,8 +117,8 @@ class TestCalculateAccuracyMetrics:
         assert metrics['mean'] == pytest.approx(1.0)
         assert metrics['median'] == 1.0
         assert metrics['bias'] == pytest.approx(0.0)
-        # Standard deviation of [0.8, 1.0, 1.2] is ~0.163, not 0.2
-        assert metrics['std'] == pytest.approx(0.16329931618554516)
+        # Sample standard deviation (divisor n - 1) of [0.8, 1.0, 1.2]
+        assert metrics['std'] == pytest.approx(0.2)
         assert metrics['rmse'] == pytest.approx(np.sqrt(0.08/3))
     
     def test_empty_estimates(self):
@@ -435,16 +435,33 @@ class TestUncertaintyOfTheStatistics:
     """A statistic of a finite number of runs comes with its uncertainty."""
 
     @pytest.mark.parametrize('count, total', [(0, 20), (1, 20), (19, 100), (265, 1500), (20, 20), (7, 7)])
-    def test_interval_agrees_with_statsmodels(self, count, total):
-        from statsmodels.stats.proportion import proportion_confint
+    def test_interval_is_the_score_interval(self, count, total):
+        """
+        The limits are the proportions p whose distance from the observed
+        fraction is 1.96 standard errors of p: the definition of the score
+        interval. An end at 0 or at 1 is exact.
+        """
         from dice.analysis.statistics import proportion_interval
 
         lower, upper = proportion_interval(count, total)
-        expected = proportion_confint(count, total, alpha=0.05, method='wilson')
+        observed = count / total
+        z = 1.959963984540054
 
-        assert (lower, upper) == pytest.approx(expected, abs=1e-12)
-        assert 0.0 <= lower <= count / total <= upper <= 1.0
+        for limit in (lower, upper):
+            if limit in (0.0, 1.0):
+                assert observed == limit
+            else:
+                assert abs(observed - limit) == pytest.approx(z * np.sqrt(limit * (1 - limit) / total), rel=1e-9)
+        assert 0.0 <= lower <= observed <= upper <= 1.0
         assert upper - lower > 0  # also for 0 and for all of the estimates
+
+    def test_interval_of_none_and_of_all_has_the_closed_form(self):
+        """For 0 of n the upper limit is z² / (n + z²); for n of n the lower limit is n / (n + z²)."""
+        from dice.analysis.statistics import proportion_interval
+
+        z2 = 1.959963984540054 ** 2
+        assert proportion_interval(0, 20) == (0.0, pytest.approx(z2 / (20 + z2), rel=1e-9))
+        assert proportion_interval(20, 20) == (pytest.approx(20 / (20 + z2), rel=1e-9), 1.0)
 
     def test_interval_narrows_with_more_runs(self):
         from dice.analysis.statistics import proportion_interval
@@ -462,8 +479,10 @@ class TestUncertaintyOfTheStatistics:
         estimates = np.array([0.009, 0.011, 0.0105, 0.0098, 0.0102, 0.0089])
         metrics = calculate_accuracy_metrics(estimates, 0.01)
 
-        assert metrics['count'] == 6
-        assert metrics['standard_error'] == pytest.approx(estimates.std(ddof=1) / np.sqrt(6))
-        assert np.isnan(calculate_accuracy_metrics(estimates[:1], 0.01)['standard_error'])
+        assert metrics['std'] == pytest.approx(estimates.std(ddof=1))
+        assert metrics['standard_error'] == pytest.approx(metrics['std'] / np.sqrt(6))
+        assert 'count' not in metrics  # the number of estimates is statistics['num_successful']
+        single = calculate_accuracy_metrics(estimates[:1], 0.01)
+        assert np.isnan(single['std']) and np.isnan(single['standard_error'])
         empty = calculate_accuracy_metrics(np.array([]), 0.01)
-        assert empty['count'] == 0 and np.isnan(empty['standard_error'])
+        assert np.isnan(empty['std']) and np.isnan(empty['standard_error'])

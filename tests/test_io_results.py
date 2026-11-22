@@ -272,7 +272,7 @@ class TestNoiseRangeOutputs:
             section = text.split(header)[1].split("\nInitial CNR ")[0]
             wls = np.array([run.wls_slope / 2 for run in runs_in_bin])
             assert f"      Mean estimate:\n          {wls.mean():.5f} micrometer^2/nanosecond\n" in section
-            assert f"      Standard deviation:\n          {wls.std():.5f} micrometer^2/nanosecond\n" in section
+            assert f"      Standard deviation:\n          {wls.std(ddof=1):.5f} micrometer^2/nanosecond\n" in section
             count = int(np.sum(np.abs(wls / 0.01 - 1) <= 0.1))
             assert (f"    Fraction within ±10% of nominal:\n"
                     f"      WLS: {count / len(wls):.1%} ({count} of {len(wls)}; ") in section

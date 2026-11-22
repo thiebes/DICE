@@ -186,11 +186,11 @@ class TestOutputDiffusionUnits:
         estimates = {'wls': df['weighted fit diffusion coeff [nm²/ps]'].to_numpy(),
                      'ols': df['unweighted fit diffusion coeff [nm²/ps]'].to_numpy()}
         assert values['Mean estimate'] == [f"{estimates[m].mean():.5f} {unit}" for m in ('wls', 'ols')]
-        assert values['Standard deviation'] == [f"{estimates[m].std():.5f} {unit}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{estimates[m].std(ddof=1):.5f} {unit}" for m in ('wls', 'ols')]
         # Lengths, times, and the unitless ratios stay as they were.
         assert values['Nominal diffusion length'] == ['0.100 micrometer']
         assert values['Relative standard error'] == [
-            f"{estimates[m].std() / 10.0:.3f}" for m in ('wls', 'ols')]
+            f"{estimates[m].std(ddof=1) / 10.0:.3f}" for m in ('wls', 'ols')]
 
     @pytest.mark.parametrize('overrides, message', [
         ({'output_time_unit': 'picosecond'}, "'output_time_unit' is not supported"),
@@ -666,13 +666,13 @@ class TestQuickTestOutputSchema:
         assert values['Mean estimate'] == [
             f"{d_estimates[m].mean():.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Standard deviation'] == [
-            f"{d_estimates[m].std():.5f} {d_unit}" for m in ('wls', 'ols')]
+            f"{d_estimates[m].std(ddof=1):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Bias (mean - nominal)'] == [
             f"{d_estimates[m].mean() - 0.01:.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Root Mean Square Error'] == [
             f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Relative standard error'] == [
-            f"{d_estimates[m].std() / 0.01:.3f}" for m in ('wls', 'ols')]
+            f"{d_estimates[m].std(ddof=1) / 0.01:.3f}" for m in ('wls', 'ols')]
         assert values['Standard error of the mean and of the bias'] == [
             f"{d_estimates[m].std(ddof=1) / np.sqrt(100):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Estimates'] == ["100 of 100 runs (0 without an estimate)"] * 2
@@ -1029,7 +1029,7 @@ class TestNoiseRangeExample:
             assert len(in_bin) == entry['num_runs']
             wls = in_bin['weighted fit diffusion slope'].dropna().to_numpy() / 2
             assert entry['accuracy']['wls']['mean'] == pytest.approx(wls.mean(), rel=1e-12)
-            assert entry['accuracy']['wls']['std'] == pytest.approx(wls.std(), rel=1e-12)
+            assert entry['accuracy']['wls']['std'] == pytest.approx(wls.std(ddof=1), rel=1e-12)
             assert entry['statistics']['wls']['num_successful'] == len(wls)
             assert entry['precision']['10%']['wls'] == pytest.approx(np.mean(np.abs(wls / 0.01 - 1) <= 0.1))
 

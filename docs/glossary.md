@@ -172,7 +172,7 @@ The proximity level is not a simulation parameter. The summary file reports the 
 
 ### Relative Standard Error
 
-The standard deviation of the diffusion coefficient estimates divided by the nominal diffusion coefficient. It is the spread of single estimates as a fraction of the nominal value: 0.25 means that one measurement is typically 25% of the nominal value away from the mean of the estimates.
+The sample standard deviation (divisor n − 1) of the diffusion coefficient estimates divided by the nominal diffusion coefficient. It is the spread of single estimates as a fraction of the nominal value: 0.25 means that one measurement is typically 25% of the nominal value away from the mean of the estimates.
 
 It is not the standard error of the mean, which is smaller by the square root of the number of runs and describes how well the simulation knows the mean.
 
@@ -196,7 +196,7 @@ The standard deviation of a Gaussian distribution, which describes its width.
 
 ### Standard Error of the Mean
 
-The standard deviation of the estimates divided by the square root of their number. It describes how well a simulation with that number of runs knows the mean of the estimates, and so also the bias.
+The standard deviation of the estimates divided by the square root of their number. The standard deviation is the sample standard deviation (divisor n − 1, for n estimates), as everywhere in the outputs of DICE. It describes how well a simulation with that number of runs knows the mean of the estimates, and so also the bias.
 
 ### Single-Exponential Decay
 

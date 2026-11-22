@@ -143,8 +143,8 @@ def summary_label_texts(estimates: np.ndarray, nominal: float, d_unit: str, scal
     """The four labels of the Precision Summary, recomputed from the estimates with NumPy."""
     standard_error = np.std(estimates, ddof=1) / np.sqrt(len(estimates))
     return [
-        f"{np.std(estimates) * scale:.3g} {d_unit}",
-        f"{np.std(estimates) / nominal:.3f}",
+        f"{np.std(estimates, ddof=1) * scale:.3g} {d_unit}",
+        f"{np.std(estimates, ddof=1) / nominal:.3f}",
         f"{(np.mean(estimates) - nominal) * scale:.3g} ± {standard_error * scale:.2g} {d_unit}",
         f"{np.mean(estimates) / nominal:.3f}",
     ]

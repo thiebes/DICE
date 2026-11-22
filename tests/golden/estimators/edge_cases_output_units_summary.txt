@@ -38,9 +38,9 @@ Diffusion Coefficient Estimate Statistics:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:
-        0.01391 centimeter^2/second
+        0.01606 centimeter^2/second
     Relative standard error:
-        0.139
+        0.161
     Mean estimate:
         0.10712 centimeter^2/second
     Standard error of the mean and of the bias:
@@ -53,9 +53,9 @@ Diffusion Coefficient Estimate Statistics:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:
-        0.01066 centimeter^2/second
+        0.01231 centimeter^2/second
     Relative standard error:
-        0.107
+        0.123
     Mean estimate:
         0.10175 centimeter^2/second
     Standard error of the mean and of the bias:

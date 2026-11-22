@@ -6,7 +6,6 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 """
 
 import dataclasses
-from statistics import NormalDist
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Union
@@ -83,16 +82,30 @@ def proportion_interval(successes: int, total: int, confidence: float = 0.95) ->
     """
     if total <= 0:
         return (np.nan, np.nan)
-    z = NormalDist().inv_cdf(0.5 + confidence / 2)
-    proportion = successes / total
-    denominator = 1 + z ** 2 / total
-    center = (proportion + z ** 2 / (2 * total)) / denominator
-    half_width = z * np.sqrt(proportion * (1 - proportion) / total + z ** 2 / (4 * total ** 2)) / denominator
+    # Imported here so that importing this module does not load statsmodels.
+    from statsmodels.stats.proportion import proportion_confint
+
+    lower, upper = proportion_confint(successes, total, alpha=1 - confidence, method='wilson')
     # At a count of none or of all, the interval ends exactly at 0 or at 1;
     # rounding must not move that end.
-    lower = 0.0 if successes == 0 else max(0.0, float(center - half_width))
-    upper = 1.0 if successes == total else min(1.0, float(center + half_width))
-    return (lower, upper)
+    return (0.0 if successes == 0 else float(lower), 1.0 if successes == total else float(upper))
+
+
+def sample_standard_deviation(values: np.ndarray) -> float:
+    """
+    Sample standard deviation of the values (divisor n - 1).
+
+    The estimates of a simulation are a sample of the estimates the
+    simulated measurement can give, so their spread is estimated with the
+    divisor n - 1. The summary, the plots and the GUI all report this value.
+
+    Returns
+    -------
+    float
+        The standard deviation; NaN for fewer than two values, which have none.
+    """
+    values = np.asarray(values, dtype=float)
+    return float(np.std(values, ddof=1)) if values.size > 1 else float('nan')
 
 
 def calculate_accuracy_metrics(
@@ -112,15 +125,15 @@ def calculate_accuracy_metrics(
     Returns
     -------
     dict
-        Dictionary containing accuracy metrics. 'count' is the number of
-        estimates, and 'standard_error' the standard error of their mean
-        (sample standard deviation / sqrt(count)), which is also the standard
-        error of the bias, because the nominal value is exact. It is NaN for
-        fewer than two estimates.
+        Dictionary containing accuracy metrics. 'std' is the sample standard
+        deviation of the estimates (sample_standard_deviation), and
+        'standard_error' the standard error of their mean ('std' divided by
+        the square root of the number of estimates), which is also the
+        standard error of the bias, because the nominal value is exact. Both
+        are NaN for fewer than two estimates.
     """
     if len(estimates) == 0:
         return {
-            'count': 0,
             'mean': np.nan,
             'median': np.nan,
             'std': np.nan,
@@ -133,7 +146,7 @@ def calculate_accuracy_metrics(
     
     mean_est = np.mean(estimates)
     median_est = np.median(estimates)
-    std_est = np.std(estimates)
+    std_est = sample_standard_deviation(estimates)
     
     # Calculate bias
     bias = mean_est - nominal_value
@@ -144,11 +157,9 @@ def calculate_accuracy_metrics(
     rmse = np.sqrt(np.mean(errors**2))
     relative_rmse = rmse / nominal_value if nominal_value != 0 else np.nan
     
-    count = len(estimates)
-    standard_error = np.std(estimates, ddof=1) / np.sqrt(count) if count > 1 else np.nan
+    standard_error = std_est / np.sqrt(len(estimates))
 
     return {
-        'count': count,
         'mean': mean_est,
         'median': median_est,
         'std': std_est,
