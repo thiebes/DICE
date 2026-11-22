@@ -94,6 +94,7 @@ CM2_PER_S = OutputUnitPreferences(diffusion_length='centimeter', diffusion_time=
 
 
 def _csv(**options) -> Callable[[MonteCarloOutput, Path], None]:
+    options = {'length_unit': 'micrometer', 'time_unit': 'nanosecond', **options}
     return lambda output, path: export_collated_results(output, path, **options)
 
 

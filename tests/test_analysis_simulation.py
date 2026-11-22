@@ -3,7 +3,6 @@ Tests for dice.analysis.simulation module.
 """
 
 import pytest
-import warnings
 import numpy as np
 from seeded_results import assert_seeded_results_agree
 from dice.analysis.simulation import (
@@ -14,16 +13,9 @@ from dice.analysis.simulation import (
 
 
 def get_legacy_simulation_params():
-    """
-    Get legacy simulation parameters for testing.
-
-    Uses MockSimulationParameters with deprecation warning suppressed.
-    For new tests, prefer using the default_simulation_params fixture.
-    """
+    """Simulation parameters with fixed values, in the structure the engine reads."""
     from dice.utils.legacy_compatibility import MockSimulationParameters
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        return MockSimulationParameters()
+    return MockSimulationParameters()
 
 
 class TestCalculateWLSWeights:

@@ -18,7 +18,7 @@ from fft_cnr import fft_cnr
 from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, calculate_wls_weights
 from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
-from ..models.parameters import NoiseRange, SimulationParameters
+from ..models.parameters import NoiseRange
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import joblib_workers_supported
 from ..utils.legacy_compatibility import LegacySimulationParameters
@@ -165,8 +165,8 @@ def run_monte_carlo_simulation(
 
     Parameters
     ----------
-    parameters : SimulationParameters
-        Simulation parameters.
+    parameters : LegacySimulationParameters
+        Simulation parameters, as create_parameters_from_legacy builds them.
     x_axis : np.ndarray
         Spatial axis values.
     time_axis : np.ndarray

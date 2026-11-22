@@ -137,7 +137,7 @@ class TestLoadAndPlotFromCsv:
     @pytest.fixture
     def exported_csv(self, tmp_path) -> Path:
         csv_file = tmp_path / 'exported.csv'
-        export_collated_results(_output(WLS_SLOPES, OLS_SLOPES), csv_file)
+        export_collated_results(_output(WLS_SLOPES, OLS_SLOPES), csv_file, length_unit='micrometer', time_unit='nanosecond')
         return csv_file
 
     @pytest.mark.parametrize('method', list(METHOD_ARGUMENTS))
@@ -177,7 +177,7 @@ class TestLoadAndPlotFromCsv:
         wls = [0.02, None, 0.03, 0.021]
         ols = [0.019, 0.0216, 0.017, 0.026]   # D / D_nominal: 0.95, 1.08, 0.85, 1.3
         csv_file = tmp_path / 'one_gap.csv'
-        export_collated_results(_output(wls, ols), csv_file)
+        export_collated_results(_output(wls, ols), csv_file, length_unit='micrometer', time_unit='nanosecond')
 
         interface = DiceInterface()
         interface.load_and_plot_from_csv(
@@ -215,7 +215,7 @@ class TestLoadAndPlotFromCsv:
         from dice.models.parameters import OutputUnitPreferences
         csv_file = tmp_path / 'nm_per_ps.csv'
         export_collated_results(
-            _output(WLS_SLOPES, OLS_SLOPES), csv_file,
+            _output(WLS_SLOPES, OLS_SLOPES), csv_file, length_unit='micrometer', time_unit='nanosecond',
             output_units=OutputUnitPreferences(diffusion_length='nanometer', diffusion_time='picosecond'))
         interface = DiceInterface()
         interface.load_and_plot_from_csv(
@@ -286,7 +286,7 @@ class TestFiguresAreClosed:
         import matplotlib.pyplot as plt
 
         csv_file = tmp_path / 'exported.csv'
-        export_collated_results(_output(WLS_SLOPES, OLS_SLOPES), csv_file)
+        export_collated_results(_output(WLS_SLOPES, OLS_SLOPES), csv_file, length_unit='micrometer', time_unit='nanosecond')
         plt.close('all')
         interface = DiceInterface()
 

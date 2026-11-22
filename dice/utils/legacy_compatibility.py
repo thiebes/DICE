@@ -1,58 +1,31 @@
 """
-Legacy compatibility layer for DICE.
+Parameter containers that the simulation engine takes as input.
 
-This module provides adapters for maintaining backward compatibility
-with the original monolithic dice.py implementation.
-
-.. deprecated::
-    All classes in this module are deprecated. Use the modern dataclasses
-    from :mod:`dice.models.parameters` instead.
+The engine reads the initial profile from ``parameters.profile`` and the
+nominal transport values from ``parameters.physics``.
+``create_parameters_from_legacy`` builds that object from a parsed parameters
+dictionary; the command-line interface, the GUI and ``dice.dice_runner`` all
+call it.
 """
 
 from typing import Dict, Any
-import warnings
 import numpy as np
 
 
 class LegacyProfileParameters:
-    """
-    Minimal profile parameters for legacy compatibility.
-
-    .. deprecated::
-        Use :class:`dice.models.parameters.GaussianParameters` instead.
-        Migration: ``GaussianParameters(amplitude_0=..., sigma2_0=..., mu_0=...)``
-    """
+    """Initial Gaussian profile: its variance, amplitude and mean."""
 
     def __init__(self, sigma2_0: float, amplitude_0: float, mu_0: float):
-        warnings.warn(
-            "LegacyProfileParameters is deprecated. "
-            "Use dice.models.parameters.GaussianParameters instead. "
-            "Migration: GaussianParameters(amplitude_0=..., sigma2_0=..., mu_0=...)",
-            DeprecationWarning,
-            stacklevel=2
-        )
         self.sigma2_0 = sigma2_0
         self.amplitude_0 = amplitude_0
         self.mu_0 = mu_0
 
 
 class LegacyPhysicsParameters:
-    """
-    Minimal physics parameters for legacy compatibility.
-
-    .. deprecated::
-        Physics parameters are now top-level attributes on
-        :class:`dice.models.parameters.SimulationParameters`.
-    """
+    """Nominal diffusion coefficient, lifetime and diffusion length."""
 
     def __init__(self, diffusion_coefficient: float, lifetime: float,
                  diffusion_length: float):
-        warnings.warn(
-            "LegacyPhysicsParameters is deprecated. "
-            "Physics parameters are now top-level attributes on SimulationParameters.",
-            DeprecationWarning,
-            stacklevel=2
-        )
         self.diffusion_coefficient = diffusion_coefficient
         self.lifetime = lifetime
         self.diffusion_length = diffusion_length
@@ -60,26 +33,18 @@ class LegacyPhysicsParameters:
 
 class LegacySimulationParameters:
     """
-    Minimal simulation parameters for legacy compatibility.
+    Simulation parameters in the structure the engine reads.
 
-    This class provides a lightweight parameter container that mimics
-    the structure expected by the new modular functions but can be
-    created from legacy dictionary format.
-
-    .. deprecated::
-        Use :class:`dice.models.parameters.SimulationParameters` instead.
-        Use ``SimulationParameters.from_legacy(params_dict)`` for migration.
+    Attributes
+    ----------
+    profile : LegacyProfileParameters
+        The initial profile.
+    physics : LegacyPhysicsParameters
+        The nominal transport values.
     """
 
     def __init__(self, profile: LegacyProfileParameters,
                  physics: LegacyPhysicsParameters):
-        warnings.warn(
-            "LegacySimulationParameters is deprecated. "
-            "Use dice.models.parameters.SimulationParameters instead. "
-            "Use SimulationParameters.from_legacy(params_dict) for migration.",
-            DeprecationWarning,
-            stacklevel=2
-        )
         self.profile = profile
         self.physics = physics
 
@@ -91,24 +56,25 @@ def create_parameters_from_legacy(
     diffusion_length: float
 ) -> LegacySimulationParameters:
     """
-    Create simulation parameters from legacy dictionary format.
-    
+    Create the engine's simulation parameters from a parsed parameters dictionary.
+
     Parameters
     ----------
     parameters_dict : dict
-        Legacy parameters dictionary with keys like 'sigma^2_0', 'amplitude_0', etc.
+        Parsed parameters dictionary with the keys 'sigma^2_0', 'amplitude_0'
+        and 'mu_0' (or 'mean_0').
     diffusion_coefficient : float
         Nominal diffusion coefficient.
     lifetime : float
         Nominal lifetime (tau).
     diffusion_length : float
         Nominal diffusion length.
-    
+
     Returns
     -------
     LegacySimulationParameters
-        Parameters object compatible with new modular functions.
-    
+        Parameters object that run_monte_carlo_simulation takes.
+
     Examples
     --------
     >>> params_dict = {
@@ -125,81 +91,40 @@ def create_parameters_from_legacy(
         amplitude_0=parameters_dict['amplitude_0'],
         mu_0=parameters_dict.get('mu_0', parameters_dict.get('mean_0', 0.0))  # Handle both naming conventions
     )
-    
+
     physics = LegacyPhysicsParameters(
         diffusion_coefficient=diffusion_coefficient,
         lifetime=lifetime,
         diffusion_length=diffusion_length
     )
-    
+
     return LegacySimulationParameters(profile=profile, physics=physics)
 
 
-# Mock parameter classes for testing
-# These are intentionally simple and should only be used in tests
+# Fixed parameter objects for unit tests of the engine.
 class MockProfileParameters:
-    """
-    Mock profile parameters for testing only.
+    """A unit-variance, unit-amplitude profile centered at zero, for tests."""
 
-    .. deprecated::
-        Use pytest fixtures from ``tests/conftest.py`` instead.
-        See ``default_gaussian_params`` fixture.
-    """
     def __init__(self):
-        warnings.warn(
-            "MockProfileParameters is deprecated. "
-            "Use pytest fixtures from tests/conftest.py instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
         self.sigma2_0 = 1.0
         self.amplitude_0 = 1.0
         self.mu_0 = 0.0
 
 
 class MockPhysicsParameters:
-    """
-    Mock physics parameters for testing only.
+    """Transport values D = 1 and tau = 10, for tests."""
 
-    .. deprecated::
-        Use pytest fixtures from ``tests/conftest.py`` instead.
-        See ``default_simulation_params`` fixture.
-    """
     def __init__(self):
-        warnings.warn(
-            "MockPhysicsParameters is deprecated. "
-            "Use pytest fixtures from tests/conftest.py instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
         self.diffusion_coefficient = 1.0
         self.lifetime = 10.0
         self.diffusion_length = np.sqrt(10.0)
 
 
 class MockSimulationParameters:
-    """
-    Mock simulation parameters for testing only.
+    """Simulation parameters with fixed values in the structure the engine reads, for tests."""
 
-    This provides a minimal implementation that doesn't require
-    complex initialization, suitable for unit tests.
-
-    .. deprecated::
-        Use pytest fixtures from ``tests/conftest.py`` instead.
-        See ``default_simulation_params`` fixture for modern dataclass equivalent.
-    """
     def __init__(self):
-        warnings.warn(
-            "MockSimulationParameters is deprecated. "
-            "Use pytest fixtures from tests/conftest.py instead. "
-            "See default_simulation_params fixture.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        # Suppress nested deprecation warnings for internal mock classes
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            self.profile = MockProfileParameters()
-            self.physics = MockPhysicsParameters()
+        self.profile = MockProfileParameters()
+        self.physics = MockPhysicsParameters()
         self.num_runs = 100
         self.noise_values = [0.05]

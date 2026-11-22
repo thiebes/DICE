@@ -49,6 +49,27 @@ class TestRunAsModule:
         assert completed.returncode == 0, completed.stderr
 
 
+class TestModuleExitCode:
+    """A failed run exits with a non-zero code under every way of starting the CLI."""
+
+    @pytest.mark.parametrize('module', ['dice', 'dice.cli.main'])
+    def test_failed_run_exits_with_one(self, tmp_path, module):
+        parameters_file = tmp_path / 'missing_width.txt'
+        parameters_file.write_text(
+            "{'number of runs': 2, 'pixel width': 50, 'mean_0': 0, 'amplitude_0': 1}", encoding='utf-8')
+
+        completed = run_python('-m', module, str(parameters_file), '--output-dir', str(tmp_path / 'out'))
+
+        assert completed.returncode == 1, completed.stdout + completed.stderr
+        assert "spatial width" in completed.stdout + completed.stderr
+
+    @pytest.mark.parametrize('module', ['dice', 'dice.cli.main'])
+    def test_version_exits_with_zero(self, module):
+        completed = run_python('-m', module, '--version')
+        assert completed.returncode == 0, completed.stderr
+        assert completed.stdout.strip() == f"dice {dice.__version__}"
+
+
 class TestPackageExports:
     """Every name in dice.cli.__all__ resolves, and `main` is always the entry function."""
 

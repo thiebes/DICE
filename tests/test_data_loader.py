@@ -195,7 +195,7 @@ class TestLoadExperimentalData:
             sim_params, params['x array'], params['time series'], params['noise series'],
             num_runs=3, multiprocessing=False, seed=2)
         results_csv = tmp_path / 'results.csv'
-        exported = export_collated_results(result, results_csv)
+        exported = export_collated_results(result, results_csv, length_unit='micrometer', time_unit='nanosecond')
 
         loaded = load_experimental_data(results_csv)
         assert set(loaded) == LOADED_DATA_KEYS | {'columns'}

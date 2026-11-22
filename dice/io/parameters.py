@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
 from ..utils.axes import make_x_axis, make_time_axis
-from ..utils.validators import validate_integer, validate_limits
+from ..utils.validators import validate_filename_slug, validate_integer, validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
     validate_output_units,
@@ -36,6 +36,17 @@ RETIRED_PROXIMITY_KEYS = ('proximity level', 'proximity_level')
 
 # Keys whose value is the path of the measured profile for the noise estimate.
 NOISE_DATA_KEYS = ('estimate noise from data', 'estimate_noise_from_data')
+
+# Defaults of the optional parameters, by the key the parameter files document.
+OPTIONAL_PARAMETER_DEFAULTS = {
+    'multiprocessing': 1,
+    'filename slug': 'dice_simulation',
+    'retain profile data': 0,
+    'image type': 'png',
+    'image width': 10,
+    'image height': 6,
+    'image dpi': 100,
+}
 
 # Keys of a noise range, from which each run draws its own noise level, each
 # mapped to whether log10(1/sigma), rather than 1/sigma, is uniformly distributed.
@@ -540,28 +551,11 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Process diffusion parameters
     handle_diffusion_parameters(parameters_dictionary)
     
-    # Set defaults for optional parameters
-    if 'multiprocessing' not in parameters_dictionary:
-        parameters_dictionary['multiprocessing'] = 1
-    
-    if 'filename slug' not in parameters_dictionary:
-        parameters_dictionary['filename slug'] = 'dice_simulation'
-    
-    if 'retain profile data' not in parameters_dictionary:
-        parameters_dictionary['retain profile data'] = 0
-    
-    # Image parameters
-    if 'image type' not in parameters_dictionary:
-        parameters_dictionary['image type'] = 'png'
-    
-    if 'image width' not in parameters_dictionary:
-        parameters_dictionary['image width'] = 10
-    
-    if 'image height' not in parameters_dictionary:
-        parameters_dictionary['image height'] = 6
-    
-    if 'image dpi' not in parameters_dictionary:
-        parameters_dictionary['image dpi'] = 100
+    # Set defaults for optional parameters. A value given under either
+    # spelling of a key stands; the two spellings share one canonical key.
+    for key, default in OPTIONAL_PARAMETER_DEFAULTS.items():
+        if key not in parameters_dictionary and normalize_parameter_key(key) not in parameters_dictionary:
+            parameters_dictionary[key] = default
 
     # Ensure both legacy and canonical keys are present for compatibility
     parameters_dictionary = add_legacy_keys(normalize_parameters(parameters_dictionary))
@@ -618,6 +612,13 @@ def validate_parameters(params) -> None:
         validate_length_unit(global_length_unit(params))
         validate_time_unit(global_time_unit(params))
         validate_output_units(params)
+
+        # The slug names the output folder and every output file, so it must
+        # be a plain name; a path separator or '..' would write outside it.
+        validate_filename_slug(
+            params.get('filename slug', params.get('filename_slug', 'dice_simulation')),
+            name="'filename slug'",
+        )
 
         # The histogram is drawn after the simulation, so reject malformed
         # limits and an image type it cannot be written as here instead of

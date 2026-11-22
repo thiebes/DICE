@@ -7,6 +7,7 @@ This module is the single source of truth for unit definitions, conversion
 factors, and display abbreviations.
 """
 
+import difflib
 from enum import Enum
 from typing import Optional, Dict, Any, Union
 import warnings
@@ -315,7 +316,7 @@ def diffusion_coefficient_label(length_unit: str, time_unit: str) -> str:
     Returns
     -------
     str
-        Label like 'um^2/ns' or 'cm^2/s'.
+        Label like 'μm²/ns' or 'cm²/s'.
     """
     l_abbr = length_abbreviation(length_unit)
     t_abbr = time_abbreviation(time_unit)
@@ -415,7 +416,8 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
         (['sigma_0'], ['sigma_0_unit']),
         (['mean_0', 'mu_0'], ['mu_0_unit']),
         (['spatial width', 'spatial_width'], ['spatial_width_unit', 'spatial width unit']),
-        (['nominal diffusion length', 'diffusion_length'], ['diffusion_length_unit']),
+        (['nominal diffusion length', 'diffusion_length'],
+         ['diffusion_length_unit', 'diffusion length unit']),
     ]
 
     for value_keys, override_keys in length_params:
@@ -524,4 +526,58 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
                         result[vk], from_l, from_t, target_length, target_time
                     )
 
+    reject_unknown_unit_keys(result)
+
     return result
+
+
+# The per-parameter unit keys that resolve_units converts and removes.
+PER_PARAMETER_UNIT_KEYS = (
+    'FWHM_0_unit', 'fwhm_0_unit', 'sigma_0_unit', 'sigma2_0_unit', 'mu_0_unit',
+    'spatial_width_unit', 'spatial width unit',
+    'diffusion_length_unit', 'diffusion length unit',
+    'diffusion_coefficient_length_unit', 'diffusion_coefficient_time_unit',
+    'lifetime_unit', 'time_range_unit', 'time_series_unit',
+    'time_start_unit', 'time_stop_unit',
+)
+
+# The unit keys that stay in the dictionary: the global units and the units of
+# the diffusion coefficients in the output files.
+GLOBAL_AND_OUTPUT_UNIT_KEYS = (
+    'length unit', 'length_unit', 'time unit', 'time_unit',
+    OUTPUT_DIFFUSION_LENGTH_UNIT_KEY, OUTPUT_DIFFUSION_TIME_UNIT_KEY,
+)
+
+_UNIT_KEY_ENDINGS = ('_unit', ' unit', '_units', ' units')
+
+
+def reject_unknown_unit_keys(parameters: Dict[str, Any]) -> None:
+    """
+    Reject a key that looks like a unit key but that no parameter uses.
+
+    A misspelled unit key would otherwise be ignored and its value read in
+    the global unit: a width meant in nanometers would run in micrometers.
+
+    Parameters
+    ----------
+    parameters : dict
+        Parameters dictionary after the per-parameter unit keys are removed.
+
+    Raises
+    ------
+    ValueError
+        If a key ends like a unit key and is not one. The message names the
+        closest unit key, if there is one.
+    """
+    known_keys = PER_PARAMETER_UNIT_KEYS + GLOBAL_AND_OUTPUT_UNIT_KEYS
+    for key in parameters:
+        if not isinstance(key, str) or not key.lower().endswith(_UNIT_KEY_ENDINGS):
+            continue
+        # validate_output_units rejects these two with its own explanation.
+        if key in GLOBAL_AND_OUTPUT_UNIT_KEYS or key in UNSUPPORTED_OUTPUT_UNIT_KEYS:
+            continue
+        close = difflib.get_close_matches(key, known_keys, n=1)
+        hint = f" Did you mean '{close[0]}'?" if close else ""
+        raise ValueError(
+            f"Unknown unit key '{key}'.{hint} The unit keys are: {', '.join(known_keys)}."
+        )

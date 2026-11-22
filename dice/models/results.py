@@ -162,7 +162,7 @@ class MonteCarloOutput:
     Attributes
     ----------
     parameters : Any
-        Simulation parameters object (SimulationParameters or None for CSV-loaded data).
+        Simulation parameters object (LegacySimulationParameters, or None for CSV-loaded data).
     run_results : List[RunResult]
         Individual results from each Monte Carlo run.
     num_runs : int

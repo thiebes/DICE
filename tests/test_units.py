@@ -229,8 +229,8 @@ class TestConvertDiffusionCoefficient:
             1.5, 'micrometer', 'nanosecond', 'micrometer', 'nanosecond'
         ) == 1.5
 
-    def test_um2_per_ns_to_cm2_per_s(self):
-        # 1 um^2/ns = (1e-4 cm)^2 / (1e-9 s) = 1e-8 / 1e-9 = 10 cm^2/s
+    def test_square_micrometer_per_ns_to_cm2_per_s(self):
+        # 1 μm^2/ns = (1e-4 cm)^2 / (1e-9 s) = 1e-8 / 1e-9 = 10 cm^2/s
         # Wait, that's for slope. For D, the factor is the same.
         result = convert_diffusion_coefficient(
             1.0, 'micrometer', 'nanosecond', 'centimeter', 'second'
@@ -238,15 +238,15 @@ class TestConvertDiffusionCoefficient:
         expected = (1e-4)**2 / 1e-9  # = 1e-8 / 1e-9 = 10.0
         assert np.isclose(result, expected, rtol=1e-10)
 
-    def test_cm2_per_s_to_um2_per_ns(self):
+    def test_cm2_per_s_to_square_micrometer_per_ns(self):
         # Inverse of above
         result = convert_diffusion_coefficient(
             10.0, 'centimeter', 'second', 'micrometer', 'nanosecond'
         )
         assert np.isclose(result, 1.0, rtol=1e-10)
 
-    def test_nm2_per_ps_to_um2_per_ns(self):
-        # 1 nm^2/ps = (1e-3 um)^2 / (1e-3 ns) = 1e-6/1e-3 = 1e-3 um^2/ns
+    def test_nm2_per_ps_to_square_micrometer_per_ns(self):
+        # 1 nm^2/ps = (1e-3 μm)^2 / (1e-3 ns) = 1e-6/1e-3 = 1e-3 μm^2/ns
         result = convert_diffusion_coefficient(
             1.0, 'nanometer', 'picosecond', 'micrometer', 'nanosecond'
         )
@@ -372,7 +372,7 @@ class TestResolveUnits:
             'spatial_width_unit': 'millimeter',
         }
         result = resolve_units(params)
-        # 0.01 mm = 10 um
+        # 0.01 mm = 10 μm
         assert np.isclose(result['spatial width'], 10.0, rtol=1e-12)
         assert 'spatial_width_unit' not in result
 
@@ -397,7 +397,7 @@ class TestResolveUnits:
             'diffusion_coefficient_time_unit': 'second',
         }
         result = resolve_units(params)
-        # 1e-5 cm^2/s -> um^2/ns
+        # 1e-5 cm^2/s -> μm^2/ns
         expected = convert_diffusion_coefficient(
             1e-5, 'centimeter', 'second', 'micrometer', 'nanosecond'
         )
@@ -453,7 +453,7 @@ class TestResolveUnits:
             'FWHM_0': 500.0,
             'fwhm_0_unit': 'nanometer',
             'spatial width': 10.0,
-            # no override for spatial_width -- stays in um
+            # no override for spatial_width -- stays in μm
             'nominal lifetime (tau)': 500.0,
             'lifetime_unit': 'picosecond',
         }
@@ -481,7 +481,7 @@ class TestResolveUnits:
             'diffusion_length_unit': 'nanometer',
         }
         result = resolve_units(params)
-        # 100 nm = 0.1 um
+        # 100 nm = 0.1 μm
         assert np.isclose(result['nominal diffusion length'], 0.1, rtol=1e-12)
 
     def test_mu_0_override(self):
@@ -504,7 +504,7 @@ class TestResolveUnits:
             # no time override -> uses global nanosecond
         }
         result = resolve_units(params)
-        # 0.01 nm^2/ns -> um^2/ns
+        # 0.01 nm^2/ns -> μm^2/ns
         expected = convert_diffusion_coefficient(
             0.01, 'nanometer', 'nanosecond', 'micrometer', 'nanosecond'
         )
@@ -518,7 +518,7 @@ class TestResolveUnits:
             'sigma2_0_unit': 'nanometer',
         }
         result = resolve_units(params)
-        # 250000 nm^2 = 0.25 um^2
+        # 250000 nm^2 = 0.25 μm^2
         assert np.isclose(result['sigma^2_0'], 0.25, rtol=1e-10)
 
     def test_time_start_unit_in_time_range_list(self):
@@ -642,3 +642,39 @@ class TestGlobalUnits:
                   'time unit': 'picosecond', 'time_unit': 'femtosecond'}
         assert global_length_unit(params) == 'angstrom'
         assert global_time_unit(params) == 'femtosecond'
+
+
+class TestUnknownUnitKeys:
+    """resolve_units rejects a key that looks like a unit key but that no parameter uses."""
+
+    BASE = {'length unit': 'micrometer', 'time unit': 'nanosecond', 'FWHM_0': 500.0, 'spatial width': 5.0}
+
+    @pytest.mark.parametrize('key, suggestion', [
+        ('FWHM_0_units', 'FWHM_0_unit'),
+        ('mean_0_unit', 'mu_0_unit'),
+        ('fwhm_unit', 'fwhm_0_unit'),
+        ('time range unit', 'time_range_unit'),
+    ])
+    def test_misspelled_unit_key_is_rejected_with_the_closest_key(self, key, suggestion):
+        with pytest.raises(ValueError, match=f"Unknown unit key '{key}'. Did you mean '{suggestion}'"):
+            resolve_units(self.BASE | {key: 'nanometer'})
+
+    def test_every_documented_unit_key_is_accepted(self):
+        from dice.utils.units import GLOBAL_AND_OUTPUT_UNIT_KEYS, PER_PARAMETER_UNIT_KEYS
+        time_keys = {'lifetime_unit', 'time_range_unit', 'time_series_unit', 'time_start_unit',
+                     'time_stop_unit', 'diffusion_coefficient_time_unit', 'time unit', 'time_unit',
+                     'output_diffusion_time_unit'}
+        for key in PER_PARAMETER_UNIT_KEYS + GLOBAL_AND_OUTPUT_UNIT_KEYS:
+            unit = 'nanosecond' if key in time_keys else 'micrometer'
+            resolved = resolve_units(self.BASE | {key: unit})
+            if key in PER_PARAMETER_UNIT_KEYS:
+                assert key not in resolved
+
+    def test_space_spelling_of_the_diffusion_length_unit_converts(self):
+        resolved = resolve_units(self.BASE | {'nominal diffusion length': 500.0,
+                                              'diffusion length unit': 'nanometer'})
+        assert resolved['nominal diffusion length'] == pytest.approx(0.5)
+
+    def test_keys_that_only_contain_the_word_unit_are_left_alone(self):
+        resolved = resolve_units(self.BASE | {'units of measure note': 'kept'})
+        assert resolved['units of measure note'] == 'kept'

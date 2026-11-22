@@ -453,8 +453,8 @@ class TestOutputUnitConversion:
             csv_default = os.path.join(tmpdir, 'default.csv')
             csv_custom = os.path.join(tmpdir, 'custom.csv')
 
-            export_collated_results(result, csv_default, output_units=default_prefs)
-            export_collated_results(result, csv_custom, output_units=custom_prefs)
+            export_collated_results(result, csv_default, length_unit='micrometer', time_unit='nanosecond', output_units=default_prefs)
+            export_collated_results(result, csv_custom, length_unit='micrometer', time_unit='nanosecond', output_units=custom_prefs)
 
             df_default = pd.read_csv(csv_default)
             df_custom = pd.read_csv(csv_custom)
@@ -700,7 +700,7 @@ class TestCSVRoundTrip:
         result = TestSimulationEquivalence._run_seeded_simulation(_base_params())
 
         csv_file = tmp_path / "round_trip.csv"
-        export_collated_results(result, str(csv_file))
+        export_collated_results(result, str(csv_file), length_unit='micrometer', time_unit='nanosecond')
 
         df = pd.read_csv(csv_file)
 

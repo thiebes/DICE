@@ -17,6 +17,7 @@ from dice.io.parameters import (
     handle_profile_width_parameters,
     handle_diffusion_parameters,
     parameter_parser,
+    validate_parameters,
 )
 
 
@@ -384,7 +385,7 @@ class TestMixedUnitParameters:
         params = self._base_params()
         params['FWHM_0'] = 500.0
         params['fwhm_0_unit'] = 'nanometer'
-        # Resolve first to convert 500 nm -> 0.5 um
+        # Resolve first to convert 500 nm -> 0.5 μm
         resolved = resolve_units(params)
         assert np.isclose(resolved['FWHM_0'], 0.5, rtol=1e-12)
         # Then parse (which converts FWHM to sigma^2)
@@ -399,7 +400,7 @@ class TestMixedUnitParameters:
         from dice.utils.units import resolve_units
         from dice.utils.converters import fwhm_to_sigma2
 
-        # Single unit system: everything in um/ns
+        # Single unit system: everything in μm/ns
         params_uniform = self._base_params()
         params_uniform['FWHM_0'] = 0.5
         params_uniform['nominal lifetime (tau)'] = 2.0
@@ -792,3 +793,56 @@ class TestNoiseRangeDraws:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+QUICK_TEST_FILE = Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt'
+
+
+def quick_test_raw() -> dict:
+    """The dictionary in data/examples/quick_test.txt, before any parsing."""
+    import ast
+    return ast.literal_eval(QUICK_TEST_FILE.read_text(encoding='utf-8'))
+
+
+class TestOptionalKeysInEitherSpelling:
+    """A value given under the underscore spelling of an optional key is not replaced by the default."""
+
+    CANONICAL_VALUES = {
+        'filename_slug': 'my_run', 'image_type': 'svg', 'image_dpi': 300,
+        'image_width': 20, 'image_height': 12, 'retain_profile_data': 1,
+    }
+    LEGACY_KEYS = {
+        'filename_slug': 'filename slug', 'image_type': 'image type', 'image_dpi': 'image dpi',
+        'image_width': 'image width', 'image_height': 'image height',
+        'retain_profile_data': 'retain profile data',
+    }
+
+    def test_canonical_optional_keys_keep_their_values(self):
+        raw = {key: value for key, value in quick_test_raw().items()
+               if key not in self.LEGACY_KEYS.values()}
+        parsed = parameter_parser(raw | self.CANONICAL_VALUES)
+        for canonical_key, value in self.CANONICAL_VALUES.items():
+            assert parsed[canonical_key] == value
+            assert parsed[self.LEGACY_KEYS[canonical_key]] == value
+
+    def test_defaults_fill_absent_optional_keys(self):
+        raw = {key: value for key, value in quick_test_raw().items()
+               if key not in self.LEGACY_KEYS.values()}
+        parsed = parameter_parser(raw)
+        assert parsed['filename slug'] == 'dice_simulation'
+        assert (parsed['image type'], parsed['image width'], parsed['image height'], parsed['image dpi']) \
+            == ('png', 10, 6, 100)
+        assert parsed['retain profile data'] == 0
+
+
+class TestFilenameSlugIsCheckedBeforeTheRun:
+    """validate_parameters rejects a slug that would write outside the output folder."""
+
+    @pytest.mark.parametrize('slug', ['../elsewhere/run', 'sub/run', 'C:/somewhere/run', '..', '.', 'run.', 'run '])
+    def test_slug_that_is_not_a_plain_name_is_rejected(self, slug):
+        parsed = parameter_parser(quick_test_raw() | {'filename slug': slug})
+        with pytest.raises(ValueError, match="'filename slug' cannot"):
+            validate_parameters(parsed)
+
+    def test_plain_slug_is_accepted(self):
+        validate_parameters(parameter_parser(quick_test_raw() | {'filename slug': 'run_2.v3'}))

@@ -136,7 +136,7 @@ class TestGlobalUnitsReachOutputs:
     def test_micrometer_nanosecond_unchanged(self, micrometer_run):
         assert micrometer_run.exit_code == 0
         df = micrometer_run.read_csv()
-        # D = 0.1 um x 0.1 um / 1 ns = 0.01 um^2/ns; 1 um^2/ns = 1e-8 cm^2 / 1e-9 s = 10 cm^2/s.
+        # D = 0.1 μm x 0.1 μm / 1 ns = 0.01 μm^2/ns; 1 μm^2/ns = 1e-8 cm^2 / 1e-9 s = 10 cm^2/s.
         assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
         assert df[WLS_D_COLUMN].to_numpy() == pytest.approx(
             df['weighted fit diffusion slope'].to_numpy() / 2 * 10, rel=1e-12)
@@ -594,7 +594,7 @@ class TestQuickTestOutputSchema:
         assert df['nominal sigma^2_0'].to_numpy() == pytest.approx(fwhm_to_sigma2(1.0))
         assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
         for prefix in ('weighted fit', 'unweighted fit'):
-            # 1 um^2/ns is 10 cm^2/s, and D is half the MSD slope.
+            # 1 μm^2/ns is 10 cm^2/s, and D is half the MSD slope.
             assert df[f'{prefix} diffusion coeff [cm²/s]'].to_numpy() == pytest.approx(
                 df[f'{prefix} diffusion slope'].to_numpy() * 5, rel=1e-12)
             assert df[f'{prefix} diffusion stderr [cm²/s]'].to_numpy() == pytest.approx(

@@ -14,8 +14,8 @@ def sample_parameters_dict():
     return {
         'filename slug': 'test_simulation',
         'number of runs': 10,
-        'length unit': 'um',
-        'time unit': 'ms',
+        'length unit': 'micrometer',
+        'time unit': 'millisecond',
         'spatial width': 10.0,
         'pixel width': 100,
         'mean_0': 0.0,
@@ -107,7 +107,7 @@ def mock_parameters_file(tmp_path):
     return str(param_path)
 
 
-# Modern dataclass-based fixtures (replacements for MockSimulationParameters)
+# Fixtures of the typed parameter dataclasses in dice.models.parameters
 
 @pytest.fixture
 def default_gaussian_params():
@@ -153,10 +153,10 @@ def default_simulation_params(
     default_output_params
 ):
     """
-    Default SimulationParameters for testing.
+    Default SimulationParameters for testing the dataclass itself.
 
-    This fixture replaces MockSimulationParameters with modern dataclasses.
-    Values match the original mock defaults: D=1.0, tau=10.0, num_runs=100.
+    The engine takes the .profile/.physics structure of legacy_simulation_params,
+    not this object. The values match that fixture: D=1.0, tau=10.0, num_runs=100.
     """
     from dice.models.parameters import SimulationParameters
     return SimulationParameters(
@@ -174,13 +174,6 @@ def default_simulation_params(
 
 @pytest.fixture
 def legacy_simulation_params():
-    """
-    Parameters with legacy .profile/.physics structure for compatibility testing.
-
-    Use this fixture when testing code that expects the legacy parameter format.
-    """
+    """Simulation parameters with fixed values, in the .profile/.physics structure the engine reads."""
     from dice.utils.legacy_compatibility import MockSimulationParameters
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        return MockSimulationParameters()
+    return MockSimulationParameters()

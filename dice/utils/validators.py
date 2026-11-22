@@ -244,7 +244,11 @@ def validate_file_path(path: str, must_exist: bool = False,
 
 def validate_filename_slug(value: str, name: str = "filename") -> str:
     """
-    Validate that a filename slug contains no forbidden characters.
+    Validate that a filename slug is a plain file name.
+
+    The slug names the output folder and the output files, so it cannot hold
+    a path separator, be '.' or '..', or end with a dot or a space (Windows
+    drops those, so the files would get another name).
 
     Parameters
     ----------
@@ -263,7 +267,8 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     TypeError
         If the value is not a string.
     ValueError
-        If the value is empty or contains forbidden characters.
+        If the value is empty, contains forbidden characters, is '.' or '..',
+        or ends with a dot or a space.
     """
     if not isinstance(value, str):
         raise TypeError(f"{name} must be a string, got {type(value).__name__}")
@@ -275,6 +280,12 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     for char in invalid_chars:
         if char in value:
             raise ValueError(f"{name} cannot contain: {', '.join(invalid_chars)}")
+
+    if value in ('.', '..'):
+        raise ValueError(f"{name} cannot be '.' or '..'")
+
+    if value.endswith(('.', ' ')):
+        raise ValueError(f"{name} cannot end with a dot or a space")
 
     return value
 

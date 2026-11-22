@@ -66,50 +66,36 @@ def nominal_profiles(params: dict, generated: dict) -> list[GaussianProfile]:
     ]
 
 
-class TestSimulationParametersFromParsedFiles:
-    """SimulationParameters.from_legacy reads the dictionaries the parser produces."""
+def simulation_fields(params: dict) -> dict:
+    """The component dataclasses of SimulationParameters, built from a parsed dictionary."""
+    return {
+        'num_runs': params['number of runs'],
+        'gaussian': GaussianParameters(
+            amplitude_0=params['amplitude_0'], sigma2_0=params['sigma^2_0'], mu_0=params['mu_0']),
+        'noise': NoiseParameters(mode='single', value=params['noise series'][0]),
+        'spatial': SpatialParameters(width=params['spatial width'], pixels=params['pixel width']),
+        'temporal': TemporalParameters(mode='series', series=list(params['time series'])),
+    }
 
-    @pytest.mark.parametrize('filename', EXAMPLE_FILES)
-    def test_fields_match_parsed_dictionary(self, filename):
-        params = open_parameters(EXAMPLES_DIR / filename)
-        sim = SimulationParameters.from_legacy(params)
 
-        assert sim.num_runs == params['number of runs']
-        assert sim.diffusion_coefficient == pytest.approx(params['nominal diffusion coefficient'])
-        assert sim.lifetime == pytest.approx(params['nominal lifetime (tau)'])
-        assert sim.diffusion_length == pytest.approx(params['nominal diffusion length'])
-        assert sim.gaussian.sigma2_0 == pytest.approx(params['sigma^2_0'])
-        assert sim.gaussian.amplitude_0 == params['amplitude_0']
-        assert sim.gaussian.mu_0 == params['mu_0']
-        assert (sim.noise.mode, sim.noise.value) == ('single', params['noise series'][0])
-        assert (sim.spatial.width, sim.spatial.pixels) == (params['spatial width'], params['pixel width'])
-        assert sim.output.filename_slug == params['filename slug']
-        assert sim.output.image_type == params['image type']
-        assert sim.length_unit == params['length unit']
-        assert sim.time_unit == params['time unit']
-        assert not hasattr(sim, 'proximity_level')
+class TestDataclassesFromParsedFiles:
+    """The dataclasses take the values of the dictionaries the parser produces."""
 
     @pytest.mark.parametrize('filename', EXAMPLE_FILES)
     def test_axes_match_parsed_axes(self, filename):
         params = open_parameters(EXAMPLES_DIR / filename)
-        sim = SimulationParameters.from_legacy(params)
-        # The parser replaces 'time range' with the derived 'time series'.
-        assert sim.temporal.mode == 'series'
-        np.testing.assert_allclose(sim.temporal.make_axis(), params['time series'])
-        np.testing.assert_allclose(sim.spatial.make_axis(), params['x array'])
+        fields = simulation_fields(params)
+        np.testing.assert_allclose(fields['temporal'].make_axis(), params['time series'])
+        np.testing.assert_allclose(fields['spatial'].make_axis(), params['x array'])
 
-    def test_retired_proximity_level_ignored(self, quick_test_parameters):
-        import ast
-        from dice.io.parameters import parameter_parser
-        raw = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
-        with pytest.warns(UserWarning, match="'proximity level' no longer affects"):
-            params = parameter_parser(raw | {'proximity level': 0.1})
-        sim = SimulationParameters.from_legacy(params)
-        assert not hasattr(sim, 'proximity_level')
-        assert sim.num_runs == quick_test_parameters['number of runs']
+    @pytest.mark.parametrize('filename', EXAMPLE_FILES)
+    def test_pixel_size_is_the_spacing_of_the_parsed_axis(self, filename):
+        params = open_parameters(EXAMPLES_DIR / filename)
+        spatial = simulation_fields(params)['spatial']
+        assert spatial.pixel_size == pytest.approx(np.diff(params['x array'])[0], rel=1e-12)
 
     def test_gaussian_field_names_after_rename(self, quick_test_parameters):
-        gaussian = GaussianParameters.from_legacy(quick_test_parameters)
+        gaussian = simulation_fields(quick_test_parameters)['gaussian']
         assert set(vars(gaussian)) == {'amplitude_0', 'sigma2_0', 'mu_0'}
         with pytest.raises(TypeError):
             GaussianParameters(amplitude=1.0, sigma2=1.0, mu=0.0)
@@ -128,14 +114,12 @@ class TestParameterValidation:
         (lambda: NoiseParameters(mode='range', range=(0.02,)), "tuple of"),
         (lambda: NoiseParameters(mode='range', range=(0.05, 0.02)), "min must be less than max"),
         (lambda: NoiseParameters(mode='range', range=(-0.02, 0.05)), "non-negative"),
-        (lambda: NoiseParameters.from_legacy({'noise range, reciprocal': [0.02]}), "at least"),
         (lambda: SpatialParameters(width=0.0, pixels=50), "Spatial width must be positive"),
         (lambda: SpatialParameters(width=5.0, pixels=0), "pixels must be positive"),
         (lambda: TemporalParameters(mode='range', start=1.0, end=0.0, frames=5), "Start time"),
         (lambda: TemporalParameters(mode='range', start=0.0, end=1.0, frames=0), "frames must be positive"),
         (lambda: TemporalParameters(mode='range', start=0.0), "required for range mode"),
         (lambda: TemporalParameters(mode='series', series=[]), "cannot be empty"),
-        (lambda: TemporalParameters.from_legacy({}), "Either 'time_series' or 'time_range'"),
         (lambda: OutputParameters(image_type='bmp'), "Unknown image type 'bmp'"),
         (lambda: OutputParameters(image_width=0.0), "dimensions must be positive"),
         (lambda: OutputParameters(image_dpi=0), "DPI must be positive"),
@@ -151,17 +135,16 @@ class TestParameterValidation:
         ({'lifetime': -1.0}, "Lifetime must be non-negative"),
     ])
     def test_invalid_simulation_parameters(self, quick_test_parameters, overrides, message):
-        sim = SimulationParameters.from_legacy(quick_test_parameters)
-        fields = {name: getattr(sim, name) for name in (
-            'num_runs', 'diffusion_coefficient', 'lifetime', 'gaussian', 'noise', 'spatial', 'temporal')}
+        fields = simulation_fields(quick_test_parameters) | {
+            'diffusion_coefficient': quick_test_parameters['nominal diffusion coefficient'],
+            'lifetime': quick_test_parameters['nominal lifetime (tau)'],
+        }
         with pytest.raises(ValueError, match=message):
             SimulationParameters(**(fields | overrides))
 
     def test_zero_lifetime_has_infinite_diffusion_length(self, quick_test_parameters):
-        sim = SimulationParameters.from_legacy(quick_test_parameters)
-        fields = {name: getattr(sim, name) for name in (
-            'num_runs', 'gaussian', 'noise', 'spatial', 'temporal')}
-        no_decay = SimulationParameters(**fields, diffusion_coefficient=0.01, lifetime=0.0)
+        no_decay = SimulationParameters(
+            **simulation_fields(quick_test_parameters), diffusion_coefficient=0.01, lifetime=0.0)
         assert no_decay.diffusion_length == np.inf
 
 
@@ -269,23 +252,8 @@ class TestTimeSeriesProfileFromGenerator:
             )
 
 
-class TestLegacyConstructorConventions:
-    """SimulationParameters.from_legacy and OutputParameters follow the run path's rules."""
-
-    def test_zero_lifetime_keeps_the_diffusion_coefficient(self, tmp_path):
-        import ast
-        params = ast.literal_eval((EXAMPLES_DIR / 'quick_test.txt').read_text())
-        del params['nominal diffusion length']
-        params.update({'nominal diffusion coefficient': 0.01, 'nominal lifetime (tau)': 0})
-        params_file = tmp_path / 'no_decay.txt'
-        params_file.write_text(str(params))
-        parsed = open_parameters(params_file)
-
-        sim = SimulationParameters.from_legacy(parsed)
-
-        assert sim.diffusion_coefficient == 0.01
-        assert sim.lifetime == 0
-        assert sim.diffusion_length == float('inf')
+class TestOutputParameterConventions:
+    """OutputParameters accepts the image types the run path accepts."""
 
     @pytest.mark.parametrize('image_type', ['png', 'eps', 'WEBP', 'tiff'])
     def test_output_parameters_accept_the_run_time_image_types(self, image_type):

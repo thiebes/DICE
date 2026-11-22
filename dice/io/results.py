@@ -18,7 +18,8 @@ from ..models.parameters import OutputUnitPreferences
 from ..utils.converters import slope_to_diffusion_constant
 from ..utils.units import (
     convert_diffusion_coefficient, length_abbreviation, time_abbreviation,
-    diffusion_coefficient_label, OUTPUT_DIFFUSION_LENGTH_UNIT_KEY, OUTPUT_DIFFUSION_TIME_UNIT_KEY,
+    diffusion_coefficient_label, global_length_unit, global_time_unit,
+    OUTPUT_DIFFUSION_LENGTH_UNIT_KEY, OUTPUT_DIFFUSION_TIME_UNIT_KEY,
 )
 
 
@@ -84,8 +85,8 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
 def export_collated_results(
     results: MonteCarloOutput,
     filename: Union[str, Path],
-    length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond',
+    length_unit: str,
+    time_unit: str,
     output_units: Optional[OutputUnitPreferences] = None,
 ) -> pd.DataFrame:
     """
@@ -101,9 +102,10 @@ def export_collated_results(
     filename : str or Path
         Output CSV filename.
     length_unit : str
-        Unit of length used in simulation.
+        Unit of length the results are in: the global length unit of the
+        simulation. The results do not carry their units, so it has no default.
     time_unit : str
-        Unit of time used in simulation.
+        Unit of time the results are in: the global time unit of the simulation.
     output_units : OutputUnitPreferences, optional
         Preferred units for output columns. When None, diffusion
         coefficients are exported in cm^2/s (default behavior).
@@ -189,8 +191,8 @@ def write_summary_file(
     filename: Union[str, Path],
     parameters: Dict[str, Any],
     analysis: Optional[Dict[str, Any]] = None,
-    length_unit: str = 'micrometer',
-    time_unit: str = 'nanosecond',
+    length_unit: Optional[str] = None,
+    time_unit: Optional[str] = None,
     output_units: Optional[OutputUnitPreferences] = None,
 ) -> None:
     """
@@ -211,15 +213,22 @@ def write_summary_file(
         Simulation parameters.
     analysis : dict, optional
         Analysis results, as from analyze_simulation_results.
-    length_unit : str
-        Unit of length.
-    time_unit : str
-        Unit of time.
+    length_unit : str, optional
+        Unit of length the results are in. When None, the global length unit
+        of `parameters`.
+    time_unit : str, optional
+        Unit of time the results are in. When None, the global time unit of
+        `parameters`.
     output_units : OutputUnitPreferences, optional
         Unit of the diffusion coefficient values (its diffusion_length and
         diffusion_time fields). When None, they are in the simulation units.
         Lengths and times are always in the simulation units.
     """
+    if length_unit is None:
+        length_unit = global_length_unit(parameters)
+    if time_unit is None:
+        time_unit = global_time_unit(parameters)
+
     # The unit of every diffusion coefficient value: the nominal value and the
     # statistics of the estimates, except the unitless relative standard error.
     d_length_unit, d_time_unit = summary_diffusion_units(length_unit, time_unit, output_units)

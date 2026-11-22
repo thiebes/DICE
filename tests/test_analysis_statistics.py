@@ -3,7 +3,6 @@ Tests for dice.analysis.statistics module.
 """
 
 import pytest
-import warnings
 import numpy as np
 from dice.analysis.statistics import (
     calculate_precision,
@@ -15,16 +14,9 @@ from dice.models.results import RunResult, MonteCarloOutput
 
 
 def get_legacy_simulation_params():
-    """
-    Get legacy simulation parameters for testing.
-
-    Uses MockSimulationParameters with deprecation warning suppressed.
-    For new tests, prefer using the default_simulation_params fixture.
-    """
+    """Simulation parameters with fixed values, in the structure the engine reads."""
     from dice.utils.legacy_compatibility import MockSimulationParameters
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        return MockSimulationParameters()
+    return MockSimulationParameters()
 
 
 class TestCalculatePrecision:

@@ -2,6 +2,8 @@
 Tests for dice.utils.legacy_compatibility module.
 """
 
+from pathlib import Path
+
 import pytest
 import warnings
 import numpy as np
@@ -17,11 +19,6 @@ from dice.utils.legacy_compatibility import (
 class TestLegacyParameterClasses:
     """Test legacy parameter classes."""
 
-    def test_legacy_profile_parameters_deprecation_warning(self):
-        """Test that LegacyProfileParameters raises deprecation warning."""
-        with pytest.warns(DeprecationWarning, match="LegacyProfileParameters is deprecated"):
-            LegacyProfileParameters(sigma2_0=1.5, amplitude_0=2.0, mu_0=0.5)
-
     def test_legacy_profile_parameters(self):
         """Test LegacyProfileParameters creation."""
         with warnings.catch_warnings():
@@ -36,15 +33,6 @@ class TestLegacyParameterClasses:
         assert profile.amplitude_0 == 2.0
         assert profile.mu_0 == 0.5
 
-    def test_legacy_physics_parameters_deprecation_warning(self):
-        """Test that LegacyPhysicsParameters raises deprecation warning."""
-        with pytest.warns(DeprecationWarning, match="LegacyPhysicsParameters is deprecated"):
-            LegacyPhysicsParameters(
-                diffusion_coefficient=0.5,
-                lifetime=10.0,
-                diffusion_length=np.sqrt(5.0)
-            )
-
     def test_legacy_physics_parameters(self):
         """Test LegacyPhysicsParameters creation."""
         with warnings.catch_warnings():
@@ -58,16 +46,6 @@ class TestLegacyParameterClasses:
         assert physics.diffusion_coefficient == 0.5
         assert physics.lifetime == 10.0
         assert physics.diffusion_length == pytest.approx(np.sqrt(5.0))
-
-    def test_legacy_simulation_parameters_deprecation_warning(self):
-        """Test that LegacySimulationParameters raises deprecation warning."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            profile = LegacyProfileParameters(1.0, 1.0, 0.0)
-            physics = LegacyPhysicsParameters(0.5, 10.0, np.sqrt(5.0))
-
-        with pytest.warns(DeprecationWarning, match="LegacySimulationParameters is deprecated"):
-            LegacySimulationParameters(profile, physics)
 
     def test_legacy_simulation_parameters(self):
         """Test LegacySimulationParameters creation."""
@@ -129,11 +107,6 @@ class TestCreateParametersFromLegacy:
 class TestMockSimulationParameters:
     """Test mock simulation parameters for testing."""
 
-    def test_mock_deprecation_warning(self):
-        """Test that MockSimulationParameters raises deprecation warning."""
-        with pytest.warns(DeprecationWarning, match="MockSimulationParameters is deprecated"):
-            MockSimulationParameters()
-
     def test_mock_creation(self):
         """Test mock parameter creation."""
         with warnings.catch_warnings():
@@ -154,3 +127,28 @@ class TestMockSimulationParameters:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestAdapterIsTheEngineInput:
+    """Every run path builds these objects, so building them raises no warning."""
+
+    def test_adapter_raises_no_warning_and_runs_in_the_engine(self):
+        from dice.analysis.simulation import run_monte_carlo_simulation
+        from dice.io.parameters import open_parameters
+
+        params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            sim_params = create_parameters_from_legacy(
+                params, params['nominal diffusion coefficient'],
+                params['nominal lifetime (tau)'], params['nominal diffusion length'])
+            MockSimulationParameters()
+
+        result = run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], params['noise series'],
+            num_runs=2, multiprocessing=False, seed=1)
+
+        assert result.parameters is sim_params
+        assert result.num_runs == 2
+        assert result.parameters.profile.sigma2_0 == params['sigma^2_0']
+        assert result.parameters.physics.diffusion_coefficient == params['nominal diffusion coefficient']

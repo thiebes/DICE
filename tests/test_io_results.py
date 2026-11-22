@@ -134,7 +134,7 @@ class TestExportCollatedResults:
 
     def test_returned_frame_matches_file(self, tmp_path, quick_test_simulation):
         csv_file = tmp_path / 'results.csv'
-        exported = export_collated_results(quick_test_simulation, csv_file)
+        exported = export_collated_results(quick_test_simulation, csv_file, length_unit='micrometer', time_unit='nanosecond')
         reloaded = load_results_csv(csv_file)
         assert list(reloaded.columns) == list(exported.columns)
         np.testing.assert_allclose(reloaded.to_numpy(dtype=float), exported.to_numpy(dtype=float), rtol=1e-12)
@@ -142,7 +142,7 @@ class TestExportCollatedResults:
 
     def test_output_units_relabel_and_convert(self, tmp_path, quick_test_simulation):
         micrometer_per_ns = OutputUnitPreferences(diffusion_length='micrometer', diffusion_time='nanosecond')
-        exported = export_collated_results(quick_test_simulation, tmp_path / 'results.csv',
+        exported = export_collated_results(quick_test_simulation, tmp_path / 'results.csv', length_unit='micrometer', time_unit='nanosecond',
                                            output_units=micrometer_per_ns)
         label = 'weighted fit diffusion coeff [μm²/ns]'
         assert label in exported.columns
@@ -154,7 +154,7 @@ class TestExportCollatedResults:
     def test_single_frame_runs_have_no_fit_columns(self, tmp_path, quick_test_parameters):
         single_frame = simulate_quick_test(
             quick_test_parameters, quick_test_parameters['time series'][:1], num_runs=2)
-        exported = export_collated_results(single_frame, tmp_path / 'results.csv')
+        exported = export_collated_results(single_frame, tmp_path / 'results.csv', length_unit='micrometer', time_unit='nanosecond')
         assert list(exported.columns) == [
             'run number', 'nominal diffusion coeff', 'nominal lifetime', 'nominal diffusion length',
             'nominal CNR', 'estimated CNR', 'nominal sigma^2_0', 'estimated sigma^2_0',
@@ -166,8 +166,8 @@ class TestLoadMultipleResults:
     """Result CSVs in one directory concatenate, with unreadable files skipped."""
 
     def test_concatenates_and_skips_unreadable(self, tmp_path, quick_test_simulation, capsys):
-        export_collated_results(quick_test_simulation, tmp_path / 'a.csv')
-        export_collated_results(quick_test_simulation, tmp_path / 'b.csv')
+        export_collated_results(quick_test_simulation, tmp_path / 'a.csv', length_unit='micrometer', time_unit='nanosecond')
+        export_collated_results(quick_test_simulation, tmp_path / 'b.csv', length_unit='micrometer', time_unit='nanosecond')
         (tmp_path / 'c_empty.csv').write_text('')
         combined = load_multiple_results(tmp_path)
         assert len(combined) == 2 * FIXTURE_RUNS
@@ -224,8 +224,8 @@ class TestNoiseRangeOutputs:
     """A simulation with a noise range: the CSV records each run's noise; the summary reports CNR bins."""
 
     def test_csv_gains_the_noise_of_each_run(self, tmp_path, range_simulation, quick_test_simulation):
-        ranged = export_collated_results(range_simulation, tmp_path / 'range.csv')
-        fixed = export_collated_results(quick_test_simulation, tmp_path / 'fixed.csv')
+        ranged = export_collated_results(range_simulation, tmp_path / 'range.csv', length_unit='micrometer', time_unit='nanosecond')
+        fixed = export_collated_results(quick_test_simulation, tmp_path / 'fixed.csv', length_unit='micrometer', time_unit='nanosecond')
 
         expected_columns = list(fixed.columns)
         expected_columns.insert(expected_columns.index('nominal CNR'), 'noise standard deviation')
@@ -294,3 +294,26 @@ class TestNoiseRangeOutputs:
         del analysis['cnr_bins']
         with pytest.raises(KeyError, match='cnr_bins'):
             self._summary(tmp_path, range_simulation, quick_test_parameters, analysis)
+
+
+class TestWritersTakeTheUnitsOfTheRun:
+    """The writers do not assume micrometer and nanosecond for results in other units."""
+
+    def test_csv_export_requires_the_units(self, tmp_path, quick_test_simulation):
+        with pytest.raises(TypeError, match="length_unit"):
+            export_collated_results(quick_test_simulation, tmp_path / 'results.csv')
+
+    def test_summary_takes_the_units_from_the_parameters(self, tmp_path, quick_test_simulation,
+                                                          quick_test_parameters, quick_test_analysis):
+        parameters = quick_test_parameters | {'length unit': 'nanometer', 'time unit': 'picosecond',
+                                              'length_unit': 'nanometer', 'time_unit': 'picosecond'}
+        derived, explicit = tmp_path / 'derived.txt', tmp_path / 'explicit.txt'
+
+        write_summary_file(quick_test_simulation, derived, parameters, quick_test_analysis)
+        write_summary_file(quick_test_simulation, explicit, parameters, quick_test_analysis,
+                           length_unit='nanometer', time_unit='picosecond')
+
+        text = derived.read_text(encoding='utf-8')
+        assert text == explicit.read_text(encoding='utf-8')
+        assert 'nanometer' in text and 'picosecond' in text
+        assert 'micrometer' not in text and 'nanosecond' not in text
