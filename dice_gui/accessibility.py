@@ -254,3 +254,64 @@ def add_form_field_with_accessibility(
     label.setBuddy(widget)
 
     return label
+
+
+# Each unit selector, by its attribute of the main window, and the quantity
+# whose unit it sets. A unit selector shares its row with the field of that
+# quantity, so no label names it.
+UNIT_SELECTOR_QUANTITIES = {
+    'length_unit_combo': 'Global length',
+    'time_unit_combo': 'Global time',
+    'diffusion_length_unit_combo': 'Diffusion length',
+    'diffusion_coeff_length_unit_combo': 'Diffusion coefficient length',
+    'diffusion_coeff_time_unit_combo': 'Diffusion coefficient time',
+    'lifetime_unit_combo': 'Lifetime',
+    'mean_unit_combo': 'Mean position',
+    'width_unit_combo': 'Profile width',
+    'spatial_width_unit_combo': 'Spatial width',
+    'time_start_unit_combo': 'Start time',
+    'time_stop_unit_combo': 'Stop time',
+    'image_width_unit_combo': 'Image width',
+    'image_height_unit_combo': 'Image height',
+    'image_font_unit_combo': 'Font size',
+    'image_tick_length_unit_combo': 'Tick length',
+    'image_tick_width_unit_combo': 'Tick width',
+}
+
+# Inputs that have neither a label with a shortcut nor a text of their own.
+UNLABELED_INPUT_NAMES = {
+    'time_series_input': 'Time series',
+    'proximity_spin': 'Accuracy threshold',
+}
+
+
+def label_text_as_name(text: str) -> str:
+    """The text of a field label as an accessible name: no shortcut marker and no final colon."""
+    return text.replace('&', '').strip().rstrip(':').strip()
+
+
+def name_inputs_for_screen_readers(window: QWidget) -> None:
+    """
+    Give every input of the window an accessible name.
+
+    Qt takes the name of a field from its label only when the two are
+    siblings in one layout. Most fields here share a row with a unit
+    selector, so a screen reader would announce them as "edit" or "combo
+    box" without a name. A field takes the text of the label it is the
+    buddy of; a unit selector is named after its quantity. A name that is
+    already set is kept.
+    """
+    for label in window.findChildren(QLabel):
+        buddy = label.buddy()
+        if buddy is not None and not buddy.accessibleName():
+            buddy.setAccessibleName(label_text_as_name(label.text()))
+
+    for attribute, quantity in UNIT_SELECTOR_QUANTITIES.items():
+        selector = getattr(window, attribute, None)
+        if selector is not None and not selector.accessibleName():
+            selector.setAccessibleName(f"{quantity} unit")
+
+    for attribute, name in UNLABELED_INPUT_NAMES.items():
+        widget = getattr(window, attribute, None)
+        if widget is not None and not widget.accessibleName():
+            widget.setAccessibleName(name)

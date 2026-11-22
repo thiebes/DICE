@@ -32,6 +32,7 @@ from dice_gui.tabs.base import set_spin_value
 from dice_gui.output_location import output_root
 from dice_gui.styles import DiceTheme, apply_theme
 from dice_gui.accessibility import (
+    name_inputs_for_screen_readers,
     add_accessible_name_and_description,
     add_tooltip_with_accessible_description,
     set_tab_order
@@ -72,6 +73,8 @@ class DiceGUI(QMainWindow):
         self.simulation_thread = None
         # True from the moment the user closes the window during a run until it has closed.
         self._close_requested = False
+        # True while a stop is pending whose Stop button had the keyboard focus.
+        self._stop_had_focus = False
         self.theme = DiceTheme()
 
         # File management
@@ -155,6 +158,7 @@ class DiceGUI(QMainWindow):
 
         # Setup validation system
         self.setup_validation()
+        name_inputs_for_screen_readers(self)
 
         # Initialize output path preview
         self._update_output_path_preview()
@@ -408,8 +412,9 @@ class DiceGUI(QMainWindow):
         self.run_button.setShortcut(QKeySequence("Ctrl+R"))
         self.run_button.clicked.connect(self.run_simulation)
 
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = QPushButton("Stop (Ctrl+.)")
         self.stop_button.setObjectName("stop-button")
+        self.stop_button.setShortcut(QKeySequence("Ctrl+."))
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.stop_simulation)
 
@@ -1094,6 +1099,14 @@ class DiceGUI(QMainWindow):
 
         return messages
 
+    def _show_field(self, widget) -> None:
+        """Switch to the tab that holds an input and give the input the focus."""
+        for index in range(self.tabs.count()):
+            if self.tabs.widget(index).isAncestorOf(widget):
+                self.tabs.setCurrentIndex(index)
+                break
+        widget.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def run_simulation(self):
         """Run the DICE simulation."""
         if self.simulation_thread is not None:
@@ -1102,11 +1115,16 @@ class DiceGUI(QMainWindow):
         # Validate all active fields (this triggers visual updates)
         is_valid, error_message = self.validation_manager.validate_all()
         if not is_valid:
+            # Name the first field that blocks the run and take the user to it.
+            field = self.validation_manager.first_invalid_field()
+            self._show_field(field.widget)
+            name = field.widget.accessibleName() or "A field"
             QMessageBox.warning(
                 self,
                 "Missing or Invalid Parameters",
-                "Please fill in all required fields.\n\n"
-                "Fields with errors are highlighted in red."
+                f"{name}: {error_message}\n\n"
+                "The field has the focus now. Every field with an error is marked "
+                "with a red border and a message below it."
             )
             return
 
@@ -1148,6 +1166,8 @@ class DiceGUI(QMainWindow):
         # Update UI for running state
         self.run_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        # Run is disabled now; the focus goes to Stop, the one control of a run.
+        self.stop_button.setFocus(Qt.FocusReason.OtherFocusReason)
         self.progress_bar.setVisible(True)
         self.elapsed_label.setVisible(True)
 
@@ -1183,6 +1203,9 @@ class DiceGUI(QMainWindow):
         """
         if self.simulation_thread and self.simulation_thread.isRunning():
             self.simulation_thread.request_stop()
+            # Qt moves the focus away from a button that is disabled;
+            # reset_ui_after_simulation gives it to Run when the run has ended.
+            self._stop_had_focus = self.focusWidget() is self.stop_button
             self.stop_button.setEnabled(False)
             self.status_label.setText("Stopping...")
 
@@ -1355,7 +1378,11 @@ class DiceGUI(QMainWindow):
         """Reset UI elements after simulation completes or stops."""
         # The form may have become invalid while the simulation ran.
         self.run_button.setEnabled(self.validation_manager.is_valid())
+        stop_had_focus = self._stop_had_focus or self.focusWidget() is self.stop_button
+        self._stop_had_focus = False
         self.stop_button.setEnabled(False)
+        if stop_had_focus and self.run_button.isEnabled():
+            self.run_button.setFocus(Qt.FocusReason.OtherFocusReason)
         self.progress_bar.setVisible(False)
         self.elapsed_label.setVisible(False)
         self.remaining_label.setVisible(False)
@@ -2248,13 +2275,14 @@ class DiceGUI(QMainWindow):
         """Show keyboard shortcuts reference dialog."""
         shortcuts_text = """
 <h2>Keyboard Shortcuts</h2>
+<p><b>Ctrl+R</b> runs the simulation and <b>Ctrl+.</b> stops it.</p>
 <p>Press <b>Alt</b> + the underlined letter to jump to a field.
 Shortcuts are scoped to the active tab.</p>
 
 <h3>Tab 1: Simulation Setup</h3>
 <table>
 <tr><td><b>Alt+N</b></td><td>Number of Runs</td></tr>
-<tr><td><b>Alt+S</b></td><td>Filename Slug</td></tr>
+<tr><td><b>Alt+U</b></td><td>Filename Slug</td></tr>
 <tr><td><b>Alt+M</b></td><td>Multiprocessing</td></tr>
 <tr><td><b>Alt+R</b></td><td>Data Retention</td></tr>
 </table>
@@ -2276,8 +2304,8 @@ Shortcuts are scoped to the active tab.</p>
 <tr><td><b>Alt+C</b></td><td>CNR</td></tr>
 <tr><td><b>Alt+L</b></td><td>Noise File</td></tr>
 <tr><td><b>Alt+W</b></td><td>Spatial Width</td></tr>
-<tr><td><b>Alt+P</b></td><td>Number of Pixels</td></tr>
-<tr><td><b>Alt+S</b></td><td>Start</td></tr>
+<tr><td><b>Alt+X</b></td><td>Number of Pixels</td></tr>
+<tr><td><b>Alt+A</b></td><td>Start</td></tr>
 <tr><td><b>Alt+O</b></td><td>Stop</td></tr>
 <tr><td><b>Alt+E</b></td><td>Steps</td></tr>
 </table>

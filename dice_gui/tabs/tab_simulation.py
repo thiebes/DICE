@@ -51,7 +51,7 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
         "Output files will be saved as: output/<slug>/<slug>.csv, <slug>_summary.txt, <slug>_accuracy_histogram.png\n\n"
         "Use descriptive names to organize multiple simulations (e.g., 'high_SNR_test' or 'sample_A_analysis')."
     )
-    filename_slug_label = QLabel("Filename &Slug:")
+    filename_slug_label = QLabel("Filename Sl&ug:")
     add_keyboard_shortcut_to_label(filename_slug_label, main_window.filename_slug_input)
     basic_layout.addRow(filename_slug_label, main_window.filename_slug_input)
 

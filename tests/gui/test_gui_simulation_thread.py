@@ -520,3 +520,19 @@ class TestOutputFilesThatCannotBeWritten:
         assert blocked.is_file()
         assert window.status_label.text() == "Simulation completed successfully."
         assert not window.write_outputs_action.isEnabled()
+
+
+@pytest.mark.usefixtures("slow_serial_runs")
+class TestFocusDuringARun:
+    """Run is disabled while a simulation runs, so the focus moves to Stop and returns afterwards."""
+
+    def test_focus_goes_to_stop_and_back_to_run(self, qtbot, window, dialogs):
+        window.run_button.setFocus()
+        _start_long_serial_run(qtbot, window)
+
+        assert window.focusWidget() is window.stop_button
+
+        _stop_and_wait(qtbot, window)
+
+        assert window.run_button.isEnabled()
+        assert window.focusWidget() is window.run_button

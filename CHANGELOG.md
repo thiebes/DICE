@@ -55,6 +55,13 @@ and Fixed give the details.
   results in `output/<slug>/` in the folder it was started from, or in
   `DICE/output/<slug>/` in the user's Documents folder when it cannot write
   there, as when the macOS Finder starts the standalone application.
+- GUI use with the keyboard and a screen reader (#25). Every input and every
+  unit selector has an accessible name. The Alt-key shortcuts of the fields
+  do not use the letters of the menus. The Tab key leaves the time-series
+  box and does not stop on the scroll areas. Ctrl+. stops a run; the focus
+  moves to Stop when a run starts and back to Run when it ends. When a run
+  is blocked by an invalid field, the message names the field, and the GUI
+  opens its tab and gives it the focus.
 - GUI warnings before a run for settings that make the fits unreliable: a low
   CNR at the last time point (the peak falls by the decay and by the
   spreading of the profile), an initial profile that is narrow compared with

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from PyQt6.QtCore import QLocale
+from PyQt6.QtCore import QLocale, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QAbstractButton, QDoubleSpinBox, QGroupBox, QLabel, QScrollArea, QWidget
 
@@ -363,3 +363,63 @@ class TestLayout:
     def test_output_preview_has_no_tool_tip_without_a_slug(self, window):
         window.filename_slug_input.setText("")
         assert window.output_path_preview.toolTip() == ""
+
+
+class TestKeyboardAndScreenReader:
+    """Every input has a name for a screen reader, and the keyboard reaches and leaves every control."""
+
+    def test_every_input_has_an_accessible_name(self, window):
+        from PyQt6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit, QTextEdit
+
+        unnamed = []
+        for kind in (QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit):
+            for widget in window.findChildren(kind):
+                # The line edit inside a spin box or an editable combo box takes the name of its owner.
+                if isinstance(widget.parent(), (QAbstractSpinBox, QComboBox)):
+                    continue
+                if not widget.accessibleName():
+                    unnamed.append(f"{type(widget).__name__} {widget.objectName()!r}")
+        assert unnamed == []
+
+    def test_names_come_from_the_labels_and_the_quantities(self, window):
+        assert window.diffusion_length_input.accessibleName() == "Diffusion Length (L)"
+        assert window.diffusion_length_unit_combo.accessibleName() == "Diffusion length unit"
+        assert window.diffusion_coeff_length_unit_combo.accessibleName() == "Diffusion coefficient length unit"
+        assert window.time_stop_unit_combo.accessibleName() == "Stop time unit"
+        assert window.pixel_width_input.accessibleName() == "Number of Pixels"
+        assert window.time_series_input.accessibleName() == "Time series"
+        assert window.length_unit_combo.accessibleName() == "Global length unit"
+
+    @pytest.mark.parametrize("tab_index", range(5))
+    def test_field_shortcuts_do_not_use_the_letters_of_the_menu_bar(self, window, tab_index):
+        """Alt+F, P, S and H open the File, Plots, Settings and Help menus on every tab."""
+        menu_letters = {"Alt+" + re.search(r"&(\w)", action.text()).group(1).upper()
+                        for action in window.menuBar().actions()}
+        assert menu_letters == {"Alt+F", "Alt+P", "Alt+S", "Alt+H"}
+        assert set(_mnemonics_on_tab(window.tabs.widget(tab_index))) & menu_letters == set()
+
+    def test_tab_key_leaves_the_time_series_box_and_skips_the_scroll_areas(self, window):
+        from PyQt6.QtWidgets import QScrollArea
+
+        assert window.time_series_input.tabChangesFocus()
+        scroll_areas = [area for index in range(window.tabs.count())
+                        for area in window.tabs.widget(index).findChildren(QScrollArea)]
+        assert scroll_areas
+        assert all(area.focusPolicy() == Qt.FocusPolicy.NoFocus for area in scroll_areas)
+
+    def test_stop_has_a_shortcut_that_its_text_names(self, window):
+        assert window.stop_button.shortcut().toString() == "Ctrl+."
+        assert window.stop_button.text() == "Stop (Ctrl+.)"
+
+    def test_blocked_run_names_the_field_and_takes_the_user_to_it(self, qtbot, window, dialogs):
+        window.amplitude_input.setText("abc")
+        window.tabs.setCurrentIndex(4)
+
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+
+        assert dialogs.titles("warning") == ["Missing or Invalid Parameters"]
+        assert dialogs.texts("warning")[0].startswith("Amplitude\u2080: ")
+        assert "has the focus now" in dialogs.texts("warning")[0]
+        assert window.tabs.currentIndex() == 1
+        assert window.focusWidget() is window.amplitude_input
+        assert window.simulation_thread is None

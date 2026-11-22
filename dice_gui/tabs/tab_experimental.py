@@ -183,7 +183,7 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Typical values: 50-500 pixels\n"
         "Minimum practical: ~20-30 pixels"
     )
-    pixel_count_label = QLabel("Number of &Pixels:")
+    pixel_count_label = QLabel("Number of Pi&xels:")
     add_keyboard_shortcut_to_label(pixel_count_label, main_window.pixel_width_input)
     spatial_layout.addRow(pixel_count_label, main_window.pixel_width_input)
 
@@ -269,7 +269,7 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
         "Minimum: 2 (though 3+ strongly recommended for meaningful statistics)"
     )
 
-    start_label = QLabel("&Start:")
+    start_label = QLabel("St&art:")
     add_keyboard_shortcut_to_label(start_label, main_window.time_start_input)
     range_layout.addRow(start_label, start_widget)
     main_window._error_labels["time_start"] = create_error_label()
@@ -294,6 +294,8 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
     main_window.time_series_input = QTextEdit()
     main_window.time_series_input.setPlaceholderText("e.g., 0.1, 0.5, 1.0, 2.0, 5.0")
     main_window.time_series_input.setMaximumHeight(80)
+    # Tab moves to the next field; a list of times needs no tab character.
+    main_window.time_series_input.setTabChangesFocus(True)
     main_window.time_series_input.setToolTip(
         "Arbitrary time points as comma-separated values.\n\n"
         "Allows custom temporal sampling to match experimental conditions.\n"

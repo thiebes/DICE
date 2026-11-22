@@ -4,7 +4,7 @@ Base Tab Utilities
 Shared utility functions for building tab UI components.
 """
 
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QFrame, QFormLayout, QVBoxLayout, QHBoxLayout,
     QWidget, QLineEdit, QLabel, QComboBox, QScrollArea
@@ -68,6 +68,9 @@ def create_scrollable_tab() -> tuple[QWidget, QVBoxLayout]:
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+    # The scroll area is no stop of the Tab key: it shows no focus, and the
+    # view follows the field that has the focus.
+    scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     scroll_content = QWidget()
     content_layout = QVBoxLayout(scroll_content)
     scroll.setWidget(scroll_content)

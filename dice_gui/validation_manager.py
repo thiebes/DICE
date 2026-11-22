@@ -137,7 +137,9 @@ class ValidationManager(QObject):
                         field.last_result = ValidationResult(True)
                         self.field_validated.emit(field_id, True, "")
                     elif not was_active and self._get_widget_value(field.widget).strip():
-                        # The field kept its value while it was inactive.
+                        # The field kept its value while it was inactive. An
+                        # empty field is not flagged before the user visits
+                        # it; Run checks it and names it.
                         self._validate_field(field_id)
 
         self._check_overall_validity()
@@ -170,6 +172,13 @@ class ValidationManager(QObject):
         if errors:
             return False, errors[0]
         return True, ""
+
+    def first_invalid_field(self) -> Optional[FieldValidation]:
+        """The first active field, in the order of registration, whose last check failed; None if all passed."""
+        for field in self._fields.values():
+            if field.is_active and not field.last_result.is_valid:
+                return field
+        return None
 
     def is_valid(self) -> bool:
         """Return current overall validity state."""
