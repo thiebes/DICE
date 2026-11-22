@@ -626,6 +626,43 @@ class TestEstimatesBeyondTheAxis:
         assert legend[1].startswith('normal curve\nmean ') and '\nstdev ' in legend[1]
         assert 'median' not in legend[1] and legend[2].startswith('median ')
 
+    @pytest.mark.parametrize('limits, side', [([1.2, 1.6], 'below'), ([0.2, 0.7], 'above')])
+    def test_histogram_says_where_the_nominal_value_is_when_the_axis_does_not_reach_it(
+            self, tmp_path, quick_test_ratios, limits, side):
+        from dice.visualization.histograms import plot_accuracy_histogram
+
+        fig = plot_accuracy_histogram(
+            simulation_result={'collated results': {'d_est_over_d_nom': quick_test_ratios.tolist()}},
+            filename=str(tmp_path / 'histogram.png'), x_lim=limits)
+        ax = fig.axes[0]
+        vertical = [line for line in ax.lines if list(line.get_xdata()) == [1.0, 1.0]]
+        legend = [text.get_text() for text in ax.get_legend().get_texts()]
+        plt.close(fig)
+
+        assert vertical == []
+        assert legend[0] == f'nominal (1) is {side} this range'
+
+    @pytest.mark.parametrize('plot', ['histogram', 'scatter'])
+    def test_plot_that_cannot_be_saved_raises_and_leaves_no_open_figure(
+            self, tmp_path, quick_test_ratios, noise_range_points, plot):
+        """A folder stands where the file would go, which blocks the save on every system."""
+        from dice.visualization.histograms import plot_accuracy_histogram, plot_accuracy_vs_cnr
+
+        blocked = tmp_path / 'plot.png'
+        blocked.mkdir()
+        open_before = plt.get_fignums()
+
+        with pytest.raises(OSError, match='plot.png'):
+            if plot == 'histogram':
+                plot_accuracy_histogram(
+                    simulation_result={'collated results': {'d_est_over_d_nom': quick_test_ratios.tolist()}},
+                    filename=str(blocked))
+            else:
+                cnr, ratios = noise_range_points
+                plot_accuracy_vs_cnr(cnr, ratios, str(blocked))
+
+        assert plt.get_fignums() == open_before
+
     def test_histogram_counts_what_narrow_limits_cut_off(self, tmp_path, quick_test_ratios):
         from dice.visualization.histograms import plot_accuracy_histogram
 

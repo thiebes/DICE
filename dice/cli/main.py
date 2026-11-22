@@ -312,7 +312,6 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
 
             # Create accuracy histogram
             plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
-            plot_file.unlink(missing_ok=True)
 
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
@@ -320,32 +319,22 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
                 **histogram_options(parameters)
             )
 
-            report_saved_plot(plot_file, "Accuracy histogram", args)
+            if not args.quiet:
+                print(f"Accuracy histogram saved to: {plot_file}")
         else:
             if not args.quiet:
                 print("Warning: No valid diffusion estimates found for plotting")
 
     except Exception as e:
-        warnings.warn(f"Error creating plots: {e}", stacklevel=2)
+        raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
     finally:
         if fig is not None:
             import matplotlib.pyplot as plt
             plt.close(fig)
 
 
-def report_saved_plot(plot_file: Path, description: str, args) -> None:
-    """
-    Report a plot as saved only if its file exists.
-
-    The plot functions log a failed save and return, so the caller removes
-    any older file of the same name first and checks for the file afterwards.
-    """
-    if plot_file.exists():
-        if not args.quiet:
-            print(f"{description} saved to: {plot_file}")
-    else:
-        warnings.warn(f"{description} could not be written to {plot_file}; see the log for the error.",
-                      stacklevel=2)
+class PlotError(RuntimeError):
+    """The plot of a finished simulation could not be created; its other output files are written."""
 
 
 def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str, Any],
@@ -373,7 +362,6 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
         if fitted_runs:
             slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
             plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
-            plot_file.unlink(missing_ok=True)
             fig = plot_accuracy_vs_cnr(
                 [nominal_cnr(amplitude_0, run.noise_sigma) for run in fitted_runs],
                 [run.accuracy('wls') for run in fitted_runs],
@@ -382,12 +370,13 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
                 **accuracy_scatter_options(parameters),
             )
 
-            report_saved_plot(plot_file, "Accuracy scatter plot", args)
+            if not args.quiet:
+                print(f"Accuracy scatter plot saved to: {plot_file}")
         elif not args.quiet:
             print("Warning: No valid diffusion estimates found for plotting")
 
     except Exception as e:
-        warnings.warn(f"Error creating plots: {e}", stacklevel=2)
+        raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
     finally:
         if fig is not None:
             import matplotlib.pyplot as plt

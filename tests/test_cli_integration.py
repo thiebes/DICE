@@ -694,22 +694,29 @@ class TestQuickTestOutputSchema:
 class TestOutputOptions:
     """Export format, output directory, plot format, and their prerequisites."""
 
-    def test_unwritten_plot_is_not_reported_as_saved(self, tmp_path, monkeypatch, capsys):
-        """The plot functions log a failed save and return; the CLI must not claim the file was saved."""
-        cli_main = importlib.import_module('dice.cli.main')
-        monkeypatch.setattr(cli_main, 'plot_accuracy_histogram', lambda **kwargs: None)
-        stale = tmp_path / 'output' / 'no_plot' / 'no_plot_accuracy_histogram.png'
-        stale.parent.mkdir(parents=True)
-        stale.write_bytes(b'from an earlier run')
-        params_file = write_quick_test_variant(tmp_path, 'no_plot', {'number of runs': 4})
+    @pytest.mark.parametrize('overrides, removed, plot_name', [
+        ({}, (), 'no_plot_accuracy_histogram.png'),
+        ({'noise range, reciprocal': [0.01, 0.05]}, ('noise value',), 'no_plot_accuracy_vs_cnr.png'),
+    ])
+    def test_plot_that_cannot_be_saved_fails_the_run_after_the_results_are_saved(
+            self, tmp_path, capsys, overrides, removed, plot_name):
+        """A folder stands where the plot file would go, which blocks the save on every system."""
+        blocked = tmp_path / 'output' / 'no_plot' / plot_name
+        blocked.mkdir(parents=True)
+        params_file = write_quick_test_variant(
+            tmp_path, 'no_plot', {'number of runs': 4} | overrides, removed=removed)
 
-        with warnings.catch_warnings(record=True) as caught, contextlib.chdir(tmp_path):
-            warnings.simplefilter('always')
-            assert main([str(params_file), '--multiprocessing', '0']) == 0
+        with contextlib.chdir(tmp_path):
+            assert main([str(params_file), '--multiprocessing', '0']) == 1
 
-        assert any('Accuracy histogram could not be written to' in str(w.message) for w in caught)
-        assert 'Accuracy histogram saved to' not in capsys.readouterr().out
-        assert not stale.exists()
+        console = capsys.readouterr().out
+        assert 'saved to: ' + str(blocked) not in console
+        last = console.splitlines()[-1]
+        assert last.startswith("Error: The results were saved, but the plot could not be created:")
+        assert plot_name in last
+        assert (blocked.parent / 'no_plot.csv').exists()
+        assert (blocked.parent / 'no_plot_summary.txt').read_text(encoding='utf-8').endswith(
+            "Simulation completed successfully.\n")
 
     OPTION_RUNS = 4
 

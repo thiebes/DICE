@@ -331,8 +331,11 @@ and Fixed give the details.
 - `--dry-run` loads and validates the parameters file and reports the first
   problem it finds, without running the simulation. It reported success
   without reading the file.
-- The command-line interface reports a plot as saved only when its file was
-  written, and warns otherwise.
+- A plot that cannot be saved is an error. The plot functions raise, and the
+  command-line interface ends with exit code 1 and a message that the
+  results were saved and the plot was not. The plot functions used to log
+  the failure and return, so a caller could report a file that was never
+  written.
 - Summary and other text output files are written as UTF-8 on every
   platform. On Windows they used the system code page, so the ± sign was not
   valid UTF-8.

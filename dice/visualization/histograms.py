@@ -40,6 +40,21 @@ _HISTOGRAM_OPTION_KEYS = {
 }
 
 
+def save_figure(fig, filename: Union[str, Path], dpi: float, image_type: str) -> None:
+    """
+    Save a figure, or raise if its file cannot be written.
+
+    The error of the save (an OSError that names the path and the cause)
+    reaches the caller, so no caller can report a plot that was not written.
+    The figure is closed first: the caller then gets no figure to close.
+    """
+    try:
+        fig.savefig(filename, dpi=dpi, format=image_type)
+    except Exception:
+        plt.close(fig)
+        raise
+
+
 def supported_image_types() -> List[str]:
     """Image types the histogram can be written as: the formats of matplotlib's savefig."""
     from matplotlib.backend_bases import FigureCanvasBase
@@ -281,8 +296,15 @@ def plot_accuracy_histogram(
         width=tick_width
     )
 
-    # Mark the nominal value, where the ratio is 1
-    ax.axvline(1.0, color=colors['dice_green'], linewidth=1.5, linestyle='--', label='nominal')
+    # Mark the nominal value, where the ratio is 1. When the axis does not
+    # reach 1 (a biased simulation, or limits from the parameters), the legend
+    # says on which side of the picture it lies.
+    low, high = sorted(x_lim)
+    if low <= 1.0 <= high:
+        ax.axvline(1.0, color=colors['dice_green'], linewidth=1.5, linestyle='--', label='nominal')
+    else:
+        side = 'below' if 1.0 < low else 'above'
+        ax.plot([], [], ' ', color=colors['dice_green'], label=f'nominal (1) is {side} this range')
 
     # Plot normal distribution overlay when variance is nonzero. The legend
     # is text only; each label has the color of what it names. The curve has
@@ -322,11 +344,8 @@ def plot_accuracy_histogram(
     fig.patch.set_alpha(1)
 
     # Save the figure
-    try:
-        plt.savefig(filename, dpi=dpi, format=image_type)
-        logger.info("Accuracy histogram saved as: %s", filename)
-    except Exception as e:
-        logger.warning("Error saving file: %s", e)
+    save_figure(fig, filename, dpi, image_type)
+    logger.info("Accuracy histogram saved as: %s", filename)
 
     return fig
 
@@ -462,11 +481,8 @@ def plot_accuracy_vs_cnr(
     fig.patch.set_facecolor('w')
     fig.patch.set_alpha(1)
 
-    try:
-        plt.savefig(filename, dpi=dpi, format=image_type)
-        logger.info("Accuracy scatter plot saved as: %s", filename)
-    except Exception as e:
-        logger.warning("Error saving file: %s", e)
+    save_figure(fig, filename, dpi, image_type)
+    logger.info("Accuracy scatter plot saved as: %s", filename)
 
     return fig
 
@@ -589,11 +605,8 @@ def plot_diffusion_coefficient_histogram(
     
     # Save if filename provided
     if filename:
-        try:
-            plt.savefig(filename, dpi=dpi, format=image_type)
-            logger.info("Diffusion coefficient histogram saved as: %s", filename)
-        except Exception as e:
-            logger.warning("Error saving file: %s", e)
+        save_figure(fig, filename, dpi, image_type)
+        logger.info("Diffusion coefficient histogram saved as: %s", filename)
     
     return fig
 
@@ -691,11 +704,8 @@ def plot_cnr_histogram(
     
     # Save if filename provided
     if filename:
-        try:
-            plt.savefig(filename, dpi=dpi, format=image_type)
-            logger.info("CNR histogram saved as: %s", filename)
-        except Exception as e:
-            logger.warning("Error saving file: %s", e)
+        save_figure(fig, filename, dpi, image_type)
+        logger.info("CNR histogram saved as: %s", filename)
     
     return fig
 
