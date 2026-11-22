@@ -89,7 +89,7 @@ class TestMainWindow:
     def test_menus_offer_the_file_and_plot_actions(self, window):
         assert _menu_action_texts(window, "&File") == [
             "&New Parameters", "&Open Parameters...", "&Save Parameters",
-            "Save Parameters &As...", "Recent &Parameters", "Load &Results...", "E&xit",
+            "Save Parameters &As...", "Recent &Parameters", "Load &Results...", "&Write Output Files", "E&xit",
         ]
         assert _menu_action_texts(window, "&Plots")[0] == "&Accuracy Histogram"
         assert _menu_action_texts(window, "&Settings") == ["&Global Units..."]

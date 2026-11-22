@@ -136,16 +136,19 @@ def fraction_sentence(estimates: np.ndarray, nominal: float, threshold: float) -
     ratios = estimates / nominal
     count = int(np.sum((ratios >= 1 - threshold) & (ratios <= 1 + threshold)))
     lower, upper = proportion_confint(count, len(estimates), alpha=0.05, method="wilson")
-    return (f"{count / len(estimates):.1%} of estimates fall within ±{round(threshold * 100)}% of nominal "
-            f"({count} of {len(estimates)}; 95% interval {lower:.1%} to {upper:.1%})")
+    return (f"Within ±{round(threshold * 100)}% of nominal: {count / len(estimates):.1%} "
+            f"({count} of {len(estimates)}; {lower:.1%} to {upper:.1%}). The range is the 95% interval.")
 
 
 def summary_label_texts(estimates: np.ndarray, nominal: float, d_unit: str, scale: float = 1.0) -> list[str]:
     """The four labels of the Precision Summary, recomputed from the estimates with NumPy."""
-    standard_error = np.std(estimates, ddof=1) / np.sqrt(len(estimates))
+    standard_error = np.std(estimates, ddof=1) / np.sqrt(len(estimates)) * scale
+    bias = (np.mean(estimates) - nominal) * scale
+    # The standard error with two significant digits, and the bias to the same decimal place.
+    decimals = max(1 - int(np.floor(np.log10(standard_error))), 0)
     return [
         f"{np.std(estimates, ddof=1) * scale:.3g} {d_unit}",
         f"{np.std(estimates, ddof=1) / nominal:.3f}",
-        f"{(np.mean(estimates) - nominal) * scale:.3g} ± {standard_error * scale:.2g} {d_unit}",
+        f"{bias:.{decimals}f} ± {standard_error:.{decimals}f} {d_unit}",
         f"{np.mean(estimates) / nominal:.3f}",
     ]

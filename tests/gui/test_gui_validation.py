@@ -240,6 +240,29 @@ class TestConsistencyWarnings:
         assert window.run_button.isEnabled()
         assert window.status_label.text() == "Ready to run"
 
+    def test_final_cnr_counts_the_spreading_of_the_profile(self, qtbot, window, dialogs):
+        """
+        The peak falls by the decay and by sigma_0 / sigma_t. Here the decay
+        alone leaves a CNR of 7.4, above the limit of 5; with the spreading
+        the CNR is 4.1.
+        """
+        enter_text(qtbot, window.amplitude_input, "1")
+        enter_text(qtbot, window.width_input, "0.5")
+        enter_text(qtbot, window.diffusion_coeff_input, "0.05")
+        enter_text(qtbot, window.lifetime_input, "1")
+        enter_text(qtbot, window.time_stop_input, "1")
+        enter_text(qtbot, window.noise_value_input, "0.05")
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        _click_run(qtbot, window)
+
+        sigma_0 = 0.5 / (2 * np.sqrt(2 * np.log(2)))
+        peak = np.exp(-1) * sigma_0 / np.sqrt(sigma_0 ** 2 + 2 * 0.05 * 1)
+        assert np.exp(-1) / 0.05 > 5 > peak / 0.05
+        assert dialogs.titles("question") == ["Parameter Warnings"]
+        assert (f"Low final CNR: At t = 1 ns, decay and spreading lower the peak to {peak:.4g}, "
+                f"giving CNR = {peak / 0.05:.2f}.") in dialogs.texts("question")[0]
+
     def test_narrow_measured_peak_warns(self, qtbot, window, dialogs):
         """The repository profile's peak is 4.6 pixels wide, too narrow for fft-cnr's CNR estimate."""
         window.noise_estimate_radio.setChecked(True)

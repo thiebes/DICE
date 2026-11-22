@@ -139,7 +139,8 @@ class TestAccuracyThresholdTool:
         fractions = []
         for threshold in np.arange(0.01, 0.51, 0.07):
             window_with_results.proximity_spin.setValue(float(threshold))
-            fractions.append(float(window_with_results.proximity_fraction_label.text().split("%")[0]))
+            text = window_with_results.proximity_fraction_label.text()
+            fractions.append(float(text.split("of nominal: ")[1].split("%")[0]))
         assert fractions == sorted(fractions)
 
     def test_histogram_shows_the_estimates_of_the_selected_fit(self, window_with_results, completed_run):
@@ -161,17 +162,26 @@ class TestAccuracyThresholdTool:
         window_with_results.proximity_spin.setValue(threshold)
         highlight, muted = _bar_pixel_counts(histogram)
 
-        # Highlighted pixels lie only inside the band of the threshold.
-        band = histogram.band_rect()
-        assert highlight["columns"] <= set(range(band.left(), band.left() + band.width()))
-
-        # Bar height is the count of a bin, so the highlighted share of the
-        # bar area is the count-weighted share of each bin that the band covers.
-        counts, edges = histogram.histogram()
-        covered = np.clip(np.minimum(edges[1:], 1 + threshold) - np.maximum(edges[:-1], 1 - threshold), 0, None)
-        expected = (counts * covered / np.diff(edges)).sum() / counts.sum()
+        # Bar height is the count of a bin, and each bar is highlighted up to
+        # the share of its estimates within the threshold, so the highlighted
+        # share of the bar area is the fraction of the drawn estimates within it.
+        counts, _ = histogram.histogram()
+        within = histogram.counts_within_threshold()
+        assert (within <= counts).all()
+        expected = within.sum() / counts.sum()
+        ratios = histogram.ratios()
+        low, high = histogram.axis_range()
+        drawn = ratios[(ratios >= low) & (ratios <= high)]
+        assert expected == pytest.approx(np.mean((drawn >= 1 - threshold) & (drawn <= 1 + threshold)))
         assert highlight["pixels"] + muted["pixels"] > 0
         assert highlight["pixels"] / (highlight["pixels"] + muted["pixels"]) == pytest.approx(expected, abs=0.03)
+
+        # A highlighted part is the foot of its bar: same columns, never taller.
+        bars = {bar.left(): bar for bar in histogram.bar_rects()}
+        for part in histogram.highlight_rects():
+            bar = bars[part.left()]
+            assert part.width() == bar.width() and part.height() <= bar.height()
+            assert part.top() + part.height() == bar.top() + bar.height()
 
     def test_highlight_grows_with_the_threshold(self, window_with_results):
         histogram = window_with_results.proximity_histogram
@@ -306,3 +316,66 @@ class TestLoadResults:
         window.load_results_button.click()
         assert dialogs.titles() == ["Select Results CSV File"]
         assert window.interface.last_result is None
+
+
+class TestFitWithoutEstimates:
+    """Selecting a fit that has no estimates clears the numbers of the other fit."""
+
+    def test_summary_and_histogram_are_cleared(self, window, dialogs, completed_run, work_dir):
+        frame = pd.read_csv(completed_run.csv_path)
+        weighted_only = work_dir / "weighted_only.csv"
+        frame[[c for c in frame.columns if not c.startswith("unweighted fit")]].to_csv(weighted_only, index=False)
+        dialogs.open_paths.append(str(weighted_only))
+        window.load_results_button.click()
+        assert "—" not in _summary_labels(window)
+        assert window.proximity_histogram.ratios().size == len(frame)
+
+        fit_method_radio(window, "OLS").setChecked(True)
+
+        assert _summary_labels(window) == ["—"] * 4
+        assert window.proximity_fraction_label.text() == ""
+        assert window.proximity_histogram.ratios().size == 0
+        assert not window.precision_placeholder.isHidden()
+        assert window.precision_placeholder.text() == "The selected fit has no estimates in these results."
+        assert not window.explore_proximity_group.isEnabled()
+
+        fit_method_radio(window, "WLS").setChecked(True)
+
+        assert "—" not in _summary_labels(window)
+        assert window.proximity_histogram.ratios().size == len(frame)
+
+
+class TestPlotThatCannotBeSaved:
+    """A folder stands where the plot file would go: both plot paths of the bridge report it."""
+
+    def test_plot_of_a_results_file_and_plot_from_memory(self, completed_run, tmp_path):
+        from dice_gui.dice_interface import DiceInterface
+
+        blocked = tmp_path / "plot.png"
+        blocked.mkdir()
+        interface = DiceInterface()
+
+        with pytest.raises(RuntimeError, match="Failed to load and plot from CSV: .*plot.png"):
+            interface.load_and_plot_from_csv(str(completed_run.csv_path), str(blocked), {"image_type": "png"})
+
+        interface.load_and_plot_from_csv(
+            str(completed_run.csv_path), str(tmp_path / "written.png"), {"image_type": "png"})
+        assert (tmp_path / "written.png").is_file()
+        with pytest.raises(RuntimeError, match="Failed to regenerate plot: .*plot.png"):
+            interface.regenerate_plot_from_memory(str(blocked), {"image_type": "png"})
+
+
+@pytest.mark.parametrize("value, uncertainty, text", [
+    (-0.000415, 0.00087, "-0.00042 ± 0.00087"),
+    (3.1e-05, 0.00087, "0.00003 ± 0.00087"),
+    (0.0047, 0.47, "0.00 ± 0.47"),
+    (12.345, 2.5, "12.3 ± 2.5"),
+    (1234.6, 250.0, "1235 ± 250"),
+    (3.1e-10, 8.7e-10, "(3.1 ± 8.7)e-10"),
+    (0.5, float("nan"), "0.5"),
+    (0.5, 0.0, "0.5"),
+])
+def test_value_and_uncertainty_share_one_notation_and_decimal_place(value, uncertainty, text):
+    from dice_gui.tabs.tab_analysis import value_with_uncertainty
+
+    assert value_with_uncertainty(value, uncertainty) == text

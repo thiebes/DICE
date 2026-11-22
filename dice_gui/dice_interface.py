@@ -22,6 +22,13 @@ CSV_D_SCALE_KEY = 'diffusion coefficient scale'
 WHOLE_NUMBER_KEYS = ('number of runs', 'pixel width', 'image dpi', 'image numbins')
 
 
+def write_error_text(error: OSError) -> str:
+    """The file and the reason of a failed write, for a dialog: 'C:\\...\\run.csv: Permission denied'."""
+    if error.filename and error.strerror:
+        return f"{error.filename}: {error.strerror}"
+    return str(error)
+
+
 def parameters_for_form(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Prepare the dictionary of a parameter file for the fields of the GUI.
@@ -298,13 +305,14 @@ class DiceInterface:
         except Exception as e:
             raise RuntimeError(str(e)) from e
 
-        # The result exists now, so a failed write must not discard it.
+        # The result exists now, so a failed write must not discard it:
+        # retry_write_outputs writes these again.
+        self.last_result, self.last_parameters = result, processed_params
         self.last_output_error = None
         try:
             self.write_outputs(result, processed_params)
-        except Exception as e:
-            self.last_output_error = str(e)
-
+        except OSError as e:
+            self.last_output_error = write_error_text(e)
         return result, processed_params
 
     def write_outputs(self, result: MonteCarloOutput, processed_params: Dict[str, Any]) -> None:
@@ -391,8 +399,8 @@ class DiceInterface:
         """
         try:
             self.write_outputs(self.last_result, self.last_parameters)
-        except Exception as e:
-            self.last_output_error = str(e)
+        except OSError as e:
+            self.last_output_error = write_error_text(e)
         else:
             self.last_output_error = None
         return self.last_output_error
@@ -734,14 +742,13 @@ class DiceInterface:
             'fraction', 'count', 'total', 'lower' and 'upper'
             (dice.analysis.statistics.precision_interval), or None if no data available.
         """
-        fraction = self.calculate_proximity_on_demand(proximity_level, estimator)
-        if fraction is None:
+        ratios = self.estimate_ratios(estimator)
+        if ratios is None:
             return None
 
-        from dice.analysis.statistics import precision_interval
-
-        total = len(self.last_result.d_estimates(estimator))
-        return {'fraction': fraction, **precision_interval(fraction, total)}
+        from dice.analysis.statistics import calculate_precision, precision_interval
+        fraction = calculate_precision(ratios, 1.0, proximity_level)
+        return {'fraction': fraction, **precision_interval(fraction, len(ratios))}
 
     def calculate_proximity_on_demand(
         self,
@@ -758,18 +765,5 @@ class DiceInterface:
         Returns:
             Fraction within proximity (0-1), or None if no data available.
         """
-        if self.last_result is None:
-            return None
-
-        from dice.analysis.statistics import calculate_precision
-
-        d_estimates = self.last_result.d_estimates(estimator)
-
-        if len(d_estimates) == 0:
-            return None
-
-        nominal_d = self.last_result.run_results[0].nominal_diffusion_coefficient
-        if nominal_d == 0:
-            return None
-
-        return calculate_precision(d_estimates, nominal_d, proximity_level)
+        detail = self.proximity_detail(proximity_level, estimator)
+        return None if detail is None else detail['fraction']

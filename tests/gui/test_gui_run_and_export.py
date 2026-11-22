@@ -36,7 +36,7 @@ class TestRunFromTheWindow:
         return window
 
     def test_controls_return_to_ready(self, finished_window):
-        assert finished_window.status_label.text() == "Simulation completed successfully!"
+        assert finished_window.status_label.text() == "Simulation completed successfully."
         assert finished_window.run_button.isEnabled()
         assert not finished_window.stop_button.isEnabled()
         assert finished_window.progress_bar.isHidden()

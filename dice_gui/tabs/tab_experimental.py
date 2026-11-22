@@ -169,7 +169,9 @@ def create_tab_experimental_conditions(main_window: "DiceGUI") -> QWidget:
 
     # Pixel width
     main_window.pixel_width_input = QSpinBox()
-    main_window.pixel_width_input.setMinimum(1)
+    # The CNR estimate of each run needs this many points (dice.core.noise).
+    from dice.core.noise import MINIMUM_PROFILE_POINTS
+    main_window.pixel_width_input.setMinimum(MINIMUM_PROFILE_POINTS)
     main_window.pixel_width_input.setMaximum(100000)
     main_window.pixel_width_input.setValue(100)
     main_window.pixel_width_input.setToolTip(

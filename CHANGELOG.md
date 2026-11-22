@@ -44,22 +44,29 @@ and Fixed give the details.
   It has light and dark themes, Alt-key shortcuts for the input fields, and a
   list of the shortcuts under Help. Stop ends a serial run after the current
   run and a parallel run after the current batch of runs. Closing the window
-  during a run asks first, then waits in the same way. If the output files
-  cannot be written, for example because a results file is open in another
-  program, the GUI keeps the results and offers to write the files again. The
+  during a run asks first; the window then stays, with a message, until the
+  run has stopped in the same way, and closes. If the output files cannot be
+  written, for example because a results file is open in another program,
+  the GUI keeps the results and offers to write the files again, at once or
+  later with File > Write Output Files, and asks before it exits without
+  them. A value of a parameters file that a field of the form cannot hold is
+  reported; the form is not changed. The
   GUI saves
   results in `output/<slug>/` in the folder it was started from, or in
   `DICE/output/<slug>/` in the user's Documents folder when it cannot write
   there, as when the macOS Finder starts the standalone application.
 - GUI warnings before a run for settings that make the fits unreliable: a low
-  CNR at the last time point, an initial profile that is narrow compared with
+  CNR at the last time point (the peak falls by the decay and by the
+  spreading of the profile), an initial profile that is narrow compared with
   the pixel size, or very few time points.
 - Post-hoc accuracy analysis in the GUI Analysis Settings tab. After a run,
   the tab shows the standard deviation, relative standard error, and bias of
   the estimates, and the fraction of estimates within any proximity level
   from 1% to 50% of the nominal value, for the weighted least squares (WLS)
   or the ordinary least squares (OLS) fit. A histogram of the estimates
-  highlights the part within the chosen level.
+  highlights the part within the chosen level: each bar from its foot up to
+  the share of its estimates within the level, so the highlighted area is
+  the fraction.
 - Per-parameter units. In a parameters file, a key that ends in `_unit` (for
   example `FWHM_0_unit` or `lifetime_unit`) gives the unit of one value, and
   DICE converts it to the global `length unit` and `time unit`. In the GUI,

@@ -633,6 +633,10 @@ class TestFileThatCannotBeLoaded:
         ({"pixel width": 50.5}, "'pixel width' must be an integer, got float 50.5"),
         ({"time range": [0, 1, 2.5]}, "The number of steps in 'time range' must be an integer"),
         ({"time range": [0, 1]}, "'time range' must be"),
+        # A spin box would set these to its limit without a sign.
+        ({"time range": [0, 1, 20000]}, "The number of steps in 'time range' is 20000, and the form takes 2 to 10000"),
+        ({"image numbins": 300}, "'image numbins' is 300, and the form takes 5 to 200"),
+        ({"pixel width": 8}, "'pixel width' is 8, and the form takes 16 to 100000"),
         ({"time_range_unit": "fortnight"}, "fortnight"),
         # This one fails after the first fields of the form are filled.
         ({"number of runs": 7, "estimate noise from data": 5}, ""),

@@ -92,10 +92,9 @@ class TestSpatialSampling:
         window.pixel_width_input.setValue(51)
         assert window.pixel_size_label.text() == f"Pixel Size: 0.1 {MICROMETER}/pixel"
 
-    def test_single_pixel_shows_no_pixel_size(self, qtbot, window):
-        enter_text(qtbot, window.spatial_width_input, "5")
-        window.pixel_width_input.setValue(1)
-        assert window.pixel_size_label.text() == "Pixel Size: ---"
+    def test_fewest_pixels_of_the_form_are_the_fewest_a_run_accepts(self, window):
+        from dice.core.noise import MINIMUM_PROFILE_POINTS
+        assert window.pixel_width_input.minimum() == MINIMUM_PROFILE_POINTS
 
     def test_invalid_width_shows_no_pixel_size(self, qtbot, window):
         enter_text(qtbot, window.spatial_width_input, "-1")

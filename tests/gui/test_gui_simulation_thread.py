@@ -365,18 +365,39 @@ class TestClosingDuringARun:
         monkeypatch.setattr(SimulationThread, "terminate", record_terminate)
         return calls
 
-    def test_close_waits_for_the_run_without_a_time_limit(self, qtbot, window, dialogs, thread_calls):
+    def test_close_keeps_the_window_until_the_run_has_stopped(self, qtbot, window, dialogs, thread_calls):
+        window.show()
         thread = _start_long_serial_run(qtbot, window)
         window.parameters_modified = False  # no unsaved-changes prompt before the one under test
         dialogs.question_answers.append(QMessageBox.StandardButton.Yes)
 
-        assert window.close() is True
+        assert window.close() is False  # the window stays while the run stops
 
         assert dialogs.titles("question") == ["Simulation Running"]
-        assert thread.isFinished()
+        assert thread.stop_requested()
+        assert window.isVisible()
+        assert not window.centralWidget().isEnabled() and not window.menuBar().isEnabled()
+        assert window.status_label.text().startswith("Stopping. DICE exits when")
+
+        qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
+
+        assert window.simulation_thread is None  # released after its run returned
         assert thread_calls["terminate"] == 0
         # A wait with a time limit is how a long parallel batch used to be cut off.
-        assert thread_calls["wait"] == [()]
+        assert thread_calls["wait"] and all(arguments == () for arguments in thread_calls["wait"])
+        # The questions were answered before the wait and are not asked again.
+        assert dialogs.titles("question") == ["Simulation Running"]
+
+    def test_close_with_unsaved_changes_asks_once(self, qtbot, window, dialogs, thread_calls):
+        window.show()
+        _start_long_serial_run(qtbot, window)
+        window.parameters_modified = True
+        dialogs.question_answers.extend([QMessageBox.StandardButton.Discard, QMessageBox.StandardButton.Yes])
+
+        assert window.close() is False
+        qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
+
+        assert dialogs.titles("question") == ["Unsaved Changes", "Simulation Running"]
 
     def test_declining_keeps_the_window_and_the_run(self, qtbot, window, dialogs, thread_calls):
         thread = _start_long_serial_run(qtbot, window)
@@ -406,8 +427,8 @@ class TestOutputFilesThatCannotBeWritten:
         result, processed = interface.run_simulation(quick_test_engine_parameters(number_of_runs=5))
 
         assert result.num_runs == 5
-        assert interface.last_output_error
-        interface.last_result, interface.last_parameters = result, processed
+        assert interface.last_output_error.endswith("quick_test.csv: " + interface.last_output_error.split(": ")[-1])
+        assert (interface.last_result, interface.last_parameters) == (result, processed)
         assert interface.retry_write_outputs() == interface.last_output_error != None  # noqa: E711
 
         (work_dir / "output" / "quick_test" / "quick_test.csv").rmdir()
@@ -436,6 +457,49 @@ class TestOutputFilesThatCannotBeWritten:
         assert window.results_status_label.text() == "Simulation results: quick_test (5 runs)"
         assert window.status_label.text() == "Simulation completed; output files not written"
         assert window.run_button.isEnabled()
+        # The message names the file and the reason, not Python's text of the error.
+        assert "[Errno" not in dialogs.texts("warning")[0] and "\\\\" not in dialogs.texts("warning")[0]
+        assert "File > Write Output Files" in dialogs.texts("warning")[0]
+        assert window.write_outputs_action.isEnabled()
+
+    def test_files_can_be_written_later_from_the_file_menu(self, qtbot, window, dialogs, work_dir):
+        self._block_the_results_file(work_dir)
+        self._run_quick_test(qtbot, window, dialogs)  # the scripted warning dialog answers Close
+        assert window.write_outputs_action.isEnabled()
+
+        (work_dir / "output" / "quick_test" / "quick_test.csv").rmdir()
+        dialogs.shown.clear()
+        window.write_outputs_action.trigger()
+
+        assert dialogs.titles() == []  # written at once, so there is nothing to ask
+        assert sorted(path.name for path in (work_dir / "output" / "quick_test").iterdir()) == [
+            "quick_test.csv", "quick_test_accuracy_histogram.png", "quick_test_summary.txt",
+        ]
+        assert not window.write_outputs_action.isEnabled()
+        assert window.status_label.text() == "Output files written"
+
+    def test_exit_with_unwritten_files_asks_first(self, qtbot, window, dialogs, work_dir):
+        self._block_the_results_file(work_dir)
+        self._run_quick_test(qtbot, window, dialogs)
+        window.parameters_modified = False
+        dialogs.shown.clear()
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        assert window.close() is False
+
+        assert dialogs.titles("question") == ["Output Files Not Written"]
+        assert "are lost when DICE exits" in dialogs.texts("question")[0]
+
+    def test_plot_that_cannot_be_saved_is_an_output_file_that_was_not_written(self, qtbot, window, dialogs, work_dir):
+        """The results file and the summary are written; the plot is not, and Retry covers it."""
+        (work_dir / "output" / "quick_test" / "quick_test_accuracy_histogram.png").mkdir(parents=True)
+
+        self._run_quick_test(qtbot, window, dialogs)
+
+        assert dialogs.titles() == ["Output Files Not Written"]
+        assert "quick_test_accuracy_histogram.png" in dialogs.texts("warning")[0]
+        assert (work_dir / "output" / "quick_test" / "quick_test.csv").is_file()
+        assert window.write_outputs_action.isEnabled()
 
     def test_retry_writes_the_files_once_the_file_is_free(self, qtbot, window, dialogs, work_dir, monkeypatch):
         self._block_the_results_file(work_dir)
@@ -454,4 +518,5 @@ class TestOutputFilesThatCannotBeWritten:
         assert warnings_shown == ["Output Files Not Written"]
         assert dialogs.titles() == ["Simulation Complete"]
         assert blocked.is_file()
-        assert window.status_label.text() == "Simulation completed successfully!"
+        assert window.status_label.text() == "Simulation completed successfully."
+        assert not window.write_outputs_action.isEnabled()

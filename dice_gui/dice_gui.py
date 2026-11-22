@@ -28,6 +28,7 @@ from dice_gui.validators import (
     calculate_diffusion_length, calculate_pixel_size
 )
 from dice_gui.dice_interface import DiceInterface, parameters_for_form
+from dice_gui.tabs.base import set_spin_value
 from dice_gui.output_location import output_root
 from dice_gui.styles import DiceTheme, apply_theme
 from dice_gui.accessibility import (
@@ -69,6 +70,8 @@ class DiceGUI(QMainWindow):
         self.setLocale(QLocale.c())
         self.interface = DiceInterface()
         self.simulation_thread = None
+        # True from the moment the user closes the window during a run until it has closed.
+        self._close_requested = False
         self.theme = DiceTheme()
 
         # File management
@@ -205,6 +208,14 @@ class DiceGUI(QMainWindow):
         load_results_action.setStatusTip("Load simulation results from CSV file")
         load_results_action.triggered.connect(self.load_and_plot_results)
         file_menu.addAction(load_results_action)
+
+        # Enabled only while a finished simulation has no output files.
+        self.write_outputs_action = QAction("&Write Output Files", self)
+        self.write_outputs_action.setStatusTip(
+            "Write the results file, the summary and the plot of the last simulation, which could not be written")
+        self.write_outputs_action.triggered.connect(self.write_output_files)
+        self.write_outputs_action.setEnabled(False)
+        file_menu.addAction(self.write_outputs_action)
 
         file_menu.addSeparator()
 
@@ -978,7 +989,9 @@ class DiceGUI(QMainWindow):
 
         Returns a list of warning/informational strings. Empty list means no issues.
         """
-        from dice.utils.units import convert_time, convert_length, time_abbreviation, length_abbreviation
+        from dice.utils.units import (
+            convert_diffusion_coefficient, convert_time, convert_length, time_abbreviation, length_abbreviation,
+        )
         from dice.utils.converters import fwhm_to_sigma
 
         messages = []
@@ -1006,28 +1019,7 @@ class DiceGUI(QMainWindow):
                 t_stop = max(time_values)
                 num_time_points = len(time_values)
 
-        # Check 1: Final CNR after exponential decay
-        if gui_params['noise_type'] == 'fixed' and t_stop is not None:
-            amplitude = gui_params['amplitude_0']
-            noise_sigma = gui_params['noise_value']
-
-            if lifetime > 0:
-                final_amplitude = amplitude * math.exp(-t_stop / lifetime)
-            else:
-                final_amplitude = amplitude
-
-            if noise_sigma > 0:
-                final_cnr = final_amplitude / noise_sigma
-                if final_cnr < 5:
-                    t_abbr = time_abbreviation(global_time)
-                    messages.append(
-                        f"\u26a0 Low final CNR: At t = {t_stop:.4g} {t_abbr}, "
-                        f"the signal decays to amplitude {final_amplitude:.4g}, "
-                        f"giving CNR = {final_cnr:.2f}. "
-                        f"Below ~5, Gaussian fitting becomes unreliable."
-                    )
-
-        # Check 2: Profile width undersampled relative to pixel grid
+        # The initial width, in the global length unit
         if gui_params['profile_width_type'] == 'fwhm':
             width_unit = gui_params.get('fwhm_0_unit', global_length)
             fwhm_global = convert_length(gui_params['profile_width_value'], width_unit, global_length)
@@ -1036,6 +1028,36 @@ class DiceGUI(QMainWindow):
             width_unit = gui_params.get('sigma_0_unit', global_length)
             sigma_0 = convert_length(gui_params['profile_width_value'], width_unit, global_length)
 
+        # Check 1: Final CNR. The profile keeps its area while it spreads, so
+        # its peak falls by the decay and by sigma_0 / sigma_t, with
+        # sigma_t^2 = sigma_0^2 + 2 D t (dice.core.profiles).
+        if gui_params['noise_type'] == 'fixed' and t_stop is not None:
+            amplitude = gui_params['amplitude_0']
+            noise_sigma = gui_params['noise_value']
+            diffusion_coefficient = convert_diffusion_coefficient(
+                gui_params['diffusion_coefficient'],
+                gui_params.get('diffusion_coefficient_length_unit', global_length),
+                gui_params.get('diffusion_coefficient_time_unit', global_time),
+                global_length, global_time,
+            )
+
+            decay = math.exp(-t_stop / lifetime) if lifetime > 0 else 1.0
+            final_variance = sigma_0 ** 2 + 2 * diffusion_coefficient * t_stop
+            spreading = sigma_0 / math.sqrt(final_variance) if final_variance > 0 else 1.0
+            final_amplitude = amplitude * decay * spreading
+
+            if noise_sigma > 0:
+                final_cnr = final_amplitude / noise_sigma
+                if final_cnr < 5:
+                    t_abbr = time_abbreviation(global_time)
+                    messages.append(
+                        f"\u26a0 Low final CNR: At t = {t_stop:.4g} {t_abbr}, "
+                        f"decay and spreading lower the peak to {final_amplitude:.4g}, "
+                        f"giving CNR = {final_cnr:.2f}. "
+                        f"Below ~5, Gaussian fitting becomes unreliable."
+                    )
+
+        # Check 2: Profile width undersampled relative to pixel grid
         spatial_unit = gui_params.get('spatial_width_unit', global_length)
         spatial_width = convert_length(gui_params['spatial_width'], spatial_unit, global_length)
         pixel_size_result = calculate_pixel_size(str(spatial_width), gui_params['pixel_width'])
@@ -1203,7 +1225,7 @@ class DiceGUI(QMainWindow):
             self.interface.last_result = result
 
         self.reset_ui_after_simulation()
-        self.status_label.setText("Simulation completed successfully!")
+        self.status_label.setText("Simulation completed")
 
         self._release_simulation_thread()
 
@@ -1214,6 +1236,30 @@ class DiceGUI(QMainWindow):
         # Populate precision summary from results
         self._populate_precision_from_results()
 
+        written = self._offer_to_write_output_files()
+        if self._close_requested:
+            self._exit_if_requested()
+            return
+        if not written:
+            return
+
+        from dice.io.results import completion_message
+        message = completion_message(self.interface.last_result)
+        self.status_label.setText(message)
+        QMessageBox.information(
+            self,
+            "Simulation Complete",
+            f"{message}\n\n"
+            "Results have been saved to output files."
+        )
+
+    def _offer_to_write_output_files(self) -> bool:
+        """
+        Ask to write the output files again until they are written or the user closes the dialog.
+
+        Returns:
+            True when the output files of the last simulation are written.
+        """
         output_error = self.interface.last_output_error
         while output_error is not None:
             answer = QMessageBox.warning(
@@ -1222,26 +1268,28 @@ class DiceGUI(QMainWindow):
                 "The simulation finished, but its output files could not be written:\n\n"
                 f"{output_error}\n\n"
                 "The results are kept, and the Analysis tab shows them. If another program "
-                "has an output file open, close it there, then choose Retry to write the files.",
+                "has an output file open, close it there, then choose Retry to write the files. "
+                "After Close, File > Write Output Files writes them later.",
                 QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Close,
                 QMessageBox.StandardButton.Retry,
             )
             if answer != QMessageBox.StandardButton.Retry:
                 self.status_label.setText("Simulation completed; output files not written")
-                return
+                break
             output_error = self.interface.retry_write_outputs()
+        self.write_outputs_action.setEnabled(output_error is not None)
+        return output_error is None
 
-        QMessageBox.information(
-            self,
-            "Simulation Complete",
-            "DICE simulation completed successfully!\n\n"
-            "Results have been saved to output files."
-        )
+    def write_output_files(self):
+        """File > Write Output Files: write the files of a simulation whose files could not be written."""
+        # Write first: the dialog is for a write that fails again.
+        self.interface.retry_write_outputs()
+        if self._offer_to_write_output_files():
+            self.status_label.setText("Output files written")
 
     def _populate_precision_from_results(self):
         """Extract precision metrics from last results and populate the analysis tab."""
-        from dice_gui.tabs.tab_analysis import populate_precision_summary
-        import numpy as np
+        from dice_gui.tabs.tab_analysis import populate_precision_summary, reset_precision_summary
 
         result = self.interface.last_result
         if result is None:
@@ -1249,13 +1297,12 @@ class DiceGUI(QMainWindow):
 
         # Extract D estimates of the selected fit method
         d_arr = result.d_estimates(selected_estimator_key(self))
+        nominal_d = result.run_results[0].nominal_diffusion_coefficient if result.run_results else 0
 
-        if len(d_arr) == 0:
-            return
-
-        nominal_d = result.run_results[0].nominal_diffusion_coefficient
-
-        if nominal_d == 0:
+        # Without estimates, or without a nominal value to compare them with,
+        # the tab must not keep the numbers of an earlier fit or simulation.
+        if len(d_arr) == 0 or nominal_d == 0:
+            reset_precision_summary(self, "The selected fit has no estimates in these results.")
             return
 
         # The statistics are the engine's, so the tab and the summary file agree.
@@ -1279,6 +1326,7 @@ class DiceGUI(QMainWindow):
         self._release_simulation_thread()
         self.status_label.setText("Simulation failed")
         QMessageBox.critical(self, "Simulation Error", f"Simulation failed:\n\n{error_message}")
+        self._exit_if_requested()
 
     def simulation_cancelled(self):
         """Handle a run that stopped at the user's request."""
@@ -1286,6 +1334,7 @@ class DiceGUI(QMainWindow):
         self._release_simulation_thread()
         # Replaces the "Stopping..." that stop_simulation() showed.
         self.status_label.setText("Simulation stopped by user")
+        self._exit_if_requested()
 
     def _release_simulation_thread(self) -> None:
         """
@@ -1646,7 +1695,7 @@ class DiceGUI(QMainWindow):
         try:
             # Basic settings
             if 'number of runs' in params:
-                self.num_runs_spin.setValue(params['number of runs'])
+                set_spin_value(self.num_runs_spin, params['number of runs'], "'number of runs'")
             if 'filename slug' in params:
                 self.filename_slug_input.setText(params['filename slug'])
 
@@ -1698,7 +1747,7 @@ class DiceGUI(QMainWindow):
             if 'spatial width' in params:
                 self.spatial_width_input.setText(str(params['spatial width']))
             if 'pixel width' in params:
-                self.pixel_width_input.setValue(params['pixel width'])
+                set_spin_value(self.pixel_width_input, params['pixel width'], "'pixel width'")
 
             # Time axis (mutually exclusive)
             if 'time range' in params:
@@ -1706,7 +1755,7 @@ class DiceGUI(QMainWindow):
                 time_range = params['time range']
                 self.time_start_input.setText(str(time_range[0]))
                 self.time_stop_input.setText(str(time_range[1]))
-                self.time_steps_input.setValue(time_range[2])
+                set_spin_value(self.time_steps_input, time_range[2], "The number of steps in 'time range'")
                 self.time_series_input.clear()
             elif 'time series' in params:
                 self.time_series_radio.setChecked(True)
@@ -1739,11 +1788,11 @@ class DiceGUI(QMainWindow):
             ):
                 if key in params:
                     unit_combo.setCurrentText(unit)
-                    spin.setValue(float(params[key]))
+                    set_spin_value(spin, float(params[key]), f"'{key}'")
             if 'image dpi' in params:
-                self.image_dpi_spin.setValue(params['image dpi'])
+                set_spin_value(self.image_dpi_spin, params['image dpi'], "'image dpi'")
             if 'image numbins' in params:
-                self.image_numbins_spin.setValue(params['image numbins'])
+                set_spin_value(self.image_numbins_spin, params['image numbins'], "'image numbins'")
             # When only the diffusion length is provided, use the engine's
             # convention (tau = 1, so the time axis is in units of the
             # lifetime), then let the linked-field logic compute D = L^2.
@@ -2318,7 +2367,7 @@ licenses of the packages DICE uses.</p>
 
     def closeEvent(self, event):
         """Handle window close event to check for unsaved changes."""
-        if self.parameters_modified:
+        if self.parameters_modified and not self._close_requested:
             reply = QMessageBox.question(
                 self, "Unsaved Changes",
                 "You have unsaved changes. Do you want to save before exiting?",
@@ -2340,8 +2389,8 @@ licenses of the packages DICE uses.</p>
             reply = QMessageBox.question(
                 self, "Simulation Running",
                 "A simulation is running. Stop it and exit?\n\n"
-                "DICE exits when the current run has ended, or the current batch of a "
-                "parallel simulation.",
+                "DICE stays open until the current run has ended, or the current batch of a "
+                "parallel simulation, and then exits.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -2350,12 +2399,44 @@ licenses of the packages DICE uses.</p>
                 return
 
             # The thread is not terminated, because a terminated parallel run
-            # leaves its worker processes behind. Hide the window and wait.
+            # leaves its worker processes behind. The window stays, disabled
+            # and with a message, and closes when the thread reports its end.
             self.simulation_thread.request_stop()
-            self.hide()
-            self.simulation_thread.wait()
+            self._close_requested = True
+            self.centralWidget().setEnabled(False)
+            self.menuBar().setEnabled(False)
+            self.status_label.setText("Stopping. DICE exits when the current run or batch has ended...")
+            event.ignore()
+            return
+
+        if self.interface.last_output_error is not None and not self._close_requested:
+            reply = QMessageBox.question(
+                self, "Output Files Not Written",
+                "The output files of the last simulation are not written, and its results "
+                "are lost when DICE exits. Exit anyway?\n\n"
+                "File > Write Output Files writes them.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
 
         event.accept()
+
+    def _exit_if_requested(self) -> None:
+        """Close the window after a run that the user stopped by closing the window."""
+        if not self._close_requested:
+            return
+        self.centralWidget().setEnabled(True)
+        self.menuBar().setEnabled(True)
+        if self.interface.last_output_error is not None:
+            # The run finished before the stop took effect and its files are
+            # not written: the user decides, so the window stays.
+            self._close_requested = False
+            return
+        # closeEvent skips its questions now: they were answered before the wait.
+        self.close()
 
 
 def main():

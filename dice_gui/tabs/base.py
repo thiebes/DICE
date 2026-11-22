@@ -22,6 +22,27 @@ TIME_UNITS_DISPLAY = [
 ]
 
 
+def set_spin_value(spin, value: float, name: str) -> None:
+    """
+    Show a value of a parameter file in a spin box, or raise if the box cannot hold it.
+
+    A spin box replaces a value outside its range with the nearest limit
+    and gives no sign, so the simulation would run with another value than
+    the file gives.
+
+    Raises
+    ------
+    ValueError
+        If the value is outside the range of the spin box.
+    """
+    if not spin.minimum() <= value <= spin.maximum():
+        raise ValueError(
+            f"{name} is {value:g}, and the form takes {spin.minimum():g} to {spin.maximum():g}. "
+            "Change the value in the file, or run the file with the command-line interface."
+        )
+    spin.setValue(value)
+
+
 def format_computed_value(value: float) -> str:
     """
     Text of a value the GUI computes from other fields.

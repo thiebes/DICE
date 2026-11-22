@@ -5,6 +5,7 @@ Fit method selection and post-hoc precision analysis.
 """
 
 from __future__ import annotations
+import math
 from typing import TYPE_CHECKING, Optional
 
 from PyQt6.QtWidgets import (
@@ -68,7 +69,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     precision_layout.addRow("Bias (mean − nominal) ± standard error:", main_window.precision_bias_label)
     precision_layout.addRow("Mean D_est / D_nom:", main_window.precision_mean_ratio_label)
 
-    main_window.precision_placeholder = QLabel("Run a simulation to see results.")
+    main_window.precision_placeholder = QLabel(NO_RESULTS_TEXT)
     main_window.precision_placeholder.setProperty("class", "info-text")
     precision_layout.addRow(main_window.precision_placeholder)
 
@@ -155,19 +156,43 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
     main_window.proximity_pct_label.setText(f"(±{pct}%)")
     main_window.proximity_histogram.set_proximity(value)
 
-    # Recalculate fraction if results are available
+    # Recalculate the fraction if results are available. A fit without
+    # estimates clears what an earlier fit or simulation left on the tab.
     if main_window.interface.last_result is not None:
         estimator = selected_estimator_key(main_window)
         main_window.proximity_histogram.set_ratios(main_window.interface.estimate_ratios(estimator))
         detail = main_window.interface.proximity_detail(value, estimator=estimator)
-        if detail is not None:
+        if detail is None:
+            main_window.proximity_fraction_label.setText("")
+        else:
             # The fraction comes from a finite number of runs, so it is shown
-            # with its count and its 95% interval.
+            # with its count and its 95% interval, as in the summary file.
+            from dice.io.results import fraction_text
             main_window.proximity_fraction_label.setText(
-                f"{detail['fraction']:.1%} of estimates fall within ±{pct}% of nominal "
-                f"({detail['count']} of {detail['total']}; "
-                f"95% interval {detail['lower']:.1%} to {detail['upper']:.1%})"
+                f"Within ±{pct}% of nominal: {fraction_text(detail['fraction'], detail)}. "
+                "The range is the 95% interval."
             )
+
+
+def value_with_uncertainty(value: float, uncertainty: float) -> str:
+    """
+    A value and its uncertainty in one notation, to the same decimal place.
+
+    The uncertainty is given with two significant digits and the value is
+    rounded to its last digit, for example '-0.00042 ± 0.00087'. Numbers
+    that need more than eight decimals share one power of ten, for example
+    '(3.1 ± 8.7)e-10'. A value without a finite uncertainty (the standard
+    error of one estimate) is given alone, with three significant digits.
+    """
+    if not math.isfinite(uncertainty) or uncertainty <= 0 or not math.isfinite(value):
+        return f"{value:.3g}"
+    decimals = 1 - math.floor(math.log10(uncertainty))
+    if decimals > 8:
+        exponent = math.floor(math.log10(max(abs(value), uncertainty)))
+        scale = 10.0 ** exponent
+        return f"({value / scale:.1f} ± {uncertainty / scale:.1f})e{exponent}"
+    decimals = max(decimals, 0)
+    return f"{value:.{decimals}f} ± {uncertainty:.{decimals}f}"
 
 
 def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Optional[str] = None) -> None:
@@ -175,15 +200,16 @@ def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Op
 
     The standard deviation and bias are diffusion coefficients in the unit
     d_unit (no unit is shown when it is None); the two ratios are unitless.
-    The bias is shown with its standard error ('bias_standard_error'). Three
-    significant digits: the statistics of a simulation are not known more
-    closely.
+    The bias is shown with its standard error ('bias_standard_error'), both
+    to the same decimal place (value_with_uncertainty). The other values
+    have three significant digits: the statistics of a simulation are not
+    known more closely.
     """
     unit_suffix = f" {d_unit}" if d_unit else ""
     main_window.precision_std_label.setText(f"{metrics['std']:.3g}{unit_suffix}")
     main_window.precision_rse_label.setText(f"{metrics['relative_std_error']:.3f}")
     main_window.precision_bias_label.setText(
-        f"{metrics['bias']:.3g} ± {metrics['bias_standard_error']:.2g}{unit_suffix}")
+        f"{value_with_uncertainty(metrics['bias'], metrics['bias_standard_error'])}{unit_suffix}")
     main_window.precision_mean_ratio_label.setText(f"{metrics['mean_relative_error']:.3f}")
     main_window.precision_placeholder.setVisible(False)
 
@@ -194,8 +220,12 @@ def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Op
     _on_proximity_changed(main_window, main_window.proximity_spin.value())
 
 
-def reset_precision_summary(main_window: "DiceGUI") -> None:
-    """Reset precision summary to placeholder state."""
+NO_RESULTS_TEXT = "Run a simulation to see results."
+
+
+def reset_precision_summary(main_window: "DiceGUI", placeholder: str = NO_RESULTS_TEXT) -> None:
+    """Reset precision summary to placeholder state, with `placeholder` as the text shown in its place."""
+    main_window.precision_placeholder.setText(placeholder)
     main_window.precision_std_label.setText("—")
     main_window.precision_rse_label.setText("—")
     main_window.precision_bias_label.setText("—")

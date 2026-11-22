@@ -9,16 +9,21 @@ from PyQt6.QtCore import QRect, Qt
 from PyQt6.QtGui import QColor, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import QSizePolicy, QWidget
 
+from dice_gui.styles import DiceTheme
+
 
 class ProximityHistogramWidget(QWidget):
     """
     Histogram of D estimate / nominal D that highlights the accuracy threshold.
 
     The bars show how the estimates of a simulation are distributed around
-    the nominal value, at ratio 1. The part of each bar that lies within the
-    threshold of the nominal value (from 1 - proximity to 1 + proximity) is
-    drawn in the highlight color, so the highlighted share of the bars is the
-    fraction of estimates within the threshold.
+    the nominal value, at ratio 1. Each bar is highlighted from its foot up
+    to the share of its estimates that lie within the threshold of the
+    nominal value (from 1 - proximity to 1 + proximity): a bar inside the
+    limits in full, a bar that a limit crosses in part. The height of a bar
+    is the count of its bin, so the highlighted share of the bar area is the
+    fraction of the drawn estimates within the threshold. Dashed lines mark
+    the limits.
 
     The axis is centered on the nominal value and spans the estimates, so
     it does not move when the threshold changes. The rare estimates beyond
@@ -76,6 +81,15 @@ class ProximityHistogramWidget(QWidget):
         bin_count = int(min(max(automatic, self.MIN_BINS), self.MAX_BINS))
         return np.histogram(inside, bins=bin_count, range=(low, high))
 
+    def counts_within_threshold(self) -> np.ndarray:
+        """For each bin of histogram(), the number of its estimates within the threshold."""
+        low, high = self.axis_range()
+        _, edges = self.histogram()
+        inside = self._ratios[(self._ratios >= low) & (self._ratios <= high)]
+        # The limits as dice.analysis.statistics.calculate_precision applies them.
+        within = inside[(inside >= 1 - self._proximity) & (inside <= 1 + self._proximity)]
+        return np.histogram(within, bins=edges)[0]
+
     def count_outside_axis(self) -> int:
         """Number of estimates beyond the ends of the axis."""
         if self._ratios.size == 0:
@@ -99,15 +113,8 @@ class ProximityHistogramWidget(QWidget):
         plot = self.plot_rect()
         return plot.left() + round((ratio - low) / (high - low) * plot.width())
 
-    def band_rect(self) -> QRect:
-        """The part of the plot area within the threshold of the nominal value."""
-        plot = self.plot_rect()
-        left = max(self.x_position(1.0 - self._proximity), plot.left())
-        right = min(self.x_position(1.0 + self._proximity), plot.left() + plot.width())
-        return QRect(left, plot.top(), max(right - left, 0), plot.height())
-
-    def bar_rects(self) -> List[QRect]:
-        """One rectangle for each bin that holds estimates, with its foot on the axis."""
+    def _bars(self) -> List[Tuple[int, QRect]]:
+        """The index of each bin that holds estimates, and its bar with its foot on the axis."""
         counts, edges = self.histogram()
         plot = self.plot_rect()
         peak = counts.max() if counts.size else 0
@@ -116,14 +123,33 @@ class ProximityHistogramWidget(QWidget):
         columns = [self.x_position(edge) for edge in edges]
         bottom = plot.top() + plot.height()
         bars = []
-        for count, left, right in zip(counts, columns[:-1], columns[1:]):
+        for index, (count, left, right) in enumerate(zip(counts, columns[:-1], columns[1:])):
             if count == 0:
                 continue
             # One pixel between bars, when the bars are wide enough to spare it.
             width = right - left - (1 if right - left > 3 else 0)
             height = max(round(count / peak * plot.height()), 1)
-            bars.append(QRect(left, bottom - height, max(width, 1), height))
+            bars.append((index, QRect(left, bottom - height, max(width, 1), height)))
         return bars
+
+    def bar_rects(self) -> List[QRect]:
+        """One rectangle for each bin that holds estimates, with its foot on the axis."""
+        return [bar for _, bar in self._bars()]
+
+    def highlight_rects(self) -> List[QRect]:
+        """The lower part of each bar that stands for its estimates within the threshold."""
+        bars = self._bars()
+        if not bars:
+            return []
+        counts, _ = self.histogram()
+        within = self.counts_within_threshold()
+        highlights = []
+        for index, bar in bars:
+            if within[index] == 0:
+                continue
+            height = max(round(bar.height() * within[index] / counts[index]), 1)
+            highlights.append(QRect(bar.left(), bar.top() + bar.height() - height, bar.width(), height))
+        return highlights
 
     # ---- drawing ---------------------------------------------------------------
 
@@ -133,10 +159,9 @@ class ProximityHistogramWidget(QWidget):
         Both are opaque and stand out from the window background by at
         least 3:1 in either theme.
         """
-        dark_mode = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
-        if dark_mode:
-            return QColor(100, 181, 246), QColor(120, 120, 120)
-        return QColor(13, 71, 161), QColor(140, 140, 140)
+        theme = DiceTheme()
+        highlight = theme.get_semantic_colors()['calculated_value']
+        return highlight, (QColor(120, 120, 120) if theme.is_dark_mode else QColor(140, 140, 140))
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -153,26 +178,18 @@ class ProximityHistogramWidget(QWidget):
             return
 
         highlight, muted = self.bar_colors()
-        plot, band = self.plot_rect(), self.band_rect()
+        plot = self.plot_rect()
         bottom = plot.top() + plot.height()
         low, high = self.axis_range()
 
-        # The threshold band behind the bars.
-        tint = QColor(highlight)
-        tint.setAlpha(34)
-        painter.fillRect(band, tint)
-
-        # Every bar in the muted color, then the part inside the band in the
-        # highlight color. Without antialiasing, the bar edges are exact.
+        # Every bar in the muted color, then the part of each bar that stands
+        # for its estimates within the threshold in the highlight color.
+        # Without antialiasing, the bar edges are exact.
         painter.setPen(Qt.PenStyle.NoPen)
-        bars = self.bar_rects()
-        for bar in bars:
+        for bar in self.bar_rects():
             painter.fillRect(bar, muted)
-        painter.save()
-        painter.setClipRect(band)
-        for bar in bars:
-            painter.fillRect(bar, highlight)
-        painter.restore()
+        for part in self.highlight_rects():
+            painter.fillRect(part, highlight)
 
         # Limits of the threshold, where they fall on the axis.
         painter.setPen(QPen(text_color, 1, Qt.PenStyle.DashLine))
