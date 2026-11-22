@@ -275,7 +275,7 @@ List the time points in increasing order, without duplicates. The results file r
 
 ## Analysis output
 
-For each run, DICE fits a Gaussian function to each noisy profile. It then fits the variance of these Gaussians against time with two linear fits: weighted least squares (WLS) and ordinary least squares (OLS). In one dimension the slope equals 2D, so each linear fit gives one estimate of the diffusion coefficient. For all runs together, DICE reports:
+For each run, DICE fits a Gaussian function to each noisy profile. The fit is a bounded least-squares fit by the trust region reflective method (SciPy's `curve_fit` with bounds); the 2024 paper names the Levenberg-Marquardt algorithm, which SciPy does not apply to a fit with bounds. DICE then fits the variance of these Gaussians against time with two linear fits: weighted least squares (WLS) and ordinary least squares (OLS). In one dimension the slope equals 2D, so each linear fit gives one estimate of the diffusion coefficient. For all runs together, DICE reports:
 
 - the standard deviation of the estimates
 - the relative standard deviation (standard deviation divided by the nominal diffusion coefficient)

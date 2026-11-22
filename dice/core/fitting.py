@@ -128,23 +128,15 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             mu0_min = xmin
             mu0_max = xmax
 
-        # Find maximum amplitude within the mu bounds
-        valid_mask = (x_fit >= mu0_min) & (x_fit <= mu0_max)
-        valid_indices = np.where(valid_mask)[0]
-
-        if len(valid_indices) > 0:
-            # Find maximum within valid region
-            valid_profile = this_profile[valid_mask]
-            max_amp_idx_in_valid = np.argmax(np.abs(valid_profile))
-            max_amp_idx = valid_indices[max_amp_idx_in_valid]
-        else:
-            # Fallback: use global maximum
-            max_amp_idx = np.argmax(np.abs(this_profile))
-
-        # Initial guesses
-        mu0 = x_fit[max_amp_idx]  # Mean at maximum within bounds
+        # Initial guesses, as in Table II of the 2024 paper.
+        # Center: the center of the window, where x_fit is 0. The paper gives 0
+        # on an axis centered on 0.
+        mu0 = 0.0
         sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
-        a0 = np.abs(this_profile[max_amp_idx])  # Amplitude guess: absolute max value within bounds
+        # Amplitude: the largest absolute value of the profile. The absolute
+        # value keeps the guess inside the bounds, which start at 0.
+        largest_value = np.max(np.abs(this_profile))
+        a0 = largest_value
         
         # Set bounds for sigma^2
         sigma2_min = (xwid / xpix) ** 2  # Minimum: ~1 pixel width
@@ -152,7 +144,7 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         
         # Set bounds for amplitude
         a0_min = 0  # Non-negative amplitude
-        a0_max = 2 * np.max(np.abs(this_profile))  # Maximum: 2x the max value
+        a0_max = 2 * largest_value  # Maximum: 2x the largest absolute value
         
         # Ensure amplitude bounds are valid
         if a0_max <= 0:

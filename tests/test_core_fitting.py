@@ -5,6 +5,7 @@ Tests for dice.core.fitting module.
 import pytest
 import numpy as np
 from dice.core.fitting import (
+    center_search_limits,
     gauss_fitting,
     fit_gaussian_profile,
     diffusion_ols_fit,
@@ -81,6 +82,52 @@ class TestGaussFitting:
         # Should recover the variance regardless of mean
         assert np.isclose(result['sigma^2_t estimates'][0], 1.5, rtol=0.01)
     
+    def test_initial_guesses_follow_the_paper(self, monkeypatch):
+        """The fit starts at the center of the window and at the largest value of the profile.
+
+        Table II of the 2024 paper gives the initial guesses: 0 for the center
+        on an axis centered on 0, and the profile maximum for the amplitude.
+        The fit runs on an axis centered on the window and on the profile
+        divided by its largest absolute value, so there the guesses are 0 and
+        1, wherever the largest value lies and whatever the positions on the
+        axis are. Here the largest value is a spike outside the range in which
+        the fit looks for the center.
+        """
+        import dice.core.fitting as fitting
+
+        guesses = []
+        scipy_curve_fit = fitting.curve_fit
+
+        def recording_curve_fit(model, x, y, p0, **keywords):
+            guesses.append((p0[0], p0[2], keywords['bounds'][1][2]))
+            return scipy_curve_fit(model, x, y, p0=p0, **keywords)
+
+        monkeypatch.setattr(fitting, 'curve_fit', recording_curve_fit)
+        x = np.linspace(3.0, 23.0, 201)  # the center of the window is at 13
+        y = gaussian(x, mu=16.0, sig2=1.5, amp=0.8)
+        y[5] = 1.0  # at x = 3.5, outside the central 40% of the window
+
+        result = gauss_fitting(x, y)
+
+        center_guess, amplitude_guess, amplitude_upper_bound = guesses[0]
+        assert center_guess == 0.0
+        assert amplitude_guess == 1.0
+        assert amplitude_upper_bound == 2.0
+        assert np.isclose(result['sigma^2_t estimates'][0], 1.5, rtol=0.02)
+
+    def test_profile_at_the_limit_of_the_center_range(self):
+        """Noisy profiles centered near the limit of the center range are fitted from the center of the window."""
+        x = np.linspace(-2.5, 2.5, 100)
+        _, highest_center = center_search_limits(x)
+        rng = np.random.default_rng(3)
+        clean = gaussian(x, mu=0.98 * highest_center, sig2=0.18, amp=1.0)
+        profiles = [clean + rng.normal(0, 0.05, x.size) for _ in range(50)]
+
+        result = gauss_fitting(x, profiles)
+
+        assert result['fit_failures'] == 0
+        np.testing.assert_allclose(result['sigma^2_t estimates'], 0.18, rtol=0.25)
+
     def test_mismatched_lengths_error(self):
         """Test error when profile and x_axis have different lengths."""
         x = np.linspace(-10, 10, 100)

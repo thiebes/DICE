@@ -20,7 +20,8 @@ and Fixed give the details.
 
 | Your 1.2.0 simulation | What was wrong | What to do |
 | ------- | ------------- | ------------- |
-| Micrometers and nanoseconds, `amplitude_0` = 1, a fixed `noise value`, `mean_0` within 0.2 × `spatial width` of 0 | Nothing that changes the diffusion coefficient statistics: the estimates change by less than 1e-5 of their value. The `estimated CNR` column changes with the new CNR estimator. | No rerun needed. |
+| Micrometers and nanoseconds, `amplitude_0` = 1, a fixed `noise value`, `mean_0` within 0.2 × `spatial width` of 0, and a CNR above about 4 in every frame | Nothing that changes the diffusion coefficient statistics: the mean and the standard deviation of the estimates agree to four digits. Single estimates change a little, because the fit runs in scaled coordinates and starts its search for the center at the center of the window. With a diffusion length of 0.1 × `FWHM_0`, a window 5 FWHM wide, 100 pixels and 10 frames, they change by less than 1e-4 of their value at an initial CNR of 50; at an initial CNR of 20, one estimate in ten changes by more than 1e-5 and none by more than 1%. The `estimated CNR` column changes with the new CNR estimator. | No rerun needed. |
+| A frame with a CNR below about 4. The CNR falls from frame to frame with the decay and the spreading of the profile. | The Gaussian fit of a noisy frame could start outside its bounds and fail. 1.2.0 printed a warning and used (`spatial width` / 4)² as the variance of that frame, which put an outlier in the estimates of that run. In a window 5 FWHM wide with 100 pixels, 0.4% of the frames failed at a CNR of 3 and 6% at a CNR of 2. | Rerun. |
 | `mean_0` farther than 0.2 × `spatial width` from 0, the center of the window | The Gaussian fit looks for the center of a profile only in the central 40% of the window. It held the center at that limit and reported a wrong width, so the diffusion coefficient estimates were wrong (10% low for `mean_0` = 1.3 in a window 5 wide, at low noise). | Rerun with `mean_0` inside the central 40% of the window. 2.0.0 rejects the old value. |
 | Another length or time unit | The diffusion coefficients in cm²/s were too large by the factor (1 micrometer / length unit)² × (time unit / 1 nanosecond): 10^6 for nanometers and nanoseconds, 10^-3 for micrometers and picoseconds. The summary labeled lengths in micrometers. Ratios of estimate to nominal value were correct. | Divide the cm²/s columns by the factor, or rerun. |
 | Lengths in centimeters or meters, a spatial width below about 0.05 in its unit, or `amplitude_0` below about 0.01 | The Gaussian fit stopped early, so the estimates themselves were wrong. | Rerun. |
@@ -335,9 +336,13 @@ and Fixed give the details.
 - `--multiprocessing N` sets the number of worker processes. Any value other
   than 0 used all CPU cores.
 - Gaussian fits no longer fail because the starting point lies outside the
-  parameter bounds. The initial center and amplitude come from the largest
-  absolute value within the allowed range of the center, and the initial
-  amplitude is positive.
+  parameter bounds. The fit starts its search for the center at the center of
+  the window and the amplitude starts at the largest absolute value of the
+  profile, as Table II of the 2024 paper gives them. In 1.2.0 the search for
+  the center started at the position of the largest absolute value of
+  the whole profile; when noise put that value outside the allowed range, the
+  fit failed and (`spatial width` / 4)² stood in for the variance of the
+  frame.
 - A lifetime of 0, which means no decay, gives an infinite diffusion length
   in the summary, the results file, the JSON file, and the GUI. The diffusion
   length was reported as 0.

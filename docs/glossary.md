@@ -96,6 +96,8 @@ The width of a peak at half of its maximum height. For a Gaussian profile, FWHM 
 
 A bell-shaped distribution described by a Gaussian (normal) function. DICE models the excited state population as a Gaussian profile.
 
+DICE fits a Gaussian function to each noisy profile. The variance, the amplitude and the center are free within bounds, and the baseline is fixed at zero. The fit is a bounded least-squares fit by the trust region reflective method (SciPy's `curve_fit` with bounds). The 2024 paper names the Levenberg-Marquardt algorithm; SciPy applies the trust region reflective method whenever a fit has bounds.
+
 **Parameters:** amplitude (A), mean (μ), standard deviation (σ)
 
 ## L
