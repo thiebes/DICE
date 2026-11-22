@@ -328,7 +328,9 @@ class DiceInterface:
         from dice.io.results import (
             export_collated_results, output_unit_preferences, write_summary_file,
         )
-        from dice.visualization.histograms import histogram_options, plot_accuracy_histogram, use_file_backend
+        from dice.visualization.histograms import (
+            histogram_options, plot_accuracy_histogram, remove_plots_of_earlier_runs, use_file_backend,
+        )
         from dice.utils.units import global_length_unit, global_time_unit
 
         use_file_backend()
@@ -365,10 +367,10 @@ class DiceInterface:
         d_estimates = result.d_estimates('wls')
         d_nominal = processed_params['nominal diffusion coefficient']
 
-        # A plot of an earlier run must not stay beside the new results,
-        # whether this run draws a plot or not.
+        # No plot of an earlier run with this slug stays beside the new
+        # results, whether this run draws a plot or not.
+        remove_plots_of_earlier_runs(output_dir, slug)
         plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
-        plot_file.unlink(missing_ok=True)
 
         if len(d_estimates) > 0:
             d_ratios = d_estimates / d_nominal

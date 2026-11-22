@@ -62,6 +62,8 @@ and Fixed give the details.
   moves to Stop when a run starts and back to Run when it ends. When a run
   is blocked by an invalid field, the message names the field, and the GUI
   opens its tab and gives it the focus.
+- The GUI compares the start and the stop of a time range in one unit. A
+  start of 500 ps with a stop of 1 ns was refused.
 - GUI warnings before a run for settings that make the fits unreliable: a low
   CNR at the last time point (the peak falls by the decay and by the
   spreading of the profile), an initial profile that is narrow compared with
@@ -372,6 +374,11 @@ and Fixed give the details.
   printed Python's default form, with the path and the line of the source
   file. The help of `--quiet` says that warnings are still printed; a
   simulation in which no run gives an estimate is reported as a warning.
+- A run removes the accuracy plots that an earlier run with the same slug
+  left in the output folder, in every image type, also with `--no-plots`.
+  An earlier plot could stay beside results it did not show: after a run
+  with another image type, after a change between a noise value and a noise
+  range, and after a run without plots.
 - A plot that cannot be saved is an error. The plot functions raise, and the
   command-line interface ends with exit code 1 and a message that the
   results were saved and the plot was not. The plot functions used to log

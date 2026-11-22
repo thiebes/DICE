@@ -26,7 +26,7 @@ from ..io.results import (
 from ..models.results import MonteCarloOutput
 from ..visualization.histograms import (
     accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
-    use_file_backend,
+    remove_plots_of_earlier_runs, use_file_backend,
 )
 from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.units import diffusion_coefficient_label, global_length_unit, global_time_unit
@@ -290,6 +290,15 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
     args : Namespace
         Command-line arguments.
     """
+    # The results file and the summary are new; no plot of an earlier run
+    # with this slug stays beside them, also when this run draws none.
+    try:
+        remove_plots_of_earlier_runs(output_dir, parameters.get('filename slug', 'dice'))
+    except OSError as e:
+        raise PlotError(
+            "The results were saved, but a plot of an earlier run could not be removed: "
+            f"{file_error_text(e)}") from e
+
     if args.no_plots:
         return
     
@@ -309,10 +318,7 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
         d_estimates = result.d_estimates('wls')
         d_nominal = parameters['nominal diffusion coefficient']
 
-        # A plot of an earlier run must not stay beside the new results,
-        # whether this run draws a plot or not.
         plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
-        plot_file.unlink(missing_ok=True)
 
         if len(d_estimates) > 0:
             d_ratios = d_estimates / d_nominal
@@ -373,11 +379,8 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
     try:
         amplitude_0 = result.parameters.profile.amplitude_0
         fitted_runs = [run for run in result.run_results if run.slope_fit('wls') is not None]
-        # A plot of an earlier run must not stay beside the new results,
-        # whether this run draws a plot or not.
         slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
         plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
-        plot_file.unlink(missing_ok=True)
         if fitted_runs:
             fig = plot_accuracy_vs_cnr(
                 [nominal_cnr(amplitude_0, run.noise_sigma) for run in fitted_runs],

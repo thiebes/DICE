@@ -785,6 +785,14 @@ class DiceGUI(QMainWindow):
             QMessageBox.critical(self, "Error Loading Results",
                                f"Failed to load and plot results:\n\n{str(e)}")
 
+    def _in_global_time_unit(self, text: str, unit_combo) -> str:
+        """The time in a field as text in the global time unit; a text that is no number is returned as it is."""
+        from dice.utils.units import convert_time
+        try:
+            return str(convert_time(float(text), combo_value(unit_combo), self.time_unit_combo.currentText()))
+        except ValueError:
+            return text  # validate_time_range reports it
+
     def validate_all_inputs(self) -> tuple[bool, str]:
         """Validate all inputs before running simulation."""
         # Validate based on current radio button selections
@@ -844,9 +852,11 @@ class DiceGUI(QMainWindow):
 
         # Time
         if self.time_range_radio.isChecked():
+            # Start and stop each have a unit selector, so they are compared
+            # in the global time unit: 500 ps is before 1 ns.
             result = validate_time_range(
-                self.time_start_input.text(),
-                self.time_stop_input.text(),
+                self._in_global_time_unit(self.time_start_input.text(), self.time_start_unit_combo),
+                self._in_global_time_unit(self.time_stop_input.text(), self.time_stop_unit_combo),
                 str(self.time_steps_input.value())
             )
             if not result:

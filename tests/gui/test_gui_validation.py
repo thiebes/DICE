@@ -163,6 +163,23 @@ class TestRunIsBlocked:
         assert _visible_error(window, "noise_file") == "File path is required"
         assert window.simulation_thread is None
 
+    def test_start_and_stop_are_compared_in_one_unit(self, qtbot, window, dialogs):
+        """Each has a unit selector: 500 ps is before 1 ns, and 2 ns is after 500 ps."""
+        from dice_gui.tabs.base import set_combo_value
+
+        enter_text(qtbot, window.time_start_input, "500")
+        set_combo_value(window.time_start_unit_combo, "picosecond")
+        enter_text(qtbot, window.time_stop_input, "1")
+        set_combo_value(window.time_stop_unit_combo, "nanosecond")
+        assert window.validate_all_inputs() == (True, "")
+
+        enter_text(qtbot, window.time_start_input, "2")
+        set_combo_value(window.time_start_unit_combo, "nanosecond")
+        enter_text(qtbot, window.time_stop_input, "500")
+        set_combo_value(window.time_stop_unit_combo, "picosecond")
+        is_valid, message = window.validate_all_inputs()
+        assert not is_valid and message.startswith("Time range start must be less than stop")
+
     def test_reversed_time_range_blocks_run(self, qtbot, window, dialogs):
         enter_text(qtbot, window.time_start_input, "2")
         enter_text(qtbot, window.time_stop_input, "1")

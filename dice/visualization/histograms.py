@@ -50,6 +50,33 @@ def use_file_backend() -> None:
         matplotlib.use('Agg')
 
 
+# The ends of the names of the two accuracy plots: '<slug>_accuracy_histogram.<type>'
+# for a fixed noise value, '<slug>_accuracy_vs_cnr.<type>' for a noise range.
+ACCURACY_PLOT_NAME_ENDINGS = ('_accuracy_histogram', '_accuracy_vs_cnr')
+
+
+def remove_plots_of_earlier_runs(output_dir: Union[str, Path], slug: str) -> None:
+    """
+    Remove the accuracy plots that earlier runs with this slug left in the output folder.
+
+    A run replaces the results file and the summary of an earlier run with
+    the same slug. A plot of that run would stay beside results it does not
+    show when the new run writes another image type, draws the other kind of
+    plot, or draws none. Both plot names are removed, in every image type.
+
+    Raises
+    ------
+    OSError
+        If a plot file exists and cannot be removed, for example because
+        another program has it open.
+    """
+    for ending in ACCURACY_PLOT_NAME_ENDINGS:
+        for image_type in supported_image_types():
+            older_plot = Path(output_dir) / f"{slug}{ending}.{image_type}"
+            if older_plot.is_file():
+                older_plot.unlink()
+
+
 def save_figure(fig, filename: Union[str, Path], dpi: float, image_type: str) -> None:
     """
     Save a figure, or raise if its file cannot be written.

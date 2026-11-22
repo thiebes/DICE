@@ -1125,3 +1125,51 @@ class TestNoiseRangeExample:
         assert result.noise_range == NoiseRange(0.01, 0.05, logarithmic=False)
         assert result.num_runs == len(result.run_results) == len(result.noise_values) == 6
         assert [run.noise_sigma for run in result.run_results] == result.noise_values
+
+
+class TestNoPlotOfAnEarlierRunStaysBesideNewResults:
+    """A run replaces the results of an earlier run with the same slug, and removes its plots."""
+
+    RUNS = {'number of runs': 4}
+
+    def _plots(self, run: CliRun) -> list:
+        return sorted(path.name for path in run.output_dir.iterdir() if 'accuracy' in path.name)
+
+    def test_another_image_type_replaces_the_earlier_plot(self, tmp_path):
+        first = run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS), 'rerun')
+        assert self._plots(first) == ['rerun_accuracy_histogram.png']
+
+        second = run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS | {'image type': 'svg'}),
+                         'rerun')
+
+        assert second.exit_code == 0
+        assert self._plots(second) == ['rerun_accuracy_histogram.svg']
+
+    def test_noise_range_after_a_fixed_noise_value_and_back(self, tmp_path):
+        run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS), 'rerun')
+
+        ranged = run_cli(tmp_path, write_quick_test_variant(
+            tmp_path, 'rerun', self.RUNS | {'noise range, reciprocal': [0.01, 0.05]}, removed=('noise value',)),
+            'rerun')
+        assert self._plots(ranged) == ['rerun_accuracy_vs_cnr.png']
+
+        fixed = run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS), 'rerun')
+        assert self._plots(fixed) == ['rerun_accuracy_histogram.png']
+
+    def test_run_without_plots_removes_the_earlier_plot(self, tmp_path):
+        params_file = write_quick_test_variant(tmp_path, 'rerun', self.RUNS)
+        first = run_cli(tmp_path, params_file, 'rerun')
+        earlier_results = first.read_csv()
+
+        second = run_cli(tmp_path, params_file, 'rerun', '--no-plots')
+
+        assert second.exit_code == 0
+        assert self._plots(second) == []
+        # The results are those of the second run, which the earlier plot did not show.
+        assert not second.read_csv().equals(earlier_results)
+
+    def test_files_of_another_slug_are_kept(self, tmp_path):
+        other = run_cli(tmp_path, write_quick_test_variant(tmp_path, 'other', self.RUNS), 'other')
+        run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS), 'rerun', '--output-dir',
+                str(other.output_dir))
+        assert 'other_accuracy_histogram.png' in self._plots(other)
