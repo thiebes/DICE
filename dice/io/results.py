@@ -245,8 +245,9 @@ def export_collated_results(
     # Create DataFrame
     df = pd.DataFrame(data_rows)
 
-    # Save to CSV
-    df.to_csv(filename, index=False)
+    # Save to CSV, as UTF-8 with a byte-order mark: the column names hold
+    # 'μ' and '²', which a spreadsheet program reads correctly only with it.
+    df.to_csv(filename, index=False, encoding='utf-8-sig')
 
     return df
 
@@ -455,9 +456,9 @@ def write_summary_file(
         f.write(f"Nominal diffusion coefficient:\n")
         f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
-        # 'lifetime assumed' is LIFETIME_ASSUMED_KEY of dice.io.parameters.
+        from .parameters import LIFETIME_ASSUMED_KEY
         assumed = (" (assumed: the file gives only the diffusion length, so its times are in units "
-                   "of the lifetime)") if parameters.get('lifetime assumed') else ""
+                   "of the lifetime)") if parameters.get(LIFETIME_ASSUMED_KEY) else ""
         f.write(f"    {results.parameters.physics.lifetime} {time_unit}{assumed}\n")
         f.write("\n")
         
@@ -480,6 +481,13 @@ def write_summary_file(
         
         # Write completion message
         f.write(f"{completion_message(results)}\n")
+
+
+def file_error_text(error: OSError) -> str:
+    """The file and the reason of a failed read or write, for a message: 'C:\\...\\run.csv: Permission denied'."""
+    if error.filename and error.strerror:
+        return f"{error.filename}: {error.strerror}"
+    return str(error)
 
 
 def completion_message(results: MonteCarloOutput) -> str:

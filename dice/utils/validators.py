@@ -245,10 +245,15 @@ def validate_file_path(path: str, must_exist: bool = False,
 # Windows reserves these names for devices in every folder, with or without
 # an extension: a folder or file of such a name cannot be created.
 WINDOWS_RESERVED_NAMES = frozenset(
-    ['CON', 'PRN', 'AUX', 'NUL']
-    + [f'COM{number}' for number in range(1, 10)]
-    + [f'LPT{number}' for number in range(1, 10)]
+    ['CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$']
+    + [f'COM{digit}' for digit in '123456789\u00b9\u00b2\u00b3']
+    + [f'LPT{digit}' for digit in '123456789\u00b9\u00b2\u00b3']
 )
+
+# The slug names the output folder and is the start of every file name in
+# it. File systems take names of 255 characters, and Windows by default
+# paths of 260, so a long slug would fail when the outputs are written.
+MAX_FILENAME_SLUG_LENGTH = 100
 
 
 def validate_filename_slug(value: str, name: str = "filename") -> str:
@@ -276,8 +281,9 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     TypeError
         If the value is not a string.
     ValueError
-        If the value is empty, contains forbidden or control characters, is
-        '.' or '..', ends with a dot or a space, or is a name that Windows
+        If the value is empty, longer than 100 characters, contains
+        forbidden or control characters, is '.' or '..', ends with a dot or
+        a space, or is a name that Windows
         reserves for a device (the check applies on every system, so that a
         parameter file runs everywhere).
     """
@@ -291,6 +297,11 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     for char in invalid_chars:
         if char in value:
             raise ValueError(f"{name} cannot contain: {', '.join(invalid_chars)}")
+
+    if len(value) > MAX_FILENAME_SLUG_LENGTH:
+        raise ValueError(
+            f"{name} cannot be longer than {MAX_FILENAME_SLUG_LENGTH} characters; it has {len(value)}"
+        )
 
     if any(ord(char) < 32 for char in value):
         raise ValueError(f"{name} cannot contain control characters such as a tab or a line break")

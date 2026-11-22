@@ -339,7 +339,11 @@ class TestDryRun:
 
     INVALID_VALUES = [
         ({'noise value': 'loud'}, "Invalid noise value loud"),
-        ({'number of runs': 0}, "Number of runs must be positive"),
+        ({'number of runs': 0}, "'number of runs' must be >= 1, got 0"),
+        # These two used to pass the checks, run the whole simulation, and fail at the plot.
+        ({'nominal diffusion length': 0}, "The nominal diffusion coefficient must be greater than 0"),
+        ({'image numbins': 0}, "'image numbins' must be >= 1, got 0"),
+        ({'image numbins': 35.5}, "'image numbins' must be an integer"),
         ({'number of runs': 3.5}, "'number of runs' must be an integer"),
         ({'time range': [0, 1, 1]}, "The number of steps in 'time range' must be >= 2"),
         ({'noise value': -0.02}, "'noise value' must be 0 or greater"),
@@ -722,8 +726,10 @@ class TestOutputOptions:
         console = capsys.readouterr().out
         assert 'saved to: ' + str(blocked) not in console
         last = console.splitlines()[-1]
-        assert last.startswith("Error: The results were saved, but the plot could not be created:")
+        assert last.startswith("Error: The results were saved, but the plot could not be saved: ")
         assert plot_name in last
+        # The file and the reason, not Python's text of the error.
+        assert "[Errno" not in last and "\\\\" not in last
         assert (blocked.parent / 'no_plot.csv').exists()
         assert (blocked.parent / 'no_plot_summary.txt').read_text(encoding='utf-8').endswith(
             "Simulation completed successfully.\n")

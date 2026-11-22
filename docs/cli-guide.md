@@ -61,7 +61,7 @@ dice [options] parameters_file
 | Option | Effect |
 | ------- | ------------- |
 | `--verbose`, `-v` | Print the settings, the size of the simulation, and progress messages. |
-| `--quiet`, `-q` | Print warnings and errors only. |
+| `--quiet`, `-q` | Print warnings and errors only. A simulation in which no run gives an estimate is reported as a warning. |
 | `--output-dir DIR`, `-o DIR` | Write the output files to `DIR` instead of `output/<slug>/`. |
 | `--no-plots` | Do not create the plot: the histogram, or the scatter plot of a noise range. |
 | `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
@@ -103,7 +103,7 @@ One row for each run. The main columns are:
 | `unweighted fit diffusion coeff [cm²/s]`, `unweighted fit diffusion stderr [cm²/s]` | The same for the OLS fit |
 | `nominal diffusion coeff [cm²/s]` | Nominal diffusion coefficient in cm²/s |
 
-WLS stands for weighted least squares, OLS for ordinary least squares. In one dimension the slope of the variance against time equals 2D. If a fit fails in a run, the columns of that fit are empty in that row. The file is encoded in UTF-8.
+WLS stands for weighted least squares, OLS for ordinary least squares. In one dimension the slope of the variance against time equals 2D. If a fit fails in a run, the columns of that fit are empty in that row. The file is encoded in UTF-8 with a byte-order mark, so that a spreadsheet program shows the units in the column names correctly. pandas reads the file as it is; with Python's `csv` module, open it with `encoding="utf-8-sig"`.
 
 Each column whose value has a unit names it in brackets. The table shows the names for a simulation in micrometers and nanoseconds; a simulation in nanometers and picoseconds writes `nominal lifetime [ps]`, `weighted fit diffusion slope (2D) [nm²/ps]`, and so on. The function `dice.io.results.results_column` finds a column from its name without the unit, so that a script does not depend on the units (see [Analyze the results in Python](#analyze-the-results-in-python)).
 

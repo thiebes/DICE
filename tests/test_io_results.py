@@ -436,3 +436,23 @@ class TestColumnsNameTheirUnits:
         assert results_column(columns, 'weighted fit diffusion slope') == 'weighted fit diffusion slope'
         assert results_column(columns, 'nominal diffusion coeff') == 'nominal diffusion coeff'
         assert column_unit('weighted fit diffusion slope') is None
+
+
+class TestResultsFileEncoding:
+    """The results file is UTF-8 with a byte-order mark, which spreadsheet programs need for 'μ' and '²'."""
+
+    def test_file_starts_with_the_mark_and_reads_back_without_it(self, tmp_path, quick_test_simulation):
+        import csv
+
+        import pandas as pd
+
+        results_file = tmp_path / 'results.csv'
+        exported = export_collated_results(quick_test_simulation, results_file,
+                                           length_unit='micrometer', time_unit='nanosecond')
+
+        assert results_file.read_bytes().startswith(b'\xef\xbb\xbf')
+        assert list(pd.read_csv(results_file).columns) == list(exported.columns)
+        assert pd.read_csv(results_file).columns[0] == 'run number'
+        with open(results_file, newline='', encoding='utf-8-sig') as handle:
+            assert next(csv.reader(handle)) == list(exported.columns)
+        assert 'nominal diffusion coeff [μm²/ns]' in exported.columns

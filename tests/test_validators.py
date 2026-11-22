@@ -257,7 +257,16 @@ class TestValidateFilenameSlug:
         with pytest.raises(ValueError, match="cannot contain control characters"):
             validate_filename_slug(slug)
 
-    @pytest.mark.parametrize('slug', ['NUL', 'nul', 'Con', 'COM1', 'lpt9', 'aux.v2', 'NUL.tar.gz'])
+    def test_slug_longer_than_the_limit_is_rejected(self):
+        """A long slug would fail when the outputs are written, after the simulation."""
+        from dice.utils.validators import MAX_FILENAME_SLUG_LENGTH
+
+        assert validate_filename_slug('r' * MAX_FILENAME_SLUG_LENGTH) == 'r' * MAX_FILENAME_SLUG_LENGTH
+        with pytest.raises(ValueError, match="cannot be longer than 100 characters; it has 101"):
+            validate_filename_slug('r' * (MAX_FILENAME_SLUG_LENGTH + 1))
+
+    @pytest.mark.parametrize('slug', ['NUL', 'nul', 'Con', 'COM1', 'lpt9', 'aux.v2', 'NUL.tar.gz',
+                                      'CONIN$', 'conout$', 'COM\u00b9', 'LPT\u00b3'])
     def test_windows_device_names_are_rejected(self, slug):
         """No folder of these names can be created on Windows, with or without an extension."""
         with pytest.raises(ValueError, match="Windows reserves that name"):

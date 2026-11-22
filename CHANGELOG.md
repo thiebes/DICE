@@ -191,7 +191,8 @@ and Fixed give the details.
 - Behavior change: `filename slug` must be a plain file name. A slug with a
   path separator, a tab or a line break, the slugs `.` and `..`, a slug that
   ends with a dot or a space, and a name that Windows reserves for a device
-  (`NUL`, `CON`, `COM1`, ...) are rejected before the simulation runs. Such a
+  (`NUL`, `CON`, `COM1`, ...) are rejected before the simulation runs, and so
+  is a slug of more than 100 characters. Such a
   slug used to write the output outside `output/`, or fail after the
   simulation had run.
 - Behavior change: a parameters file that cannot run is rejected when it is
@@ -201,8 +202,9 @@ and Fixed give the details.
   estimate needs; `time range` has a whole number of steps, 2 or more, and
   a start below its stop; `time series` has two or more time points and
   repeats none; `noise value` is 0 or greater; `FWHM_0` or `sigma_0` is
-  greater than 0. These files used to fail during the run, or to run
-  without an estimate. The command-line interface used to cut a `time
+  greater than 0; the nominal diffusion coefficient is greater than 0;
+  `image numbins` is a whole number, 1 or more. These files used to fail
+  during the run or at the plot, or to run without an estimate. The command-line interface used to cut a `time
   range` of 5.5 steps to 5.
 - Behavior change: a `time series` is sorted into ascending order, as the
   GUI sorts it. The command-line interface used to run the series in the
@@ -227,9 +229,12 @@ and Fixed give the details.
   finds a column from its name without the unit, in a results file of this
   version and of 1.2.0. When the output unit of the diffusion coefficients
   is the unit of the simulation, the file has one `nominal diffusion coeff`
-  column. The GUI still plots a results file of 1.2.0.
+  column. The GUI still plots a results file of 1.2.0. The results file is
+  written as UTF-8 with a byte-order mark, so that a spreadsheet program
+  shows the units in the column names; with Python's `csv` module, open it
+  with `encoding="utf-8-sig"`.
 - The JSON file names the units of its values in `summary.units`.
-- The summary marks the lifetime as assumed when the parameters file gives
+- The summary of the command-line interface marks the lifetime as assumed when the parameters file gives
   only the diffusion length; it printed "1 nanosecond" as if it were given.
 - Python interface: `export_collated_results()` requires `length_unit` and
   `time_unit`, the units the results are in. `write_summary_file()` takes
@@ -365,7 +370,8 @@ and Fixed give the details.
   (`use_file_backend`).
 - The command-line interface prints a warning as `Warning: <message>`. It
   printed Python's default form, with the path and the line of the source
-  file. The help of `--quiet` says that warnings are still printed.
+  file. The help of `--quiet` says that warnings are still printed; a
+  simulation in which no run gives an estimate is reported as a warning.
 - A plot that cannot be saved is an error. The plot functions raise, and the
   command-line interface ends with exit code 1 and a message that the
   results were saved and the plot was not. The plot functions used to log

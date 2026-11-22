@@ -607,7 +607,8 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Process spatial axis (support both key formats)
     spatial_width = parameters_dictionary.get('spatial width', parameters_dictionary.get('spatial_width'))
     pixel_width = parameters_dictionary.get('pixel width', parameters_dictionary.get('pixel_width'))
-    pixel_width = validate_integer(pixel_width, "'pixel width'")
+    pixel_key = 'pixel width' if 'pixel width' in parameters_dictionary else 'pixel_width'
+    parameters_dictionary[pixel_key] = pixel_width = validate_integer(pixel_width, "'pixel width'")
     if pixel_width < MINIMUM_PROFILE_POINTS:
         raise ValueError(
             f"'pixel width' (the number of pixels) is {pixel_width}; a profile needs at least "
@@ -622,7 +623,7 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     
     # Process noise parameters; a noise range draws one value for each run
     runs_key = 'number of runs' if 'number of runs' in parameters_dictionary else 'number_of_runs'
-    number_of_runs = validate_integer(parameters_dictionary[runs_key], "'number of runs'")
+    number_of_runs = validate_integer(parameters_dictionary[runs_key], "'number of runs'", min_val=1)
     parameters_dictionary[runs_key] = number_of_runs
     handle_noise_parameters(parameters_dictionary, num_vals=number_of_runs, seed=seed)
     
@@ -631,6 +632,18 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     
     # Process diffusion parameters
     handle_diffusion_parameters(parameters_dictionary)
+    if not parameters_dictionary['nominal diffusion coefficient'] > 0:
+        raise ValueError(
+            "The nominal diffusion coefficient must be greater than 0 (it follows from 'nominal diffusion "
+            "coefficient', or from 'nominal diffusion length'). The estimates are reported as ratios to it."
+        )
+
+    # The number of histogram bins is a count; the plot is drawn after the
+    # simulation, so a value it cannot use is rejected here.
+    for bins_key in ('image numbins', 'image_numbins'):
+        if bins_key in parameters_dictionary:
+            parameters_dictionary[bins_key] = validate_integer(
+                parameters_dictionary[bins_key], "'image numbins'", min_val=1)
     
     # Set defaults for optional parameters. A value given under either
     # spelling of a key stands; the two spellings share one canonical key.
@@ -679,14 +692,9 @@ def validate_parameters(params) -> None:
     """
     # Basic validation for dictionary format
     if isinstance(params, dict):
-        if params.get('number of runs', 0) <= 0:
-            raise ValueError("Number of runs must be positive.")
-        
-        if params.get('spatial width', 0) <= 0:
-            raise ValueError("Spatial width must be positive.")
-        
-        if params.get('pixel width', 0) <= 0:
-            raise ValueError("Pixel width must be positive.")
+        # parameter_parser checks each value on its own (counts, widths, the
+        # time axis, the noise). The checks here need several values, or
+        # concern the outputs.
 
         # Outputs convert from the global units, so reject an unknown unit
         # before the simulation runs rather than when the results are written.

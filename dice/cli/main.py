@@ -21,7 +21,7 @@ from ..analysis.simulation import run_monte_carlo_simulation
 from ..core.noise import Seed, nominal_cnr
 from ..analysis.statistics import analyze_simulation_results
 from ..io.results import (
-    completion_message, export_collated_results, output_unit_preferences, write_summary_file,
+    completion_message, export_collated_results, file_error_text, output_unit_preferences, write_summary_file,
 )
 from ..models.results import MonteCarloOutput
 from ..visualization.histograms import (
@@ -321,6 +321,8 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
 
             # Create accuracy histogram
             plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
+            # A plot of an earlier run must not stay beside the new results if this save fails.
+            plot_file.unlink(missing_ok=True)
 
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
@@ -330,10 +332,11 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
 
             if not args.quiet:
                 print(f"Accuracy histogram saved to: {plot_file}")
-        else:
-            if not args.quiet:
-                print("Warning: No valid diffusion estimates found for plotting")
+        # Without estimates there is no plot; main() reports that no run gave one.
 
+    except OSError as e:
+        raise PlotError(
+            f"The results were saved, but the plot could not be saved: {file_error_text(e)}") from e
     except Exception as e:
         raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
     finally:
@@ -371,6 +374,8 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
         if fitted_runs:
             slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
             plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
+            # A plot of an earlier run must not stay beside the new results if this save fails.
+            plot_file.unlink(missing_ok=True)
             fig = plot_accuracy_vs_cnr(
                 [nominal_cnr(amplitude_0, run.noise_sigma) for run in fitted_runs],
                 [run.accuracy('wls') for run in fitted_runs],
@@ -381,9 +386,11 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
 
             if not args.quiet:
                 print(f"Accuracy scatter plot saved to: {plot_file}")
-        elif not args.quiet:
-            print("Warning: No valid diffusion estimates found for plotting")
+        # Without estimates there is no plot; main() reports that no run gave one.
 
+    except OSError as e:
+        raise PlotError(
+            f"The results were saved, but the plot could not be saved: {file_error_text(e)}") from e
     except Exception as e:
         raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
     finally:
@@ -483,7 +490,10 @@ def run_command(argv: Optional[list] = None) -> int:
         # Create plots
         create_plots(result, parameters, output_dir, args)
         
-        if not args.quiet:
+        if not result.has_estimates():
+            # A warning, so that --quiet prints it too.
+            warnings.warn(completion_message(result), stacklevel=1)
+        elif not args.quiet:
             print(completion_message(result))
         
         return 0

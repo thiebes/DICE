@@ -30,7 +30,7 @@ A prefix for the output files. DICE writes the output to the directory `output/<
 - `output/example/example_summary.txt`: parameters and summary statistics
 - `output/example/example_accuracy_histogram.png`: histogram of the estimates, or with a noise range, `output/example/example_accuracy_vs_cnr.png`: the estimates against the initial CNR
 
-The slug must be a plain file name. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*`, a tab or a line break, the slugs `.` and `..`, and a slug that ends with a dot or a space. It also rejects the names that Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), on every system, so that a parameters file runs everywhere. If the key is missing, the slug is `dice_simulation`.
+The slug must be a plain file name of at most 100 characters. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*`, a tab or a line break, the slugs `.` and `..`, and a slug that ends with a dot or a space. It also rejects the names that Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), on every system, so that a parameters file runs everywhere. If the key is missing, the slug is `dice_simulation`.
 
 ### `number of runs`
 
@@ -112,7 +112,7 @@ The diffusion length, L_D = √(Dτ).
 
 **Units:** length unit
 
-If you give only the diffusion length, DICE sets the lifetime to 1 time unit and the diffusion coefficient to L_D² per time unit. The time points of the temporal axis are then in units of the lifetime. The summary marks that lifetime as assumed. The diffusion coefficients in the outputs then hold for a lifetime of exactly 1 time unit; the ratio of each estimate to the nominal value, and every statistic of that ratio, does not depend on the lifetime.
+If you give only the diffusion length, DICE sets the lifetime to 1 time unit and the diffusion coefficient to L_D² per time unit. The time points of the temporal axis are then in units of the lifetime. The summary of the command-line interface marks that lifetime as assumed. (The GUI shows the lifetime of 1 in its form and passes it on as a value.) The diffusion coefficients in the outputs then hold for a lifetime of exactly 1 time unit; the ratio of each estimate to the nominal value, and every statistic of that ratio, does not depend on the lifetime.
 
 ### `nominal diffusion coefficient` and `nominal lifetime (tau)`
 

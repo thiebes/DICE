@@ -952,3 +952,32 @@ class TestFileThatCannotRunIsRejected:
         run = run_single_simulation(0, parsed['x array'], parsed['time series'], parameters,
                                     parsed['noise series'][0], seed=1)
         assert np.isfinite(run.cnr_0_estimate)
+
+
+class TestValuesThatOnlyThePlotWouldReject:
+    """A value that the plot cannot use is rejected when the file is parsed, not after the simulation."""
+
+    def test_number_of_bins_given_as_a_float_becomes_an_int(self):
+        parsed = parameter_parser(quick_test_raw() | {'image numbins': 35.0})
+        assert parsed['image numbins'] == 35 and isinstance(parsed['image numbins'], int)
+
+    @pytest.mark.parametrize('bins, error', [(0, ValueError), (-5, ValueError), (35.5, TypeError), ('many', TypeError)])
+    def test_number_of_bins_that_is_no_count_is_rejected(self, bins, error):
+        with pytest.raises(error, match="'image numbins'"):
+            parameter_parser(quick_test_raw() | {'image numbins': bins})
+
+    def test_zero_diffusion_is_rejected(self):
+        """The estimates are reported as ratios to the nominal diffusion coefficient."""
+        with pytest.raises(ValueError, match="The nominal diffusion coefficient must be greater than 0"):
+            parameter_parser(quick_test_raw() | {'nominal diffusion length': 0})
+        raw = {key: value for key, value in quick_test_raw().items() if key != 'nominal diffusion length'}
+        with pytest.raises(ValueError, match="The nominal diffusion coefficient must be greater than 0"):
+            parameter_parser(raw | {'nominal diffusion coefficient': 0, 'nominal lifetime (tau)': 1})
+
+    def test_pixel_count_given_as_a_float_is_stored_as_an_int(self):
+        parsed = parameter_parser(quick_test_raw() | {'pixel width': 50.0})
+        assert parsed['pixel width'] == 50 and isinstance(parsed['pixel width'], int)
+
+    def test_number_of_runs_below_one_is_rejected_by_the_parser(self):
+        with pytest.raises(ValueError, match="'number of runs' must be >= 1, got 0"):
+            parameter_parser(quick_test_raw() | {'number of runs': 0})
