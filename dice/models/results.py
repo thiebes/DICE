@@ -6,7 +6,7 @@ result of each run and the collected output of a Monte Carlo simulation.
 """
 
 from dataclasses import dataclass, field, fields
-from typing import Optional, List, Any, Tuple
+from typing import Optional, List, Any, Tuple, Union
 import numpy as np
 
 from .estimators import DEFAULT_ESTIMATOR_KEYS, SlopeFit
@@ -177,8 +177,10 @@ class MonteCarloOutput:
     noise_range : NoiseRange, optional
         The range from which each run drew its own noise sigma; None when
         the runs used fixed noise levels.
-    seed : int, optional
-        The seed the simulation ran with, which reproduces it; None when it
+    seed : int or str, optional
+        The seed the simulation ran with, which reproduces it: an integer,
+        or the text of a SeedSequence that one integer does not describe
+        (seed_record in dice.analysis.simulation). None when the simulation
         drew fresh entropy, or for results loaded from a file.
     """
     parameters: Any
@@ -187,7 +189,11 @@ class MonteCarloOutput:
     noise_values: List[float] = field(default_factory=list)
     estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
     noise_range: Optional[NoiseRange] = None
-    seed: Optional[int] = None
+    seed: Optional[Union[int, str]] = None
+
+    def has_estimates(self) -> bool:
+        """Whether a run gave a diffusion coefficient estimate, with any estimator."""
+        return any(len(self.d_estimates(key)) > 0 for key in self.estimator_keys)
 
     def d_estimates(self, key: str) -> np.ndarray:
         """Estimator `key`'s D estimates (slope / 2) of the runs that have a fit, in run order."""

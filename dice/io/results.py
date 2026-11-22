@@ -411,11 +411,14 @@ def write_summary_file(
             f.write("\n")
         
         # Write completion message
-        fits = (analysis or {}).get('statistics', {})
-        if fits and all(entry['num_successful'] == 0 for entry in fits.values()):
-            f.write("Simulation completed, but no run gave an estimate of the diffusion coefficient.\n")
-        else:
-            f.write("Simulation completed successfully.\n")
+        f.write(f"{completion_message(results)}\n")
+
+
+def completion_message(results: MonteCarloOutput) -> str:
+    """The last line of the summary, of the console output and of the GUI's status after a simulation."""
+    if results.has_estimates():
+        return "Simulation completed successfully."
+    return "Simulation completed, but no run gave an estimate of the diffusion coefficient."
 
 
 def load_results_csv(filename: Union[str, Path]) -> pd.DataFrame:

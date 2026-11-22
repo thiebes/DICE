@@ -718,6 +718,21 @@ class TestOutputOptions:
             workdir, slug, {'number of runs': self.OPTION_RUNS} | (overrides or {}))
         return run_cli(workdir, params_file, slug, *cli_args)
 
+    def test_seed_of_the_command_line_is_recorded(self, tmp_path):
+        """--seed N reproduces the run, although the runs draw from a child of N."""
+        run = self._run(tmp_path, 'seeded', '--seed', '7', '--export-format', 'both', '--no-plots')
+        assert run.exit_code == 0
+        assert "Seed:\n    7\n" in run.read_summary()
+        assert json.loads((run.output_dir / 'seeded.json').read_text())['summary']['seed'] == 7
+
+    def test_console_ends_with_the_completion_line_of_the_summary(self, tmp_path, capsys):
+        params_file = write_quick_test_variant(tmp_path, 'spoken', {'number of runs': self.OPTION_RUNS})
+        with contextlib.chdir(tmp_path):
+            assert main([str(params_file), '--multiprocessing', '1', '--no-plots']) == 0
+        console = capsys.readouterr().out.splitlines()
+        summary = (tmp_path / 'output' / 'spoken' / 'spoken_summary.txt').read_text(encoding='utf-8').splitlines()
+        assert console[-1] == summary[-1] == "Simulation completed successfully."
+
     def test_json_and_csv_export(self, tmp_path):
         run = self._run(tmp_path, 'both', '--export-format', 'both', '--no-plots')
         assert run.exit_code == 0

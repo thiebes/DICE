@@ -345,14 +345,35 @@ class TestSummaryRecordsWhatReproducesIt:
         assert quick_test_simulation.seed is None
         assert "Seed:\n    none (another simulation" in summary_file.read_text(encoding='utf-8')
 
-    def test_child_of_a_seed_sequence_records_its_root(self, quick_test_parameters):
-        child = np.random.SeedSequence(41).spawn(2)[1]
-        params = quick_test_parameters
+    @staticmethod
+    def _simulate(params, seed):
         from dice.utils.legacy_compatibility import create_parameters_from_legacy as adapt
-        result = run_monte_carlo_simulation(
+        return run_monte_carlo_simulation(
             adapt(params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
                   params['nominal diffusion length']),
             params['x array'], params['time series'], params['noise series'],
-            num_runs=2, multiprocessing=False, seed=child)
+            num_runs=2, multiprocessing=False, seed=seed)
 
-        assert result.seed == 41
+    def test_seed_sequence_of_one_integer_records_the_integer(self, quick_test_parameters):
+        assert self._simulate(quick_test_parameters, np.random.SeedSequence(41)).seed == 41
+
+    def test_child_of_a_seed_sequence_records_what_reproduces_it(self, quick_test_parameters):
+        """The entropy alone names the parent, whose noise is different."""
+        first, second = np.random.SeedSequence(41).spawn(2)
+        of_second = self._simulate(quick_test_parameters, second)
+
+        assert of_second.seed == "SeedSequence(entropy=41, spawn_key=(1,))"
+        assert self._simulate(quick_test_parameters, first).seed == "SeedSequence(entropy=41, spawn_key=(0,))"
+
+        again = self._simulate(quick_test_parameters, np.random.SeedSequence(entropy=41, spawn_key=(1,)))
+        np.testing.assert_array_equal(again.d_estimates('wls'), of_second.d_estimates('wls'))
+        parent = self._simulate(quick_test_parameters, 41)
+        assert not np.array_equal(parent.d_estimates('wls'), of_second.d_estimates('wls'))
+
+    def test_seed_sequence_of_several_integers_is_not_recorded_as_unseeded(self, quick_test_parameters, tmp_path):
+        result = self._simulate(quick_test_parameters, np.random.SeedSequence([1, 2]))
+        assert result.seed == "SeedSequence(entropy=[1, 2], spawn_key=())"
+
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(result, summary_file, quick_test_parameters, analyze_simulation_results(result))
+        assert "Seed:\n    SeedSequence(entropy=[1, 2], spawn_key=())\n" in summary_file.read_text(encoding='utf-8')

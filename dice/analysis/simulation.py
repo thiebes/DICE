@@ -9,7 +9,7 @@ import multiprocessing as mp
 import sys
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import List, Tuple, Optional, Any, Sequence
+from typing import List, Tuple, Optional, Any, Sequence, Union
 from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
@@ -263,7 +263,7 @@ def run_monte_carlo_simulation(
         noise_values=noise_values,
         estimator_keys=DEFAULT_ESTIMATOR_KEYS,
         noise_range=noise_range,
-        seed=root_seed(seed),
+        seed=seed_record(seed),
     )
 
     return simulation_result
@@ -292,16 +292,23 @@ def noise_sigma_of_each_run(
     return list(noise_values)
 
 
-def root_seed(seed: Seed) -> Optional[int]:
-    """The integer that reproduces a seeded simulation; None when it is unseeded.
-
-    For an integer seed, the integer. For a SeedSequence, its entropy: the
-    command-line interface passes a child of SeedSequence(N) for --seed N,
-    and the child keeps N as its entropy.
+def seed_record(seed: Seed) -> Optional[Union[int, str]]:
     """
-    if isinstance(seed, np.random.SeedSequence):
-        seed = seed.entropy
-    return int(seed) if isinstance(seed, (int, np.integer)) else None
+    What reproduces a seeded simulation, for its outputs; None when it is unseeded.
+
+    An integer seed is recorded as the integer, and so is a SeedSequence
+    made from one integer that is not a child of another. Any other
+    SeedSequence is recorded as text with its entropy and its spawn key: the
+    entropy alone names its parent, whose noise is different.
+    """
+    if seed is None:
+        return None
+    if not isinstance(seed, np.random.SeedSequence):
+        return int(seed)
+    if seed.spawn_key == () and isinstance(seed.entropy, (int, np.integer)):
+        return int(seed.entropy)
+    spawn_key = tuple(int(key) for key in seed.spawn_key)
+    return f"SeedSequence(entropy={seed.entropy!r}, spawn_key={spawn_key!r})"
 
 
 def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:

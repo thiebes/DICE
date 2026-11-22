@@ -111,7 +111,7 @@ The parameters `output_diffusion_length_unit` and `output_diffusion_time_unit` r
 
 A text report that contains:
 
-- the DICE version and the seed, which together with the parameters file reproduce the simulation (see [Reproducible results](#reproducible-results))
+- the DICE version and the seed, which together with the parameters file reproduce the simulation (see [Reproducible results](#reproducible-results)). The seed is the number given to `--seed`. A simulation started from Python with a NumPy `SeedSequence` that one integer does not describe records its entropy and its spawn key
 - the main simulation parameters: number of runs, spatial axis, time points, noise level, initial CNR, initial variance, and the nominal diffusion length, diffusion coefficient, and lifetime
 - for the WLS fit and, for comparison, the OLS fit: the number of runs with an estimate, and the standard deviation, relative standard error, mean, standard error of the mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
 - the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value, each with its count and its 95% interval

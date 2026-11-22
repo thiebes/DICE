@@ -76,7 +76,8 @@ and Fixed give the details.
   and `precision_intervals`.
 - The summary file and the JSON file record the DICE version and the seed of
   the simulation. A simulation in which no run gives an estimate says so in
-  the summary, in place of "completed successfully".
+  the summary, on the console and in the GUI, in place of "completed
+  successfully".
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), `high_precision.txt` (10000 runs), and
   `noise_range.txt` (100 runs over a range of CNR).

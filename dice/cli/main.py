@@ -20,7 +20,9 @@ from ..io.parameters import noise_range_from_parameters, open_parameters, valida
 from ..analysis.simulation import run_monte_carlo_simulation
 from ..core.noise import Seed, nominal_cnr
 from ..analysis.statistics import analyze_simulation_results
-from ..io.results import export_collated_results, output_unit_preferences, write_summary_file
+from ..io.results import (
+    completion_message, export_collated_results, output_unit_preferences, write_summary_file,
+)
 from ..models.results import MonteCarloOutput
 from ..visualization.histograms import (
     accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
@@ -443,6 +445,9 @@ def main(argv: Optional[list] = None) -> int:
         
         # Run simulation
         result = run_simulation(parameters, args, seed=simulation_seed)
+        # --seed N reproduces the simulation from the command line; the
+        # stream the runs drew from is a child of N.
+        result.seed = args.seed
         
         # Save results
         save_results(result, parameters, output_dir, args)
@@ -451,7 +456,7 @@ def main(argv: Optional[list] = None) -> int:
         create_plots(result, parameters, output_dir, args)
         
         if not args.quiet:
-            print("DICE simulation completed successfully!")
+            print(completion_message(result))
         
         return 0
     

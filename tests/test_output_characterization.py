@@ -186,6 +186,17 @@ def test_comparison_of_the_analysis_tolerates_only_the_last_digits():
             assert_same_values(different, golden)
 
 
+def test_completion_message_says_when_no_run_gave_an_estimate():
+    """The summary, the console and the GUI take their last line from this one function."""
+    from dice.io.results import completion_message
+
+    assert edge_case_output().has_estimates()
+    assert completion_message(edge_case_output()) == "Simulation completed successfully."
+    assert not all_failed_output().has_estimates()
+    assert completion_message(all_failed_output()) == (
+        "Simulation completed, but no run gave an estimate of the diffusion coefficient.")
+
+
 def test_analysis_keeps_estimators_whose_every_fit_failed():
     analysis = analyze_simulation_results(all_failed_output())
     assert list(analysis['accuracy']) == ['ols', 'wls']
