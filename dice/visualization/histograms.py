@@ -9,11 +9,6 @@ import logging
 import os
 import matplotlib
 
-# Use non-interactive backend for thread safety in GUI/CI contexts
-# Allow override via MPLBACKEND environment variable
-if os.environ.get('MPLBACKEND') is None:
-    matplotlib.use('Agg')
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
@@ -38,6 +33,21 @@ _HISTOGRAM_OPTION_KEYS = {
     'image numbins': 'num_bins',
     'image x_lim': 'x_lim',
 }
+
+
+def use_file_backend() -> None:
+    """
+    Select Matplotlib's Agg backend, which draws to files and opens no window.
+
+    The command-line interface and the GUI call this before they plot. The
+    GUI plots in a worker thread, where a backend that opens windows is not
+    safe. A backend named in the MPLBACKEND environment variable is kept.
+
+    Importing this module does not select a backend, so a Python session
+    that imports DICE keeps its own.
+    """
+    if os.environ.get('MPLBACKEND') is None:
+        matplotlib.use('Agg')
 
 
 def save_figure(fig, filename: Union[str, Path], dpi: float, image_type: str) -> None:

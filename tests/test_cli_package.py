@@ -130,3 +130,62 @@ class TestConsoleEntryPoint:
         completed = subprocess.run([script, '--version'], capture_output=True, text=True, timeout=120)
         assert completed.returncode == 0, completed.stderr
         assert completed.stdout.strip() == f"dice {dice.__version__}"
+
+
+class TestWarningsOnTheConsole:
+    """A warning is one line that starts with "Warning:", without Python's source file and line."""
+
+    def test_retired_key_warning_is_printed_in_the_form_of_the_command_line(self, tmp_path):
+        import ast
+        examples = Path(__file__).parent.parent / 'data' / 'examples'
+        parameters = ast.literal_eval((examples / 'quick_test.txt').read_text(encoding='utf-8'))
+        parameters.update({'number of runs': 2, 'proximity level': 0.1, 'multiprocessing': False})
+        parameters_file = tmp_path / 'retired_key.txt'
+        parameters_file.write_text(str(parameters), encoding='utf-8')
+
+        completed = run_python('-m', 'dice', str(parameters_file), '--quiet', '--no-plots',
+                               '--output-dir', str(tmp_path / 'out'))
+
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        warning_lines = [line for line in completed.stderr.splitlines() if line.strip()]
+        assert len(warning_lines) == 1
+        assert warning_lines[0].startswith("Warning: Parameter 'proximity level' no longer affects")
+        assert 'UserWarning' not in completed.stderr and '.py:' not in completed.stderr
+
+    def test_format_is_restored_after_the_run(self, tmp_path):
+        import warnings
+        from dice.cli.main import main
+
+        before = warnings.formatwarning
+        with pytest.raises(SystemExit):
+            main([str(tmp_path / 'no_such_file.txt'), '--dry-run'])
+        assert warnings.formatwarning is before
+
+
+class TestBackendOfTheSession:
+    """Importing the plot module leaves Matplotlib's backend alone; the command line selects Agg itself."""
+
+    def test_import_keeps_the_backend_and_use_file_backend_selects_agg(self):
+        completed = run_snippet("""
+            import os
+            os.environ.pop('MPLBACKEND', None)
+            import matplotlib
+            matplotlib.use('svg')
+            import dice.visualization.histograms as histograms
+            import dice.visualization.plots
+            assert matplotlib.get_backend().lower() == 'svg', matplotlib.get_backend()
+            histograms.use_file_backend()
+            assert matplotlib.get_backend().lower() == 'agg', matplotlib.get_backend()
+        """)
+        assert completed.returncode == 0, completed.stderr
+
+    def test_backend_of_the_environment_is_kept(self):
+        completed = run_snippet("""
+            import os
+            os.environ['MPLBACKEND'] = 'svg'
+            import matplotlib
+            import dice.visualization.histograms as histograms
+            histograms.use_file_backend()
+            assert matplotlib.get_backend().lower() == 'svg', matplotlib.get_backend()
+        """)
+        assert completed.returncode == 0, completed.stderr

@@ -20,7 +20,8 @@ and Fixed give the details.
 
 | Your 1.2.0 simulation | What was wrong | What to do |
 | ------- | ------------- | ------------- |
-| Micrometers and nanoseconds, `amplitude_0` = 1, a fixed `noise value` | Nothing that changes the diffusion coefficient statistics: the estimates change by less than 1e-5 of their value. The `estimated CNR` column changes with the new CNR estimator. | No rerun needed. |
+| Micrometers and nanoseconds, `amplitude_0` = 1, a fixed `noise value`, `mean_0` within 0.2 × `spatial width` of 0 | Nothing that changes the diffusion coefficient statistics: the estimates change by less than 1e-5 of their value. The `estimated CNR` column changes with the new CNR estimator. | No rerun needed. |
+| `mean_0` farther than 0.2 × `spatial width` from 0, the center of the window | The Gaussian fit looks for the center of a profile only in the central 40% of the window. It held the center at that limit and reported a wrong width, so the diffusion coefficient estimates were wrong (10% low for `mean_0` = 1.3 in a window 5 wide, at low noise). | Rerun with `mean_0` inside the central 40% of the window. 2.0.0 rejects the old value. |
 | Another length or time unit | The diffusion coefficients in cm²/s were too large by the factor (1 micrometer / length unit)² × (time unit / 1 nanosecond): 10^6 for nanometers and nanoseconds, 10^-3 for micrometers and picoseconds. The summary labeled lengths in micrometers. Ratios of estimate to nominal value were correct. | Divide the cm²/s columns by the factor, or rerun. |
 | Lengths in centimeters or meters, a spatial width below about 0.05 in its unit, or `amplitude_0` below about 0.01 | The Gaussian fit stopped early, so the estimates themselves were wrong. | Rerun. |
 | `estimate noise from data` | The noise level came from another CNR estimator, and it was wrong for `amplitude_0` other than 1. For the example profile, whose peak is 4.6 pixels wide, 1.2.0 read a CNR of 176, where the residuals of a Gaussian fit give 59. It simulated too little noise and reported a precision that was too good. | Rerun with a profile whose peak is at least 9 pixels wide, or set `noise value` from your own CNR estimate. For a narrower peak, 2.0.0 reads too low (8.9 for the example profile) and warns. |
@@ -344,6 +345,13 @@ and Fixed give the details.
 - `--dry-run` loads and validates the parameters file and reports the first
   problem it finds, without running the simulation. It reported success
   without reading the file.
+- Importing `dice.visualization.histograms` no longer switches Matplotlib to
+  the Agg backend, so a Python session that imports DICE keeps its own. The
+  command-line interface and the GUI select Agg when they plot
+  (`use_file_backend`).
+- The command-line interface prints a warning as `Warning: <message>`. It
+  printed Python's default form, with the path and the line of the source
+  file. The help of `--quiet` says that warnings are still printed.
 - A plot that cannot be saved is an error. The plot functions raise, and the
   command-line interface ends with exit code 1 and a message that the
   results were saved and the plot was not. The plot functions used to log

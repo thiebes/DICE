@@ -43,6 +43,33 @@ class TestNoticeContent:
         assert "https://github.com/thiebes/DICE\nat the tag v9.8.7" in header
         assert "uv.lock" in header
 
+    def test_header_names_both_files_that_pin_the_packages(self, notice):
+        """Every installed package is pinned in one of the two files the header names."""
+        import re
+        header = notice.split("1. DICE")[0]
+        root = Path(collect_licenses.REPOSITORY_ROOT)
+        assert collect_licenses.BUILD_REQUIREMENTS_FILE in header
+        assert (root / collect_licenses.BUILD_REQUIREMENTS_FILE).is_file()
+
+        def normalized(name: str) -> str:
+            return re.sub(r"[-_.]+", "-", name).lower()
+
+        locked = set(re.findall(r'^name = "([^"]+)"', (root / "uv.lock").read_text(encoding="utf-8"), re.M))
+        build = {normalized(name) for name in re.findall(
+            r"^([A-Za-z0-9_.-]+)==", (root / collect_licenses.BUILD_REQUIREMENTS_FILE).read_text(encoding="utf-8"),
+            re.M)}
+        installed = {normalized(d.metadata["Name"]) for d in collect_licenses.installed_packages()}
+        assert installed - locked - build == set()
+        assert "pyinstaller" in build and "pyinstaller" not in locked
+
+    def test_header_says_where_the_source_of_qt_is(self, notice):
+        header = notice.split("1. DICE")[0]
+        qt_version = metadata.version("PyQt6-Qt6")
+        major_minor = ".".join(qt_version.split(".")[:2])
+        assert f"the Qt libraries, version {qt_version}, in compiled" in header
+        assert f"https://download.qt.io/archive/qt/{major_minor}/{qt_version}/single/" in header
+        assert collect_licenses.qt_source_url("6.10.0") == "https://download.qt.io/archive/qt/6.10/6.10.0/single/"
+
     def test_dice_is_under_its_own_mit_license(self, notice):
         mit_text = (REPO_ROOT / "LICENSE.md").read_text(encoding="utf-8").strip()
         assert mit_text in notice

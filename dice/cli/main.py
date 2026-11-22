@@ -26,6 +26,7 @@ from ..io.results import (
 from ..models.results import MonteCarloOutput
 from ..visualization.histograms import (
     accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
+    use_file_backend,
 )
 from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.units import diffusion_coefficient_label, global_length_unit, global_time_unit
@@ -294,6 +295,7 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
     
     if not args.quiet:
         print("Creating plots...")
+    use_file_backend()
     
     # Across a noise range the accuracy depends on the CNR, so it is plotted against it.
     if result.noise_range is not None:
@@ -390,9 +392,39 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
             plt.close(fig)
 
 
+def console_warning(message, category, filename, lineno, line=None) -> str:
+    """A warning as one line of the console, in the form of the other messages of the command line."""
+    return f"Warning: {message}\n"
+
+
 def main(argv: Optional[list] = None) -> int:
     """
     Main entry point for the DICE CLI.
+
+    Warnings are printed as "Warning: <message>", without the source file
+    and line that Python adds by default.
+
+    Parameters
+    ----------
+    argv : list, optional
+        Command-line arguments. If None, uses sys.argv.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for error).
+    """
+    previous_format = warnings.formatwarning
+    warnings.formatwarning = console_warning
+    try:
+        return run_command(argv)
+    finally:
+        warnings.formatwarning = previous_format
+
+
+def run_command(argv: Optional[list] = None) -> int:
+    """
+    Load the parameters, run the simulation, and write its outputs.
     
     Parameters
     ----------

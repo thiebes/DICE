@@ -75,10 +75,12 @@ hiddenimports = [
     # dice.core re-exports fft_cnr lazily, by name, in its lazy-import table,
     # so keep it bundled even if the direct imports of it change.
     *collect_submodules('fft_cnr', on_error='raise'),
-    # The Matplotlib hook bundles only the backends named in matplotlib.use()
-    # calls (Agg, in dice/visualization/histograms.py). If pyplot resolves its
-    # backend while a QApplication is running and none has been set, it
-    # selects QtAgg, so bundle that backend as well.
+    # The plots are drawn with the Agg backend, which use_file_backend in
+    # dice/visualization/histograms.py selects; name it here so that the
+    # bundle does not depend on the Matplotlib hook finding that call. If
+    # pyplot resolves its backend while a QApplication is running and none
+    # has been set, it selects QtAgg, so bundle that backend as well.
+    'matplotlib.backends.backend_agg',
     'matplotlib.backends.backend_qtagg',
 ]
 

@@ -937,7 +937,7 @@ class TestNarrowPeakWarning:
     def test_repository_profile_warns(self, tmp_path):
         completed = self._dry_run(tmp_path, EXAMPLES_DIR / 'example_profile.csv')
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert "UserWarning: The peak of the measured profile" in completed.stderr
+        assert "Warning: The peak of the measured profile" in completed.stderr
         assert "is 4.6 pixels wide at half maximum" in completed.stderr
         assert "loaded and validated" in completed.stdout
 

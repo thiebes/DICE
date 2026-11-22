@@ -114,7 +114,18 @@ def missing_required_texts(packages: List[metadata.Distribution]) -> List[str]:
     return missing
 
 
-def notice_header(version: str, packaged_with_pyinstaller: bool) -> str:
+# The file of the repository that pins the packages which build the
+# application (PyInstaller and what it needs); uv.lock pins the others.
+BUILD_REQUIREMENTS_FILE = ".github/pyinstaller-requirements.txt"
+
+
+def qt_source_url(qt_version: str) -> str:
+    """Where The Qt Company publishes the source code of this version of Qt, for example 6.10.0."""
+    major_minor = ".".join(qt_version.split(".")[:2])
+    return f"https://download.qt.io/archive/qt/{major_minor}/{qt_version}/single/"
+
+
+def notice_header(version: str, packaged_with_pyinstaller: bool, qt_version: str) -> str:
     """The opening of the notice: what the application is licensed under and where its source is."""
     python_version = ".".join(str(part) for part in sys.version_info[:3])
     header = f"""DICE {version}: licenses of the standalone application
@@ -136,9 +147,17 @@ entry.
 Source code: the complete source of this application is the DICE repository,
 {REPOSITORY_URL}
 at the tag v{version}. In that repository, uv.lock gives the exact version
-of every package of section 2, each of which is available from the Python
-Package Index (https://pypi.org), and dice-gui.spec and
-.github/workflows/build-release.yml give the build instructions.
+of every package of section 2 that the application runs with, and
+{BUILD_REQUIREMENTS_FILE} gives the exact version of the
+packages that build it (PyInstaller and the packages it needs). Each package
+is available from the Python Package Index (https://pypi.org). The files
+dice-gui.spec and .github/workflows/build-release.yml give the build
+instructions.
+
+The package PyQt6-Qt6 holds the Qt libraries, version {qt_version}, in compiled
+form; the Python Package Index has no source archive of it. The Qt Company
+publishes the source code of that version of Qt at
+{qt_source_url(qt_version)}
 
 The application also contains the Python interpreter, version {python_version},
 which is licensed under the Python Software Foundation License Version 2
@@ -174,7 +193,7 @@ def collect_license_notice(version: str) -> str:
         distribution.metadata["Name"].lower() == "pyinstaller" for distribution in distributions
     )
     sections = [
-        notice_header(version, packaged_with_pyinstaller),
+        notice_header(version, packaged_with_pyinstaller, metadata.version("PyQt6-Qt6")),
         f"{RULE}\n1. DICE\n{RULE}\n",
         (REPOSITORY_ROOT / "LICENSE.md").read_text(encoding="utf-8").strip() + "\n",
         f"{RULE}\n2. Packages in the environment this application is built from\n{RULE}\n",

@@ -61,7 +61,7 @@ For more information, visit: https://github.com/thiebes/DICE
     parser.add_argument(
         '--quiet', '-q',
         action='store_true',
-        help='Suppress all output except errors'
+        help='Suppress all output except warnings and errors'
     )
     
     parser.add_argument(

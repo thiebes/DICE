@@ -322,8 +322,10 @@ class DiceInterface:
         from dice.io.results import (
             export_collated_results, output_unit_preferences, write_summary_file,
         )
-        from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
+        from dice.visualization.histograms import histogram_options, plot_accuracy_histogram, use_file_backend
         from dice.utils.units import global_length_unit, global_time_unit
+
+        use_file_backend()
 
         # Analyze results with standard proximity levels
         analysis = analyze_simulation_results(result)
@@ -469,7 +471,9 @@ class DiceInterface:
             RuntimeError: If plot generation fails
         """
         try:
-            from dice.visualization.histograms import plot_accuracy_histogram
+            from dice.visualization.histograms import plot_accuracy_histogram, use_file_backend
+
+            use_file_backend()
 
             # Check if data exists
             if self.last_result is None:
@@ -553,6 +557,9 @@ class DiceInterface:
 
             # Load CSV
             from dice.io.results import NOMINAL_D_COLUMN, column_unit, results_column
+            from dice.visualization.histograms import use_file_backend
+
+            use_file_backend()
 
             df = pd.read_csv(csv_file)
 

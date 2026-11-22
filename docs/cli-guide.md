@@ -61,7 +61,7 @@ dice [options] parameters_file
 | Option | Effect |
 | ------- | ------------- |
 | `--verbose`, `-v` | Print the settings, the size of the simulation, and progress messages. |
-| `--quiet`, `-q` | Print errors only. |
+| `--quiet`, `-q` | Print warnings and errors only. |
 | `--output-dir DIR`, `-o DIR` | Write the output files to `DIR` instead of `output/<slug>/`. |
 | `--no-plots` | Do not create the plot: the histogram, or the scatter plot of a noise range. |
 | `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
