@@ -203,6 +203,19 @@ and Fixed give the details.
 - Parameters files are read as UTF-8, with or without a byte-order mark. A
   file that is not valid UTF-8 is read in the encoding of the locale, as
   before.
+- Behavior change: every column of the results file whose value has a unit
+  names it in brackets, and the slope columns state that the slope is twice
+  the diffusion coefficient: `nominal lifetime` is now `nominal lifetime
+  [ns]`, and `weighted fit diffusion slope` is `weighted fit diffusion slope
+  (2D) [μm²/ns]`, for a simulation in micrometers and nanoseconds. A script
+  that reads columns by name must change. `dice.io.results.results_column`
+  finds a column from its name without the unit, in a results file of this
+  version and of 1.2.0. When the output unit of the diffusion coefficients
+  is the unit of the simulation, the file has one `nominal diffusion coeff`
+  column. The GUI still plots a results file of 1.2.0.
+- The JSON file names the units of its values in `summary.units`.
+- The summary marks the lifetime as assumed when the parameters file gives
+  only the diffusion length; it printed "1 nanosecond" as if it were given.
 - Python interface: `export_collated_results()` requires `length_unit` and
   `time_unit`, the units the results are in. `write_summary_file()` takes
   them from its `parameters` argument when they are not given. Both used to

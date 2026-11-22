@@ -29,9 +29,10 @@ TAB_NAMES = [
 ]
 
 # Column names the GUI reads back from the CSV that DICE exports.
-WLS_SLOPE_COLUMN = "weighted fit diffusion slope"
-OLS_SLOPE_COLUMN = "unweighted fit diffusion slope"
-NOMINAL_D_COLUMN = "nominal diffusion coeff"
+# Results-file columns of a simulation in micrometers and nanoseconds, as the examples are.
+WLS_SLOPE_COLUMN = "weighted fit diffusion slope (2D) [μm²/ns]"
+OLS_SLOPE_COLUMN = "unweighted fit diffusion slope (2D) [μm²/ns]"
+NOMINAL_D_COLUMN = "nominal diffusion coeff [μm²/ns]"
 
 
 @dataclass

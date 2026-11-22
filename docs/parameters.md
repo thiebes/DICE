@@ -112,7 +112,7 @@ The diffusion length, L_D = √(Dτ).
 
 **Units:** length unit
 
-If you give only the diffusion length, DICE sets the lifetime to 1 time unit and the diffusion coefficient to L_D² per time unit. The time points of the temporal axis are then in units of the lifetime.
+If you give only the diffusion length, DICE sets the lifetime to 1 time unit and the diffusion coefficient to L_D² per time unit. The time points of the temporal axis are then in units of the lifetime. The summary marks that lifetime as assumed. The diffusion coefficients in the outputs then hold for a lifetime of exactly 1 time unit; the ratio of each estimate to the nominal value, and every statistic of that ratio, does not depend on the lifetime.
 
 ### `nominal diffusion coefficient` and `nominal lifetime (tau)`
 

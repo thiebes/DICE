@@ -66,7 +66,7 @@ dice [options] parameters_file
 | `--no-plots` | Do not create the plot: the histogram, or the scatter plot of a noise range. |
 | `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
 | `--seed N` | Use the random seed `N` (a non-negative integer) for the noise. See [Reproducible results](#reproducible-results). |
-| `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. With a noise range, it also has the noise standard deviation of each run and the statistics of each CNR bin. `both` writes both files. |
+| `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. Its values are in the units of the simulation, which `summary.units` names. With a noise range, it also has the noise standard deviation of each run and the statistics of each CNR bin. `both` writes both files. |
 | `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
 | `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
 | `--dry-run`, `--check` | Load and validate the parameters file as a real run would, then stop without a simulation and without writing files. |
@@ -92,12 +92,12 @@ One row for each run. The main columns are:
 | Columns | Content |
 | ------- | ------------- |
 | `run number` | Index of the run |
-| `nominal diffusion coeff`, `nominal lifetime`, `nominal diffusion length` | Nominal values, in the simulation units |
-| `noise standard deviation` | Noise standard deviation of the run. Only with a noise range, where each run draws its own. |
+| `nominal diffusion coeff [μm²/ns]`, `nominal lifetime [ns]`, `nominal diffusion length [μm]` | Nominal values, in the units of the simulation |
+| `noise standard deviation` | Noise standard deviation of the run, in the units of the signal. Only with a noise range, where each run draws its own. |
 | `nominal CNR` | `amplitude_0` / noise standard deviation |
 | `estimated CNR` | CNR of the noisy profile at the first time point, estimated with the [fft-cnr](https://pypi.org/project/fft-cnr/) package |
-| `nominal sigma^2_0`, `estimated sigma^2_0` | Variance of the initial profile: nominal value, and fitted value at the first time point |
-| `weighted fit diffusion slope`, `... slope stderr`, `... intercept`, `... intercept stderr` | WLS fit of variance against time, in the simulation units |
+| `nominal sigma^2_0 [μm²]`, `estimated sigma^2_0 [μm²]` | Variance of the initial profile: nominal value, and fitted value at the first time point |
+| `weighted fit diffusion slope (2D) [μm²/ns]`, `... slope stderr [μm²/ns]`, `... intercept [μm²]`, `... intercept stderr [μm²]` | WLS fit of variance against time, in the units of the simulation. The slope is twice the diffusion coefficient. |
 | `unweighted fit ...` | The same quantities for the OLS fit |
 | `weighted fit diffusion coeff [cm²/s]`, `weighted fit diffusion stderr [cm²/s]` | WLS estimate of the diffusion coefficient and its standard error, in cm²/s |
 | `unweighted fit diffusion coeff [cm²/s]`, `unweighted fit diffusion stderr [cm²/s]` | The same for the OLS fit |
@@ -105,7 +105,11 @@ One row for each run. The main columns are:
 
 WLS stands for weighted least squares, OLS for ordinary least squares. In one dimension the slope of the variance against time equals 2D. If a fit fails in a run, the columns of that fit are empty in that row. The file is encoded in UTF-8.
 
-The parameters `output_diffusion_length_unit` and `output_diffusion_time_unit` replace cm²/s in the columns marked `[cm²/s]` with another unit, for example `[nm²/ps]` (see [Output units](parameters.md#output_diffusion_length_unit-and-output_diffusion_time_unit)).
+Each column whose value has a unit names it in brackets. The table shows the names for a simulation in micrometers and nanoseconds; a simulation in nanometers and picoseconds writes `nominal lifetime [ps]`, `weighted fit diffusion slope (2D) [nm²/ps]`, and so on. The function `dice.io.results.results_column` finds a column from its name without the unit, so that a script does not depend on the units (see [Analyze the results in Python](#analyze-the-results-in-python)).
+
+A diffusion coefficient estimate can be negative. At a low CNR the fitted widths scatter, and the line through them can slope downward. DICE keeps these estimates in the results file and in every statistic: an experiment at that CNR would obtain them too, and leaving them out would bias the mean upward.
+
+The parameters `output_diffusion_length_unit` and `output_diffusion_time_unit` replace cm²/s in the columns marked `[cm²/s]` with another unit, for example `[nm²/ps]` (see [Output units](parameters.md#output_diffusion_length_unit-and-output_diffusion_time_unit)). When that unit is the unit of the simulation, the file has one `nominal diffusion coeff` column.
 
 ### Summary file: `<slug>_summary.txt`
 
@@ -171,14 +175,17 @@ exit_code = main(["data/examples/quick_test.txt", "--quiet"])
 
 ### Analyze the results in Python
 
-The results file contains everything needed to compute the fraction of estimates within any proximity level. The slope and the nominal diffusion coefficient are both in the simulation units, so their ratio does not depend on the units:
+The results file contains everything needed to compute the fraction of estimates within any proximity level. The slope and the first nominal diffusion coefficient column are both in the units of the simulation, so their ratio does not depend on the units. `results_column` gives the full name of a column, with its unit, from the name without it:
 
 ```python
 import pandas as pd
 
+from dice.io.results import results_column
+
 df = pd.read_csv("output/quick_test/quick_test.csv")
-d_est = df["weighted fit diffusion slope"] / 2  # one dimension: MSD = 2Dt
-ratio = (d_est / df["nominal diffusion coeff"]).dropna()
+slope = df[results_column(df.columns, "weighted fit diffusion slope")]  # "... (2D) [μm²/ns]"
+nominal = df[results_column(df.columns, "nominal diffusion coeff")]     # "... [μm²/ns]"
+ratio = (slope / 2 / nominal).dropna()  # one dimension: MSD = 2Dt
 
 print(ratio.describe())
 print(f"Within ±15%: {ratio.between(0.85, 1.15).mean():.1%}")

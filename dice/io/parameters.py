@@ -532,9 +532,17 @@ def handle_diffusion_parameters(parameters_dictionary: Dict[str, Any]) -> None:
         parameters_dictionary['nominal diffusion coefficient'] = ld ** 2
         parameters_dictionary['nominal lifetime (tau)'] = 1
         parameters_dictionary['nominal diffusion length'] = ld
+        # The lifetime of 1 is a convention, not a value of the file: the
+        # time axis is then in units of the lifetime. The summary says so.
+        parameters_dictionary[LIFETIME_ASSUMED_KEY] = True
     else:
         raise ValueError("Provide either 'nominal diffusion length', or both "
                        "'nominal diffusion coefficient' and 'nominal lifetime (tau)'.")
+
+
+# Key of a parsed dictionary whose file gave only the diffusion length, so
+# that the lifetime of 1 time unit is a convention.
+LIFETIME_ASSUMED_KEY = 'lifetime assumed'
 
 
 def check_retired_parameters(parameters_dictionary: Dict[str, Any]) -> List[str]:

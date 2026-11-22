@@ -28,7 +28,7 @@ from ..visualization.histograms import (
     accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
 )
 from ..utils.axes import make_x_axis, make_time_axis
-from ..utils.units import global_length_unit, global_time_unit
+from ..utils.units import diffusion_coefficient_label, global_length_unit, global_time_unit
 
 
 def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]) -> Path:
@@ -243,7 +243,14 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
                 'dice_version': __version__,
                 'seed': result.seed,
                 'total_runs': len(result.run_results),
-                'noise_values': result.noise_values
+                'noise_values': result.noise_values,
+                # The parameters and the statistics of the analysis are in
+                # the units of the simulation, which the file would not name.
+                'units': {
+                    'length': length_unit,
+                    'time': time_unit,
+                    'diffusion_coefficient': diffusion_coefficient_label(length_unit, time_unit),
+                },
             }
         }
         # With a noise range, noise_values holds each run's noise, in run order.

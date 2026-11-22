@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from dice.io.results import results_column
+
 from gui_support import (
     EXAMPLES_DIR, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
     choose_global_units, d_estimates_from_csv, enter_text, fraction_sentence, fraction_within, run_and_wait,
@@ -107,12 +109,14 @@ class TestExportUnits:
         output_dir = work_dir / "output" / "units_check"
         frame = pd.read_csv(output_dir / "units_check.csv")
         nominal_columns = [c for c in frame.columns if c.startswith("nominal diffusion coeff [")]
-        assert len(nominal_columns) == 1
-        assert frame[nominal_columns[0]].iloc[0] == pytest.approx(d_cm2_per_s, rel=1e-9)
+        assert len(nominal_columns) == 2  # in the units of the simulation, and in cm²/s
+        assert frame[nominal_columns[0]].iloc[0] == pytest.approx(d, rel=1e-9)
+        assert frame["nominal diffusion coeff [cm²/s]"].iloc[0] == pytest.approx(d_cm2_per_s, rel=1e-9)
 
         wls_columns = [c for c in frame.columns if c.startswith("weighted fit diffusion coeff [")]
         assert frame[wls_columns[0]].to_numpy() == pytest.approx(
-            (frame[WLS_SLOPE_COLUMN] / 2 / d * d_cm2_per_s).to_numpy(), rel=1e-9
+            (frame[results_column(frame.columns, "weighted fit diffusion slope")] / 2 / d * d_cm2_per_s).to_numpy(),
+            rel=1e-9,
         )
 
         summary = (output_dir / "units_check_summary.txt").read_text()

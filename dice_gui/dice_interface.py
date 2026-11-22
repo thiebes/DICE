@@ -12,9 +12,6 @@ from dice.models.estimators import ESTIMATORS, SlopeFit, get_estimator
 from dice.models.results import RunResult, MonteCarloOutput
 from dice_gui.output_location import output_root
 
-# Results-CSV column of the nominal diffusion coefficient in simulation units.
-NOMINAL_D_COLUMN = 'nominal diffusion coeff'
-
 # Keys of last_parameters, after a results CSV is loaded, that hold the named
 # unit of the statistics of its estimates and the factor to that unit.
 CSV_D_UNIT_KEY = 'diffusion coefficient unit'
@@ -555,16 +552,18 @@ class DiceInterface:
                 raise FileNotFoundError(f"CSV file not found: {csv_file}")
 
             # Load CSV
+            from dice.io.results import NOMINAL_D_COLUMN, column_unit, results_column
+
             df = pd.read_csv(csv_file)
 
-            def _find_csv_column(prefix):
-                # Prefer exact match to avoid 'slope' matching 'slope stderr'
-                if prefix in df.columns:
-                    return prefix
-                matches = [c for c in df.columns if c.startswith(prefix)]
-                return matches[0] if matches else None
+            def _find_csv_column(name):
+                try:
+                    return results_column(df.columns, name)
+                except KeyError:
+                    return None
 
-            # Determine which columns to use
+            # Determine which columns to use. The first column of the nominal
+            # diffusion coefficient is in the units of the slopes.
             spec = get_estimator(estimator)
             slope_col = _find_csv_column(f'{spec.csv_label} diffusion slope')
             method_name = spec.short_name
@@ -592,19 +591,21 @@ class DiceInterface:
             # Get nominal diffusion coefficient (should be same for all runs)
             d_nominal = df[nom_col].iloc[0]
 
-            # The slopes and the unlabeled nominal column are in the run's
-            # simulation units, which the CSV does not name. The labeled nominal
-            # column, e.g. 'nominal diffusion coeff [cm²/s]', gives the factor
-            # to a named unit for reporting statistics of the estimates.
-            labeled_nom_col = next(
-                (c for c in df.columns if c.startswith(f'{NOMINAL_D_COLUMN} [') and c.endswith(']')),
+            # The statistics of the estimates are reported in a named unit:
+            # the output unit of the file when it has a second column of the
+            # nominal diffusion coefficient (for example in cm²/s), otherwise
+            # the unit of the slopes. A file of DICE 1.2.0 names no unit for
+            # its slopes.
+            output_nom_col = next(
+                (c for c in df.columns
+                 if c != nom_col and c.startswith(f'{NOMINAL_D_COLUMN} [') and c.endswith(']')),
                 None,
             )
-            if labeled_nom_col is not None and d_nominal != 0:
-                d_unit = labeled_nom_col[len(f'{NOMINAL_D_COLUMN} ['):-1]
-                d_scale = float(df[labeled_nom_col].iloc[0] / d_nominal)
+            if output_nom_col is not None and d_nominal != 0:
+                d_unit = column_unit(output_nom_col)
+                d_scale = float(df[output_nom_col].iloc[0] / d_nominal)
             else:
-                d_unit, d_scale = None, 1.0
+                d_unit, d_scale = column_unit(nom_col), 1.0
 
             # Calculate diffusion estimates (D = slope/2)
             d_estimates = slopes / 2
@@ -643,7 +644,7 @@ class DiceInterface:
             stored_slopes = {
                 spec.key: df[column].values
                 for spec in ESTIMATORS
-                if (column := f'{spec.csv_label} diffusion slope') in df.columns
+                if (column := _find_csv_column(f'{spec.csv_label} diffusion slope')) is not None
             }
 
             # Create RunResult objects with those slopes

@@ -277,8 +277,8 @@ def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
 
 def test_csv_columns_follow_first_appearance(tmp_path):
     columns = written_text('weighted_first_default.csv', tmp_path).splitlines()[0].split(',')
-    assert columns.index('weighted fit diffusion slope') < columns.index(
-        'nominal diffusion coeff [cm²/s]') < columns.index('unweighted fit diffusion slope')
+    assert columns.index('weighted fit diffusion slope (2D) [μm²/ns]') < columns.index(
+        'nominal diffusion coeff [cm²/s]') < columns.index('unweighted fit diffusion slope (2D) [μm²/ns]')
 
 
 def regenerate() -> None:

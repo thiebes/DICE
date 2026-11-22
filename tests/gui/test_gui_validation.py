@@ -192,8 +192,8 @@ class TestZeroDiffusionInputs:
 
         assert _visible_error(window, "diffusion_length") is None
         frame = pd.read_csv(work_dir / "output" / "no_decay" / "no_decay.csv")
-        assert (frame["nominal lifetime"] == 0).all()
-        assert (frame["nominal diffusion length"] == float("inf")).all()
+        assert (frame["nominal lifetime [ns]"] == 0).all()
+        assert (frame["nominal diffusion length [μm]"] == float("inf")).all()
         summary = (work_dir / "output" / "no_decay" / "no_decay_summary.txt").read_text(encoding="utf-8")
         assert "Nominal diffusion length:\n    inf micrometer\n" in summary
 

@@ -8,7 +8,7 @@ files and text summaries, and for loading result CSV files.
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Union, TextIO
+from typing import Dict, Any, List, Optional, Sequence, Tuple, Union, TextIO
 import csv
 
 from ..core.noise import nominal_cnr
@@ -82,6 +82,56 @@ def print_and_append(filename: Union[str, Path], message: str, print_to_console:
         f.write(message + '\n')
 
 
+# Results-file column of the nominal diffusion coefficient, before its unit.
+NOMINAL_D_COLUMN = 'nominal diffusion coeff'
+
+
+def results_column(columns: Sequence[str], name: str) -> str:
+    """
+    The full name of the results-file column that holds `name`.
+
+    A column carries its unit in its name, for example 'nominal lifetime
+    [ns]' or 'weighted fit diffusion slope (2D) [μm²/ns]', so the full name
+    depends on the units of the simulation. This function finds it from the
+    name without the unit, which keeps a script independent of the units:
+
+        slope = df[results_column(df.columns, 'weighted fit diffusion slope')]
+
+    A results file of DICE 1.2.0, whose columns have no unit, is read with
+    the same call.
+
+    Parameters
+    ----------
+    columns : sequence of str
+        The column names of a results file.
+    name : str
+        The column name without '(2D)' and without the unit in brackets.
+
+    Returns
+    -------
+    str
+        The matching column. The nominal diffusion coefficient can have two
+        columns, in the units of the simulation and in the output units;
+        the first, in the units of the simulation, is returned.
+
+    Raises
+    ------
+    KeyError
+        If no column holds `name`.
+    """
+    for column in columns:
+        if column == name or column.startswith((f'{name} [', f'{name} (2D) [')):
+            return column
+    raise KeyError(f"The results file has no column '{name}'. Its columns are: {list(columns)}")
+
+
+def column_unit(column: str) -> Optional[str]:
+    """The unit in the brackets at the end of a results-file column name; None if it names no unit."""
+    if column.endswith(']') and ' [' in column:
+        return column[column.rindex(' [') + 2:-1]
+    return None
+
+
 def export_collated_results(
     results: MonteCarloOutput,
     filename: Union[str, Path],
@@ -92,8 +142,16 @@ def export_collated_results(
     """
     Export collated results to CSV file.
 
-    One row per run. For a simulation with a noise range, the column 'noise
-    standard deviation', before 'nominal CNR', holds each run's noise level.
+    One row per run. A column whose value has a unit names it in brackets:
+    the units of the simulation for the nominal values, the variances and
+    the fits of variance against time, and the output units for the
+    diffusion coefficients. The slope of that fit is twice the diffusion
+    coefficient, which its column name states ('... diffusion slope (2D)').
+    results_column finds a column from its name without the unit.
+
+    For a simulation with a noise range, the column 'noise standard
+    deviation', before 'nominal CNR', holds each run's noise level, in the
+    units of the signal.
 
     Parameters
     ----------
@@ -124,8 +182,13 @@ def export_collated_results(
         if output_units.diffusion_time is not None:
             out_t = output_units.diffusion_time
 
-    # Build column label for diffusion coefficient
+    # Unit labels of the columns: the output unit of the diffusion
+    # coefficients, and the units of the simulation for everything else.
     d_unit_label = diffusion_coefficient_label(out_l, out_t)
+    simulation_d_label = diffusion_coefficient_label(length_unit, time_unit)
+    length_label = length_abbreviation(length_unit)
+    time_label = time_abbreviation(time_unit)
+    area_label = f"{length_label}\u00b2"
 
     def _convert_slope_to_d(slope):
         """Convert MSD slope in simulation units to D in output units."""
@@ -142,9 +205,9 @@ def export_collated_results(
     for run in results.run_results:
         row = {
             'run number': run.run_id,
-            'nominal diffusion coeff': run.nominal_diffusion_coefficient,
-            'nominal lifetime': run.nominal_lifetime,
-            'nominal diffusion length': run.nominal_diffusion_length,
+            f'{NOMINAL_D_COLUMN} [{simulation_d_label}]': run.nominal_diffusion_coefficient,
+            f'nominal lifetime [{time_label}]': run.nominal_lifetime,
+            f'nominal diffusion length [{length_label}]': run.nominal_diffusion_length,
         }
         # With a noise range each run has its own noise level, so it gets a column.
         if results.noise_range is not None:
@@ -152,8 +215,8 @@ def export_collated_results(
         row.update({
             'nominal CNR': nominal_cnr(amplitude_0, run.noise_sigma),
             'estimated CNR': run.cnr_0_estimate,
-            'nominal sigma^2_0': run.nominal_sigma2_0,
-            'estimated sigma^2_0': run.estimated_sigma2_0,
+            f'nominal sigma^2_0 [{area_label}]': run.nominal_sigma2_0,
+            f'estimated sigma^2_0 [{area_label}]': run.estimated_sigma2_0,
         })
 
         # One block of columns per estimator with a fit for this run, in registry order
@@ -162,18 +225,20 @@ def export_collated_results(
             if fit is not None:
                 label = spec.csv_label
                 row.update({
-                    f'{label} diffusion slope': fit.slope,
-                    f'{label} diffusion slope stderr': fit.slope_stderr,
-                    f'{label} intercept': fit.intercept,
-                    f'{label} intercept stderr': fit.intercept_stderr,
+                    f'{label} diffusion slope (2D) [{simulation_d_label}]': fit.slope,
+                    f'{label} diffusion slope stderr [{simulation_d_label}]': fit.slope_stderr,
+                    f'{label} intercept [{area_label}]': fit.intercept,
+                    f'{label} intercept stderr [{area_label}]': fit.intercept_stderr,
                     f'{label} diffusion coeff [{d_unit_label}]': _convert_slope_to_d(fit.slope),
                     f'{label} diffusion stderr [{d_unit_label}]': _convert_slope_to_d(fit.slope_stderr) if fit.slope_stderr else None,
                 })
 
-        # Add nominal diffusion coefficient in output units
-        row[f'nominal diffusion coeff [{d_unit_label}]'] = convert_diffusion_coefficient(
-            run.nominal_diffusion_coefficient, length_unit, time_unit, out_l, out_t
-        )
+        # The nominal diffusion coefficient in the output units; when these
+        # are the units of the simulation, the first column already holds it.
+        if d_unit_label != simulation_d_label:
+            row[f'{NOMINAL_D_COLUMN} [{d_unit_label}]'] = convert_diffusion_coefficient(
+                run.nominal_diffusion_coefficient, length_unit, time_unit, out_l, out_t
+            )
 
         data_rows.append(row)
 
@@ -390,7 +455,10 @@ def write_summary_file(
         f.write(f"Nominal diffusion coefficient:\n")
         f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
         f.write(f"Nominal lifetime:\n")
-        f.write(f"    {results.parameters.physics.lifetime} {time_unit}\n")
+        # 'lifetime assumed' is LIFETIME_ASSUMED_KEY of dice.io.parameters.
+        assumed = (" (assumed: the file gives only the diffusion length, so its times are in units "
+                   "of the lifetime)") if parameters.get('lifetime assumed') else ""
+        f.write(f"    {results.parameters.physics.lifetime} {time_unit}{assumed}\n")
         f.write("\n")
         
         # Write analysis results if available

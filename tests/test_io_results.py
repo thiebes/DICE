@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from dice.io.results import column_unit, results_column
+
 from dice.analysis.simulation import run_monte_carlo_simulation
 from dice.analysis.statistics import analyze_simulation_results
 from dice.io.parameters import open_parameters
@@ -148,7 +150,7 @@ class TestExportCollatedResults:
         assert label in exported.columns
         assert not any('cm²/s' in column for column in exported.columns)
         assert exported[label].to_numpy() == pytest.approx(
-            exported['weighted fit diffusion slope'].to_numpy() / 2, rel=1e-12)
+            exported[results_column(exported.columns, 'weighted fit diffusion slope')].to_numpy() / 2, rel=1e-12)
         assert exported['nominal diffusion coeff [μm²/ns]'].to_numpy() == pytest.approx(0.01)
 
     def test_single_frame_runs_have_no_fit_columns(self, tmp_path, quick_test_parameters):
@@ -156,8 +158,9 @@ class TestExportCollatedResults:
             quick_test_parameters, quick_test_parameters['time series'][:1], num_runs=2)
         exported = export_collated_results(single_frame, tmp_path / 'results.csv', length_unit='micrometer', time_unit='nanosecond')
         assert list(exported.columns) == [
-            'run number', 'nominal diffusion coeff', 'nominal lifetime', 'nominal diffusion length',
-            'nominal CNR', 'estimated CNR', 'nominal sigma^2_0', 'estimated sigma^2_0',
+            'run number', 'nominal diffusion coeff [μm²/ns]', 'nominal lifetime [ns]',
+            'nominal diffusion length [μm]', 'nominal CNR', 'estimated CNR',
+            'nominal sigma^2_0 [μm²]', 'estimated sigma^2_0 [μm²]',
             'nominal diffusion coeff [cm²/s]',
         ]
 
@@ -377,3 +380,59 @@ class TestSummaryRecordsWhatReproducesIt:
         summary_file = tmp_path / 'summary.txt'
         write_summary_file(result, summary_file, quick_test_parameters, analyze_simulation_results(result))
         assert "Seed:\n    SeedSequence(entropy=[1, 2], spawn_key=())\n" in summary_file.read_text(encoding='utf-8')
+
+
+class TestColumnsNameTheirUnits:
+    """Every column with a unit names it, and results_column finds a column without the unit."""
+
+    @pytest.fixture
+    def nanometer_frame(self, tmp_path, quick_test_simulation):
+        return export_collated_results(quick_test_simulation, tmp_path / 'results.csv',
+                                       length_unit='nanometer', time_unit='picosecond')
+
+    def test_units_follow_the_units_of_the_simulation(self, nanometer_frame):
+        columns = list(nanometer_frame.columns)
+        for expected in ['nominal diffusion coeff [nm²/ps]', 'nominal lifetime [ps]',
+                         'nominal diffusion length [nm]', 'nominal sigma^2_0 [nm²]',
+                         'estimated sigma^2_0 [nm²]', 'weighted fit diffusion slope (2D) [nm²/ps]',
+                         'weighted fit diffusion slope stderr [nm²/ps]', 'weighted fit intercept [nm²]',
+                         'weighted fit intercept stderr [nm²]', 'weighted fit diffusion coeff [cm²/s]',
+                         'nominal diffusion coeff [cm²/s]']:
+            assert expected in columns
+        without_unit = [column for column in columns if column_unit(column) is None]
+        assert without_unit == ['run number', 'nominal CNR', 'estimated CNR']
+
+    def test_results_column_finds_the_column_from_its_name(self, nanometer_frame):
+        columns = nanometer_frame.columns
+        assert results_column(columns, 'weighted fit diffusion slope') == 'weighted fit diffusion slope (2D) [nm²/ps]'
+        assert results_column(columns, 'weighted fit diffusion slope stderr') == (
+            'weighted fit diffusion slope stderr [nm²/ps]')
+        assert results_column(columns, 'weighted fit intercept') == 'weighted fit intercept [nm²]'
+        assert results_column(columns, 'nominal CNR') == 'nominal CNR'
+        # Two columns hold the nominal diffusion coefficient; the first is in the units of the slopes.
+        assert results_column(columns, 'nominal diffusion coeff') == 'nominal diffusion coeff [nm²/ps]'
+        with pytest.raises(KeyError, match="no column 'weighted fit diffusion'"):
+            results_column(columns, 'weighted fit diffusion')
+
+    def test_slope_is_twice_the_diffusion_coefficient_in_the_named_units(self, nanometer_frame):
+        """The name says 2D; the values agree with the column in cm²/s through the units both names give."""
+        slope = nanometer_frame[results_column(nanometer_frame.columns, 'weighted fit diffusion slope')]
+        in_cm2_per_s = nanometer_frame['weighted fit diffusion coeff [cm²/s]']
+        nm2_per_ps_in_cm2_per_s = (1e-7) ** 2 / 1e-12
+        assert (slope / 2 * nm2_per_ps_in_cm2_per_s).to_numpy() == pytest.approx(in_cm2_per_s.to_numpy(), rel=1e-12)
+
+    def test_output_units_equal_to_the_simulation_units_give_one_nominal_column(self, tmp_path, quick_test_simulation):
+        from dice.models.parameters import OutputUnitPreferences
+        frame = export_collated_results(
+            quick_test_simulation, tmp_path / 'results.csv', length_unit='micrometer', time_unit='nanosecond',
+            output_units=OutputUnitPreferences(diffusion_length='micrometer', diffusion_time='nanosecond'))
+        assert [c for c in frame.columns if c.startswith('nominal diffusion coeff')] == [
+            'nominal diffusion coeff [μm²/ns]']
+
+    def test_results_file_of_dice_1_2_is_read_with_the_same_call(self):
+        """The columns of 1.2.0 have no units; a script written with results_column reads both."""
+        columns = ['run number', 'nominal diffusion coeff', 'nominal lifetime', 'weighted fit diffusion slope',
+                   'weighted fit diffusion slope stderr', 'nominal diffusion coeff [cm²/s]']
+        assert results_column(columns, 'weighted fit diffusion slope') == 'weighted fit diffusion slope'
+        assert results_column(columns, 'nominal diffusion coeff') == 'nominal diffusion coeff'
+        assert column_unit('weighted fit diffusion slope') is None

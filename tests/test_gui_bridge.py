@@ -225,11 +225,17 @@ class TestLoadAndPlotFromCsv:
         assert unit == 'nm²/ps'
         assert scale == pytest.approx(1000, rel=1e-12)
 
-    def test_statistics_have_no_unit_when_the_csv_has_no_labeled_column(
+    def test_results_file_of_dice_1_2_loads_and_its_statistics_have_no_unit(
             self, exported_csv, plotted, tmp_path):
+        """The columns of 1.2.0 name no unit for the slopes: the same file with those names loads."""
         frame = pd.read_csv(exported_csv)
+        frame = frame[[c for c in frame.columns if '[cm²/s]' not in c and '[nm²/ps]' not in c
+                       or c.startswith(('nominal diffusion coeff [μm²/ns]', 'weighted fit diffusion slope',
+                                        'unweighted fit diffusion slope'))]]
+        frame = frame.rename(columns=lambda c: c.split(' [')[0].replace(' (2D)', ''))
+        assert 'weighted fit diffusion slope' in frame.columns and 'nominal diffusion coeff' in frame.columns
         unlabeled = tmp_path / 'unlabeled.csv'
-        frame[[c for c in frame.columns if '[' not in c]].to_csv(unlabeled, index=False)
+        frame.to_csv(unlabeled, index=False)
         interface = DiceInterface()
         interface.load_and_plot_from_csv(
             str(unlabeled), str(tmp_path / 'plot.png'), IMAGE_SETTINGS, **METHOD_ARGUMENTS['wls'])

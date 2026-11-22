@@ -22,6 +22,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from dice.io.results import results_column
+
 import dice
 from dice.cli.main import main
 from seeded_results import assert_seeded_frames_agree
@@ -120,9 +122,9 @@ class TestGlobalUnitsReachOutputs:
         assert df[D_COLUMN].to_numpy() == pytest.approx(100.0, rel=1e-12)
         # 1 nm^2/ps = 1e-14 cm^2 / 1e-12 s = 1e-2 cm^2/s; D is half the MSD slope.
         assert df[WLS_D_COLUMN].to_numpy() == pytest.approx(
-            df['weighted fit diffusion slope'].to_numpy() / 2 * 1e-2, rel=1e-12)
+            df[results_column(df.columns, 'weighted fit diffusion slope')].to_numpy() / 2 * 1e-2, rel=1e-12)
         assert df[OLS_D_COLUMN].to_numpy() == pytest.approx(
-            df['unweighted fit diffusion slope'].to_numpy() / 2 * 1e-2, rel=1e-12)
+            df[results_column(df.columns, 'unweighted fit diffusion slope')].to_numpy() / 2 * 1e-2, rel=1e-12)
 
     def test_nanometer_picosecond_summary_labels(self, nanometer_run):
         summary = nanometer_run.read_summary()
@@ -130,7 +132,8 @@ class TestGlobalUnitsReachOutputs:
         assert "Time range:\n    0.000 to 1.000 picosecond\n" in summary
         assert "Nominal diffusion length:\n    100.000 nanometer\n" in summary
         assert "Nominal diffusion coefficient:\n    10000.00000 nanometer^2/picosecond\n" in summary
-        assert "Nominal lifetime:\n    1 picosecond\n" in summary
+        assert ("Nominal lifetime:\n    1 picosecond (assumed: the file gives only the diffusion length, "
+                "so its times are in units of the lifetime)\n") in summary
         assert "micrometer" not in summary
         assert "nanosecond" not in summary
 
@@ -140,16 +143,22 @@ class TestGlobalUnitsReachOutputs:
         # D = 0.1 μm x 0.1 μm / 1 ns = 0.01 μm^2/ns; 1 μm^2/ns = 1e-8 cm^2 / 1e-9 s = 10 cm^2/s.
         assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
         assert df[WLS_D_COLUMN].to_numpy() == pytest.approx(
-            df['weighted fit diffusion slope'].to_numpy() / 2 * 10, rel=1e-12)
+            df[results_column(df.columns, 'weighted fit diffusion slope')].to_numpy() / 2 * 10, rel=1e-12)
         summary = micrometer_run.read_summary()
         assert "Spatial width:\n    5 micrometer\n" in summary
         assert "Nominal diffusion coefficient:\n    0.01000 micrometer^2/nanosecond\n" in summary
 
     def test_unit_systems_describe_the_same_problem(self, micrometer_run, nanometer_run):
         micrometer_df, nanometer_df = micrometer_run.read_csv(), nanometer_run.read_csv()
-        assert list(micrometer_df.columns) == list(nanometer_df.columns)
-        assert nanometer_df['nominal diffusion coeff'].to_numpy() == pytest.approx(
-            micrometer_df['nominal diffusion coeff'].to_numpy() * 1e6, rel=1e-12)
+        def without_simulation_units(frame):
+            return [column.replace('[μm²/ns]', '[]').replace('[nm²/ps]', '[]').replace('[μm²]', '[]')
+                    .replace('[nm²]', '[]').replace('[μm]', '[]').replace('[nm]', '[]')
+                    .replace('[ns]', '[]').replace('[ps]', '[]') for column in frame.columns]
+
+        assert without_simulation_units(micrometer_df) == without_simulation_units(nanometer_df)
+        assert 'nominal lifetime [ns]' in micrometer_df.columns and 'nominal lifetime [ps]' in nanometer_df.columns
+        assert nanometer_df[results_column(nanometer_df.columns, 'nominal diffusion coeff')].to_numpy() == pytest.approx(
+            micrometer_df[results_column(micrometer_df.columns, 'nominal diffusion coeff')].to_numpy() * 1e6, rel=1e-12)
 
     def test_unknown_unit_rejected_before_simulation(self, tmp_path, capsys):
         params_file = write_quick_test_variant(tmp_path, 'bad_unit', {'length unit': 'um'})
@@ -176,7 +185,7 @@ class TestOutputDiffusionUnits:
         assert list(df.columns) == [c.replace('cm²/s', 'nm²/ps') for c in CSV_COLUMNS]
         # 0.01 micrometer^2/ns = 0.01 x 1e6 nm^2 / 1e3 ps = 10 nm^2/ps
         assert df['nominal diffusion coeff [nm²/ps]'].to_numpy() == pytest.approx(10.0, rel=1e-12)
-        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+        assert df[results_column(df.columns, 'nominal diffusion coeff')].to_numpy() == pytest.approx(0.01)
 
     def test_summary_diffusion_coefficients_agree_with_the_csv(self, nm2_per_ps_run):
         df = nm2_per_ps_run.read_csv()
@@ -452,11 +461,11 @@ class TestZeroLifetimeRun:
 
         values = summary_label_to_values(run.read_summary())
         assert values['Nominal diffusion length'] == ['inf micrometer']
-        assert values['Nominal lifetime'] == ['0 nanosecond']
+        assert values['Nominal lifetime'] == ['0 nanosecond']  # given in the file, so not marked as assumed
         df = run.read_csv()
-        assert (df['nominal diffusion length'] == np.inf).all()
-        assert (df['nominal lifetime'] == 0).all()
-        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
+        assert (df[results_column(df.columns, 'nominal diffusion length')] == np.inf).all()
+        assert (df[results_column(df.columns, 'nominal lifetime')] == 0).all()
+        assert df[results_column(df.columns, 'nominal diffusion coeff')].to_numpy() == pytest.approx(0.01)
         exported = json.loads((run.output_dir / 'no_decay.json').read_text())
         assert exported['parameters']['nominal diffusion length'] == np.inf
         assert exported['analysis']['summary']['nominal_diffusion_length'] == np.inf
@@ -466,23 +475,23 @@ class TestZeroLifetimeRun:
 
 CSV_COLUMNS = [
     'run number',
-    'nominal diffusion coeff',
-    'nominal lifetime',
-    'nominal diffusion length',
+    'nominal diffusion coeff [μm²/ns]',
+    'nominal lifetime [ns]',
+    'nominal diffusion length [μm]',
     'nominal CNR',
     'estimated CNR',
-    'nominal sigma^2_0',
-    'estimated sigma^2_0',
-    'unweighted fit diffusion slope',
-    'unweighted fit diffusion slope stderr',
-    'unweighted fit intercept',
-    'unweighted fit intercept stderr',
+    'nominal sigma^2_0 [μm²]',
+    'estimated sigma^2_0 [μm²]',
+    'unweighted fit diffusion slope (2D) [μm²/ns]',
+    'unweighted fit diffusion slope stderr [μm²/ns]',
+    'unweighted fit intercept [μm²]',
+    'unweighted fit intercept stderr [μm²]',
     'unweighted fit diffusion coeff [cm²/s]',
     'unweighted fit diffusion stderr [cm²/s]',
-    'weighted fit diffusion slope',
-    'weighted fit diffusion slope stderr',
-    'weighted fit intercept',
-    'weighted fit intercept stderr',
+    'weighted fit diffusion slope (2D) [μm²/ns]',
+    'weighted fit diffusion slope stderr [μm²/ns]',
+    'weighted fit intercept [μm²]',
+    'weighted fit intercept stderr [μm²]',
     'weighted fit diffusion coeff [cm²/s]',
     'weighted fit diffusion stderr [cm²/s]',
     'nominal diffusion coeff [cm²/s]',
@@ -510,7 +519,8 @@ SUMMARY_SKELETON = [
     "Initial profile squared width (sigma^2):", "    # micrometer^2",
     "Nominal diffusion length:", "    # micrometer",
     "Nominal diffusion coefficient:", "    # micrometer^2/nanosecond",
-    "Nominal lifetime:", "    # nanosecond",
+    "Nominal lifetime:",
+    "    # nanosecond (assumed: the file gives only the diffusion length, so its times are in units of the lifetime)",
     "",
     "Analysis Results:",
     "-" * 30,
@@ -634,18 +644,18 @@ class TestQuickTestOutputSchema:
         from dice.utils.converters import fwhm_to_sigma2
         df = quick_test_run.read_csv()
         assert df['run number'].tolist() == list(range(100))
-        assert df['nominal diffusion coeff'].to_numpy() == pytest.approx(0.01)
-        assert df['nominal lifetime'].to_numpy() == pytest.approx(1.0)
-        assert df['nominal diffusion length'].to_numpy() == pytest.approx(0.1)
+        assert df[results_column(df.columns, 'nominal diffusion coeff')].to_numpy() == pytest.approx(0.01)
+        assert df[results_column(df.columns, 'nominal lifetime')].to_numpy() == pytest.approx(1.0)
+        assert df[results_column(df.columns, 'nominal diffusion length')].to_numpy() == pytest.approx(0.1)
         assert df['nominal CNR'].to_numpy() == pytest.approx(50.0)
-        assert df['nominal sigma^2_0'].to_numpy() == pytest.approx(fwhm_to_sigma2(1.0))
+        assert df[results_column(df.columns, 'nominal sigma^2_0')].to_numpy() == pytest.approx(fwhm_to_sigma2(1.0))
         assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
         for prefix in ('weighted fit', 'unweighted fit'):
             # 1 μm^2/ns is 10 cm^2/s, and D is half the MSD slope.
             assert df[f'{prefix} diffusion coeff [cm²/s]'].to_numpy() == pytest.approx(
-                df[f'{prefix} diffusion slope'].to_numpy() * 5, rel=1e-12)
+                df[results_column(df.columns, f'{prefix} diffusion slope')].to_numpy() * 5, rel=1e-12)
             assert df[f'{prefix} diffusion stderr [cm²/s]'].to_numpy() == pytest.approx(
-                df[f'{prefix} diffusion slope stderr'].to_numpy() * 5, rel=1e-12)
+                df[results_column(df.columns, f'{prefix} diffusion slope stderr')].to_numpy() * 5, rel=1e-12)
         assert not df.isna().any().any()
 
     def test_summary_skeleton(self, quick_test_run):
@@ -658,8 +668,8 @@ class TestQuickTestOutputSchema:
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
         assert values['Noise standard deviation values'] == ['[0.02]']
         d_estimates = {
-            'wls': df['weighted fit diffusion slope'].to_numpy() / 2,
-            'ols': df['unweighted fit diffusion slope'].to_numpy() / 2,
+            'wls': df[results_column(df.columns, 'weighted fit diffusion slope')].to_numpy() / 2,
+            'ols': df[results_column(df.columns, 'unweighted fit diffusion slope')].to_numpy() / 2,
         }
         # WLS is listed before OLS under each statistic.
         d_unit = 'micrometer^2/nanosecond'
@@ -747,8 +757,11 @@ class TestOutputOptions:
             'both.csv', 'both.json', 'both_summary.txt']
         exported = json.loads((run.output_dir / 'both.json').read_text())
         assert set(exported) == {'analysis', 'parameters', 'summary'}
-        assert exported['summary'] == {'dice_version': dice.__version__, 'seed': None,
-                                       'total_runs': self.OPTION_RUNS, 'noise_values': [0.02]}
+        assert exported['summary'] == {
+            'dice_version': dice.__version__, 'seed': None,
+            'total_runs': self.OPTION_RUNS, 'noise_values': [0.02],
+            'units': {'length': 'micrometer', 'time': 'nanosecond', 'diffusion_coefficient': 'μm²/ns'},
+        }
         assert set(exported['analysis']) == {
             'summary', 'precision', 'precision_intervals', 'accuracy', 'noise_analysis', 'statistics'}
         interval = exported['analysis']['precision_intervals']['10%']['wls']
@@ -989,8 +1002,8 @@ class TestNominalCnrUsesAmplitude:
         # Scaling signal and noise together leaves every CNR, and every slope, unchanged.
         assert double_df['estimated CNR'].to_numpy() == pytest.approx(
             unit_df['estimated CNR'].to_numpy(), rel=1e-9)
-        assert double_df['weighted fit diffusion slope'].to_numpy() == pytest.approx(
-            unit_df['weighted fit diffusion slope'].to_numpy(), rel=1e-6)
+        assert double_df[results_column(double_df.columns, 'weighted fit diffusion slope')].to_numpy() == pytest.approx(
+            unit_df[results_column(unit_df.columns, 'weighted fit diffusion slope')].to_numpy(), rel=1e-6)
 
 
 class TestNoiseRangeExample:
@@ -1049,7 +1062,7 @@ class TestNoiseRangeExample:
             in_bin = df[df['nominal CNR'].between(
                 entry['cnr_min'] * (1 - 1e-12), entry['cnr_max'] * (1 + 1e-12))]
             assert len(in_bin) == entry['num_runs']
-            wls = in_bin['weighted fit diffusion slope'].dropna().to_numpy() / 2
+            wls = in_bin[results_column(in_bin.columns, 'weighted fit diffusion slope')].dropna().to_numpy() / 2
             assert entry['accuracy']['wls']['mean'] == pytest.approx(wls.mean(), rel=1e-12)
             assert entry['accuracy']['wls']['std'] == pytest.approx(wls.std(ddof=1), rel=1e-12)
             assert entry['statistics']['wls']['num_successful'] == len(wls)
