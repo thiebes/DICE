@@ -491,7 +491,7 @@ SUMMARY_SKELETON = [
     "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
     "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
     "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
-    "  Ordinary (unweighted) Least Squares:",
+    "  Ordinary (unweighted) Least Squares, for comparison:",
     "    Estimates:", "        # of # runs (# without an estimate)",
     "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",

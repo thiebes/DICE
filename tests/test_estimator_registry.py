@@ -38,7 +38,7 @@ class TestRegistry:
 
     def test_labels_are_the_output_literals(self):
         assert [(s.key, s.csv_label, s.summary_name, s.short_name) for s in ESTIMATORS] == [
-            ('ols', 'unweighted fit', 'Ordinary (unweighted) Least Squares', 'OLS'),
+            ('ols', 'unweighted fit', 'Ordinary (unweighted) Least Squares, for comparison', 'OLS'),
             ('wls', 'weighted fit', 'Weighted Least Squares', 'WLS'),
         ]
 

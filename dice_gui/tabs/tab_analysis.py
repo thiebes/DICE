@@ -30,7 +30,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     fit_method_layout = QVBoxLayout(fit_method_group)
 
     main_window.plot_method_wls_radio = QRadioButton("&Weighted Least Squares (WLS)")
-    main_window.plot_method_ols_radio = QRadioButton("&Ordinary Least Squares (OLS)")
+    main_window.plot_method_ols_radio = QRadioButton("&Ordinary Least Squares (OLS), for comparison")
     main_window.plot_method_wls_radio.setChecked(True)
     main_window.plot_method_wls_radio.setToolTip(
         "Weighted Least Squares regression.\n\n"
@@ -39,9 +39,10 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
         "heteroscedasticity in MSD measurements."
     )
     main_window.plot_method_ols_radio.setToolTip(
-        "Ordinary Least Squares regression.\n\n"
-        "Treats all data points equally regardless of variance.\n"
-        "May be preferred when measurement uncertainties are uniform."
+        "Ordinary Least Squares regression, shown for comparison.\n\n"
+        "Treats all time points equally, although the later profiles are\n"
+        "weaker and their fitted widths less certain. The weighted fit is\n"
+        "the default."
     )
     fit_method_layout.addWidget(main_window.plot_method_wls_radio)
     fit_method_layout.addWidget(main_window.plot_method_ols_radio)

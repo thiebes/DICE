@@ -116,7 +116,7 @@ def _estimate_wls(fits: FrameFits) -> SlopeFit:
 
 
 OLS = EstimatorSpec(key='ols', csv_label='unweighted fit',
-                    summary_name='Ordinary (unweighted) Least Squares',
+                    summary_name='Ordinary (unweighted) Least Squares, for comparison',
                     short_name='OLS', estimate=_estimate_ols)
 WLS = EstimatorSpec(key='wls', csv_label='weighted fit',
                     summary_name='Weighted Least Squares',
@@ -124,7 +124,8 @@ WLS = EstimatorSpec(key='wls', csv_label='weighted fit',
 
 # Column order of the CSV and the analysis dict (OLS block first).
 ESTIMATORS: Tuple[EstimatorSpec, ...] = (OLS, WLS)
-# Order of the summary text and the GUI (WLS, the recommended estimator, first).
+# Order of the summary text and the GUI (WLS, the default estimator, first).
+# OLS is reported for comparison with it; the plots show the WLS estimates.
 DISPLAY_ORDER: Tuple[str, ...] = ('wls', 'ols')
 # Estimators every simulation runs; any further estimator is opt-in.
 DEFAULT_ESTIMATOR_KEYS: Tuple[str, ...] = ('ols', 'wls')

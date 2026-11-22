@@ -178,7 +178,9 @@ and Fixed give the details.
   them from its `parameters` argument when they are not given. Both used to
   assume micrometers and nanoseconds.
 - The summary file lists the dispersion statistics of the estimates first,
-  followed by the fractions within the standard proximity levels.
+  followed by the fractions within the standard proximity levels. It marks
+  the ordinary least squares fit as given for comparison; the weighted fit
+  is the default and the one the plots show.
 - The accuracy histogram shows the probability of each bin on the y-axis,
   with the normal curve scaled to match, and draws no proximity limits. A
   dashed line marks the nominal value, the legend names the normal curve,

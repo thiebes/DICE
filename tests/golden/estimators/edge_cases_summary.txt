@@ -49,7 +49,7 @@ Diffusion Coefficient Estimate Statistics:
         0.00071 micrometer^2/nanosecond
     Root Mean Square Error:
         0.00156 micrometer^2/nanosecond
-  Ordinary (unweighted) Least Squares:
+  Ordinary (unweighted) Least Squares, for comparison:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:

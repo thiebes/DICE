@@ -49,7 +49,7 @@ Diffusion Coefficient Estimate Statistics:
         0.00712 centimeter^2/second
     Root Mean Square Error:
         0.01563 centimeter^2/second
-  Ordinary (unweighted) Least Squares:
+  Ordinary (unweighted) Least Squares, for comparison:
     Estimates:
         4 of 6 runs (2 without an estimate)
     Standard deviation:

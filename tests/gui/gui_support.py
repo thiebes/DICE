@@ -74,11 +74,11 @@ def enter_text(qtbot, line_edit: QLineEdit, text: str) -> None:
 
 
 def fit_method_radio(window, abbreviation: str) -> QRadioButton:
-    """The Analysis tab's fit-method radio whose label ends with '(WLS)' or '(OLS)'."""
+    """The Analysis tab's fit-method radio whose label holds '(WLS)' or '(OLS)'."""
     analysis_tab = window.tabs.widget(TAB_NAMES.index("Analysis Settings"))
     return next(
         radio for radio in analysis_tab.findChildren(QRadioButton)
-        if radio.text().endswith(f"({abbreviation})")
+        if f"({abbreviation})" in radio.text()
     )
 
 
