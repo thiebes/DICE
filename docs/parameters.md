@@ -157,7 +157,7 @@ The mean position (center) of the initial Gaussian profile.
 
 **Typical value:** 0.0 (the center of the spatial axis)
 
-**Limit:** the center must lie in the central 40% of the spatial window, so its distance from the center of the axis is at most 0.2 × `spatial width`. The fit looks for the center of each profile only there. DICE rejects a value outside this range, because the fit would then report a wrong width without failing.
+**Limit:** the center must lie in the central 40% of the spatial window, so its distance from the center of the axis is at most 0.2 × `spatial width`. The fit looks for the center of each profile only there. Table II of the 2024 paper gives a narrower range for the center, 0.1 × `spatial width` to each side; the code searches twice that. DICE rejects a value outside this range, because the fit would then report a wrong width without failing.
 
 **Units:** length unit
 
@@ -278,7 +278,7 @@ List the time points in increasing order, without duplicates. The results file r
 For each run, DICE fits a Gaussian function to each noisy profile. It then fits the variance of these Gaussians against time with two linear fits: weighted least squares (WLS) and ordinary least squares (OLS). In one dimension the slope equals 2D, so each linear fit gives one estimate of the diffusion coefficient. For all runs together, DICE reports:
 
 - the standard deviation of the estimates
-- the relative standard error (standard deviation divided by the nominal diffusion coefficient)
+- the relative standard deviation (standard deviation divided by the nominal diffusion coefficient)
 - the mean estimate, the bias (mean estimate minus nominal value), and the root-mean-square error (RMSE)
 - the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
 

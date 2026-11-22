@@ -63,7 +63,7 @@ class TestRunFromTheWindow:
         )
         window = finished_window
         # The standard deviation and bias carry the run's diffusion coefficient unit.
-        assert [window.precision_std_label.text(), window.precision_rse_label.text(),
+        assert [window.precision_std_label.text(), window.precision_rsd_label.text(),
                 window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] \
             == summary_label_texts(estimates, nominal, "μm²/ns")
         assert window.precision_placeholder.isHidden()

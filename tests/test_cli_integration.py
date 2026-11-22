@@ -198,7 +198,7 @@ class TestOutputDiffusionUnits:
         assert values['Standard deviation'] == [f"{estimates[m].std(ddof=1):.5f} {unit}" for m in ('wls', 'ols')]
         # Lengths, times, and the unitless ratios stay as they were.
         assert values['Nominal diffusion length'] == ['0.100 micrometer']
-        assert values['Relative standard error'] == [
+        assert values['Relative standard deviation'] == [
             f"{estimates[m].std(ddof=1) / 10.0:.3f}" for m in ('wls', 'ols')]
 
     @pytest.mark.parametrize('overrides, message', [
@@ -532,18 +532,20 @@ SUMMARY_SKELETON = [
     "  Weighted Least Squares:",
     "    Estimates:", "        # of # runs (# without an estimate)",
     "    Standard deviation:", "        # micrometer^2/nanosecond",
-    "    Relative standard error:", "        #",
+    "    Relative standard deviation:", "        #",
     "    Mean estimate:", "        # micrometer^2/nanosecond",
     "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
     "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Mean estimate / nominal:", "        #",
     "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "  Ordinary (unweighted) Least Squares, for comparison:",
     "    Estimates:", "        # of # runs (# without an estimate)",
     "    Standard deviation:", "        # micrometer^2/nanosecond",
-    "    Relative standard error:", "        #",
+    "    Relative standard deviation:", "        #",
     "    Mean estimate:", "        # micrometer^2/nanosecond",
     "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
     "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
+    "    Mean estimate / nominal:", "        #",
     "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "",
     "Precision at standard thresholds:",
@@ -685,10 +687,12 @@ class TestQuickTestOutputSchema:
             f"{d_estimates[m].mean() - 0.01:.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Root Mean Square Error'] == [
             f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
-        assert values['Relative standard error'] == [
+        assert values['Relative standard deviation'] == [
             f"{d_estimates[m].std(ddof=1) / 0.01:.3f}" for m in ('wls', 'ols')]
         assert values['Standard error of the mean and of the bias'] == [
             f"{d_estimates[m].std(ddof=1) / np.sqrt(100):.5f} {d_unit}" for m in ('wls', 'ols')]
+        # The ratio is the bias in the paper's form: 1 + bias / nominal.
+        assert values['Mean estimate / nominal'] == [f"{d_estimates[m].mean() / 0.01:.3f}" for m in ('wls', 'ols')]
         assert values['Estimates'] == ["100 of 100 runs (0 without an estimate)"] * 2
         assert values['DICE version'] == [dice.__version__]
         assert values['Seed'] == ['1']

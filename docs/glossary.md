@@ -26,6 +26,8 @@ The mean of the diffusion coefficient estimates minus the nominal diffusion coef
 
 The bias of a simulation is itself an estimate from a finite number of runs. Its standard error is the standard error of the mean. A bias smaller than about twice that standard error may be chance.
 
+The 2024 paper reports the bias as a ratio, the mean of the estimates divided by the nominal value (its Fig. 7), which is 1 when the estimates are correct on average. DICE gives that ratio as "Mean estimate / nominal" in the summary file and as "Mean D_est / D_nom" in the GUI. The ratio equals 1 plus the bias divided by the nominal value.
+
 ## C
 
 ### CNR (Contrast-to-Noise Ratio)
@@ -156,11 +158,11 @@ The response of an imaging system to a point source. In microscopy, the PSF is o
 
 ### Precision
 
-How closely the diffusion coefficient estimates of repeated measurements agree with each other. The standard deviation of the estimates and the relative standard error measure it.
+How closely the diffusion coefficient estimates of repeated measurements agree with each other. The standard deviation of the estimates and the relative standard deviation measure it.
 
 In the summary file, the heading "Precision at standard thresholds" stands over the fractions of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Such a fraction is high only when the estimates are both precise and accurate: a large spread or a large bias lowers it.
 
-**See also:** Accuracy, Proximity Level, Relative Standard Error
+**See also:** Accuracy, Proximity Level, Relative Standard Deviation
 
 ### Proximity Level
 
@@ -170,11 +172,11 @@ The proximity level is not a simulation parameter. The summary file reports the 
 
 ## R
 
-### Relative Standard Error
+### Relative Standard Deviation
 
 The sample standard deviation (divisor n − 1) of the diffusion coefficient estimates divided by the nominal diffusion coefficient. It is the spread of single estimates as a fraction of the nominal value: 0.25 means that one measurement is typically 25% of the nominal value away from the mean of the estimates.
 
-It is not the standard error of the mean, which is smaller by the square root of the number of runs and describes how well the simulation knows the mean.
+It is not a standard error: the standard error of the mean is smaller by the square root of the number of runs and describes how well the simulation knows the mean. The 2024 paper reports the spread of the estimates as their standard deviation (SD), and uses "standard error" (SE) for the uncertainty that a single fit reports for its own parameter.
 
 ### RMSE (Root-Mean-Square Error)
 

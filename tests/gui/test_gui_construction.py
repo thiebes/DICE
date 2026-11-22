@@ -167,7 +167,7 @@ class TestDefaultValues:
     def test_analysis_tab_waits_for_results(self, window):
         assert fit_method_radio(window, "WLS").isChecked()
         assert not fit_method_radio(window, "OLS").isChecked()
-        assert [window.precision_std_label.text(), window.precision_rse_label.text(),
+        assert [window.precision_std_label.text(), window.precision_rsd_label.text(),
                 window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] == ["—"] * 4
         assert not window.precision_placeholder.isHidden()
         assert window.precision_placeholder.text() == "Run a simulation to see results."

@@ -325,7 +325,7 @@ def write_summary_file(
         time_unit = global_time_unit(parameters)
 
     # The unit of every diffusion coefficient value: the nominal value and the
-    # statistics of the estimates, except the unitless relative standard error.
+    # statistics of the estimates, except the unitless relative standard deviation.
     d_length_unit, d_time_unit = summary_diffusion_units(length_unit, time_unit, output_units)
     d_unit = f"{d_length_unit}^2/{d_time_unit}"
 
@@ -383,9 +383,9 @@ def write_summary_file(
                 f.write(f"{indent}    Standard deviation:\n")
                 f.write(f"{indent}        {d_text(metrics['std'])} {d_unit}\n")
                 if nominal_d and nominal_d != 0:
-                    rse = metrics['std'] / nominal_d
-                    f.write(f"{indent}    Relative standard error:\n")
-                    f.write(f"{indent}        {rse:.3f}\n")
+                    relative_standard_deviation = metrics['std'] / nominal_d
+                    f.write(f"{indent}    Relative standard deviation:\n")
+                    f.write(f"{indent}        {relative_standard_deviation:.3f}\n")
                 f.write(f"{indent}    Mean estimate:\n")
                 f.write(f"{indent}        {d_text(metrics['mean'])} {d_unit}\n")
                 if 'standard_error' in metrics:
@@ -393,6 +393,11 @@ def write_summary_file(
                     f.write(f"{indent}        {d_text(metrics['standard_error'])} {d_unit}\n")
                 f.write(f"{indent}    Bias (mean - nominal):\n")
                 f.write(f"{indent}        {d_text(metrics['bias'])} {d_unit}\n")
+                if nominal_d and nominal_d != 0:
+                    # The form in which the 2024 paper reports the bias (its Fig. 7);
+                    # the Analysis tab of the GUI shows it as "Mean D_est / D_nom".
+                    f.write(f"{indent}    Mean estimate / nominal:\n")
+                    f.write(f"{indent}        {metrics['mean'] / nominal_d:.3f}\n")
                 f.write(f"{indent}    Root Mean Square Error:\n")
                 f.write(f"{indent}        {d_text(metrics['rmse'])} {d_unit}\n")
 

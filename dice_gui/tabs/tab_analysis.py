@@ -61,16 +61,16 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     precision_layout = QFormLayout(precision_group)
 
     main_window.precision_std_label = QLabel("—")
-    main_window.precision_rse_label = QLabel("—")
+    main_window.precision_rsd_label = QLabel("—")
     main_window.precision_bias_label = QLabel("—")
     main_window.precision_mean_ratio_label = QLabel("—")
     # The unit beside these values can come from a results file: no markup.
-    for value_label in (main_window.precision_std_label, main_window.precision_rse_label,
+    for value_label in (main_window.precision_std_label, main_window.precision_rsd_label,
                         main_window.precision_bias_label, main_window.precision_mean_ratio_label):
         value_label.setTextFormat(Qt.TextFormat.PlainText)
 
     precision_layout.addRow("Std Dev:", main_window.precision_std_label)
-    precision_layout.addRow("Relative Std Error:", main_window.precision_rse_label)
+    precision_layout.addRow("Relative Std Dev:", main_window.precision_rsd_label)
     precision_layout.addRow("Bias (mean − nominal) ± standard error:", main_window.precision_bias_label)
     precision_layout.addRow("Mean D_est / D_nom:", main_window.precision_mean_ratio_label)
 
@@ -222,7 +222,7 @@ def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Op
     """
     unit_suffix = f" {d_unit}" if d_unit else ""
     main_window.precision_std_label.setText(f"{metrics['std']:.3g}{unit_suffix}")
-    main_window.precision_rse_label.setText(f"{metrics['relative_std_error']:.3f}")
+    main_window.precision_rsd_label.setText(f"{metrics['relative_std_dev']:.3f}")
     main_window.precision_bias_label.setText(
         f"{value_with_uncertainty(metrics['bias'], metrics['bias_standard_error'])}{unit_suffix}")
     main_window.precision_mean_ratio_label.setText(f"{metrics['mean_relative_error']:.3f}")
@@ -242,7 +242,7 @@ def reset_precision_summary(main_window: "DiceGUI", placeholder: str = NO_RESULT
     """Reset precision summary to placeholder state, with `placeholder` as the text shown in its place."""
     main_window.precision_placeholder.setText(placeholder)
     main_window.precision_std_label.setText("—")
-    main_window.precision_rse_label.setText("—")
+    main_window.precision_rsd_label.setText("—")
     main_window.precision_bias_label.setText("—")
     main_window.precision_mean_ratio_label.setText("—")
     main_window.precision_placeholder.setVisible(True)

@@ -31,7 +31,7 @@ FIT_METHOD_COLUMNS = {"wls": WLS_SLOPE_COLUMN, "ols": OLS_SLOPE_COLUMN}
 def _summary_labels(window) -> list[str]:
     return [
         window.precision_std_label.text(),
-        window.precision_rse_label.text(),
+        window.precision_rsd_label.text(),
         window.precision_bias_label.text(),
         window.precision_mean_ratio_label.text(),
     ]

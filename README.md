@@ -14,7 +14,7 @@ Joseph J. Thiebes, Erik M. Grumstrup; Quantifying noise effects in optical measu
 
 ## What Does DICE Do?
 
-DICE estimates how precise and how accurate a diffusion coefficient measurement can be with your experimental parameters, such as the initial spot width, the nominal diffusion length, and the initial contrast-to-noise ratio (CNR). It simulates many measurements with these parameters and estimates the diffusion coefficient from each one. It then reports the standard deviation, relative standard error, bias, and root-mean-square error (RMSE) of the estimates.
+DICE estimates how precise and how accurate a diffusion coefficient measurement can be with your experimental parameters, such as the initial spot width, the nominal diffusion length, and the initial contrast-to-noise ratio (CNR). It simulates many measurements with these parameters and estimates the diffusion coefficient from each one. It then reports the standard deviation, relative standard deviation, bias, and root-mean-square error (RMSE) of the estimates.
 
 DICE also reports the fraction of estimates within a chosen proximity of the nominal value, for example: "50% of the diffusion coefficient estimates are within ±10% of the nominal value." That fraction estimates the probability that one measurement with your parameters reaches the accuracy and precision that your investigation requires. You choose the proximity level when you analyze the results, after the simulation. The summary file reports ±5%, ±10%, ±20%, and ±50%. In the GUI, you can choose any level from 1% to 50%.
 

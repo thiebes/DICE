@@ -69,7 +69,7 @@ and Fixed give the details.
   spreading of the profile), an initial profile that is narrow compared with
   the pixel size, or very few time points.
 - Post-hoc accuracy analysis in the GUI Analysis Settings tab. After a run,
-  the tab shows the standard deviation, relative standard error, and bias of
+  the tab shows the standard deviation, relative standard deviation, and bias of
   the estimates, and the fraction of estimates within any proximity level
   from 1% to 50% of the nominal value, for the weighted least squares (WLS)
   or the ordinary least squares (OLS) fit. A histogram of the estimates
@@ -91,6 +91,10 @@ and Fixed give the details.
   GUI Analysis Settings tab shows the same for the bias and the fraction.
   The analysis dictionary and the JSON file carry them as `standard_error`
   and `precision_intervals`.
+- The summary file gives the ratio of the mean estimate to the nominal value
+  ("Mean estimate / nominal"), the form in which the 2024 paper reports the
+  bias. "Bias" in DICE is the difference, mean minus nominal, with its
+  standard error.
 - The summary file and the JSON file record the DICE version and the seed of
   the simulation. A simulation in which no run gives an estimate says so in
   the summary, on the console and in the GUI, in place of "completed
@@ -154,13 +158,13 @@ and Fixed give the details.
 - Behavior change: the standard deviation of the estimates is the sample
   standard deviation (divisor n − 1), in the summary, the JSON file, the
   plots and the GUI. It was the population form (divisor n). The reported
-  standard deviation and relative standard error are larger by the factor
+  standard deviation and relative standard deviation are larger by the factor
   √(n / (n − 1)): 0.5% for 100 runs, 0.05% for 1000. The standard error of
   the mean is this standard deviation divided by √n.
 - Behavior change: `proximity level` is no longer a simulation parameter. A
   `proximity level` key in a parameters file triggers a warning and is
   otherwise ignored. DICE reports the standard deviation, relative standard
-  error, mean, bias, and root-mean-square error (RMSE) of the diffusion
+  deviation, mean, bias, and root-mean-square error (RMSE) of the diffusion
   coefficient estimates, and the fraction of
   estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Choose any
   other proximity level after the simulation, in the GUI or from the results

@@ -1393,7 +1393,7 @@ class DiceGUI(QMainWindow):
         d_scale, d_unit = self.interface.diffusion_coefficient_unit()
         metrics = {
             'std': accuracy['std'] * d_scale,
-            'relative_std_error': accuracy['std'] / nominal_d,
+            'relative_std_dev': accuracy['std'] / nominal_d,
             'bias': accuracy['bias'] * d_scale,
             'bias_standard_error': accuracy['standard_error'] * d_scale,
             'mean_relative_error': accuracy['mean'] / nominal_d,

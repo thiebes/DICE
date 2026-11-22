@@ -39,7 +39,7 @@ Diffusion Coefficient Estimate Statistics:
         0 of 2 runs (2 without an estimate)
     Standard deviation:
         nan micrometer^2/nanosecond
-    Relative standard error:
+    Relative standard deviation:
         nan
     Mean estimate:
         nan micrometer^2/nanosecond
@@ -47,6 +47,8 @@ Diffusion Coefficient Estimate Statistics:
         nan micrometer^2/nanosecond
     Bias (mean - nominal):
         nan micrometer^2/nanosecond
+    Mean estimate / nominal:
+        nan
     Root Mean Square Error:
         nan micrometer^2/nanosecond
   Ordinary (unweighted) Least Squares, for comparison:
@@ -54,7 +56,7 @@ Diffusion Coefficient Estimate Statistics:
         0 of 2 runs (2 without an estimate)
     Standard deviation:
         nan micrometer^2/nanosecond
-    Relative standard error:
+    Relative standard deviation:
         nan
     Mean estimate:
         nan micrometer^2/nanosecond
@@ -62,6 +64,8 @@ Diffusion Coefficient Estimate Statistics:
         nan micrometer^2/nanosecond
     Bias (mean - nominal):
         nan micrometer^2/nanosecond
+    Mean estimate / nominal:
+        nan
     Root Mean Square Error:
         nan micrometer^2/nanosecond
 
