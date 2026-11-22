@@ -23,20 +23,82 @@
    "wls": 0.0
   }
  },
+ "precision_intervals": {
+  "5%": {
+   "ols": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   },
+   "wls": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   }
+  },
+  "10%": {
+   "ols": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   },
+   "wls": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   }
+  },
+  "20%": {
+   "ols": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   },
+   "wls": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   }
+  },
+  "50%": {
+   "ols": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   },
+   "wls": {
+    "count": 0,
+    "total": 0,
+    "lower": NaN,
+    "upper": NaN
+   }
+  }
+ },
  "accuracy": {
   "ols": {
+   "count": 0,
    "mean": NaN,
    "median": NaN,
    "std": NaN,
+   "standard_error": NaN,
    "bias": NaN,
    "relative_bias": NaN,
    "rmse": NaN,
    "relative_rmse": NaN
   },
   "wls": {
+   "count": 0,
    "mean": NaN,
    "median": NaN,
    "std": NaN,
+   "standard_error": NaN,
    "bias": NaN,
    "relative_bias": NaN,
    "rmse": NaN,

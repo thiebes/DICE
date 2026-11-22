@@ -14,6 +14,35 @@ from typing import Dict, List, Tuple, Optional, Union
 from ..utils.validators import validate_array_like
 from .profiles import gaussian
 
+# Fraction of the window width, at each side of the window, in which
+# gauss_fitting does not look for the center of a profile. The center is
+# searched in the remaining central 40% of the window.
+CENTER_SEARCH_MARGIN = 0.3
+
+
+def center_search_limits(x_axis: np.ndarray) -> Tuple[float, float]:
+    """
+    The range of positions in which gauss_fitting looks for the center of a profile.
+
+    A profile centered outside this range is fitted with its center held at
+    the nearest limit. The fit then reports a wrong width without failing, so
+    the parameters of a simulation must keep the center inside the range
+    (dice.io.parameters.validate_parameters).
+
+    Parameters
+    ----------
+    x_axis : np.ndarray
+        The spatial axis.
+
+    Returns
+    -------
+    tuple of float
+        The lowest and the highest center position: the central 40% of the window.
+    """
+    low, high = float(np.min(x_axis)), float(np.max(x_axis))
+    margin = (high - low) * CENTER_SEARCH_MARGIN
+    return low + margin, high - margin
+
 
 def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -> Dict:
     """
@@ -88,8 +117,8 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
             intensity_scale = 1.0  # a zero or non-finite profile is fitted as it is
         this_profile = this_profile / intensity_scale
 
-        # Set bounds for mu (central region of the window)
-        mu_margin = xwid * 0.3  # Allow mu within central 60% of window
+        # Set bounds for mu: the central 40% of the window (center_search_limits)
+        mu_margin = xwid * CENTER_SEARCH_MARGIN
         mu0_min = xmin + mu_margin
         mu0_max = xmax - mu_margin
 

@@ -332,7 +332,7 @@ class TestCustomProximityLevels:
 class TestCnrBins:
     """A simulation with a noise range is analyzed in bins of nominal CNR with equal numbers of runs."""
 
-    BIN_KEYS = ['cnr_min', 'cnr_max', 'num_runs', 'precision', 'accuracy', 'statistics']
+    BIN_KEYS = ['cnr_min', 'cnr_max', 'num_runs', 'precision', 'precision_intervals', 'accuracy', 'statistics']
 
     @staticmethod
     def _range_output(noise_sigmas, amplitude_0=1.0, failed_wls_runs=()):
@@ -429,3 +429,41 @@ class TestCnrBins:
     def test_no_runs_no_bins(self):
         analysis = analyze_simulation_results(self._range_output([]))
         assert analysis['cnr_bins'] == []
+
+
+class TestUncertaintyOfTheStatistics:
+    """A statistic of a finite number of runs comes with its uncertainty."""
+
+    @pytest.mark.parametrize('count, total', [(0, 20), (1, 20), (19, 100), (265, 1500), (20, 20), (7, 7)])
+    def test_interval_agrees_with_statsmodels(self, count, total):
+        from statsmodels.stats.proportion import proportion_confint
+        from dice.analysis.statistics import proportion_interval
+
+        lower, upper = proportion_interval(count, total)
+        expected = proportion_confint(count, total, alpha=0.05, method='wilson')
+
+        assert (lower, upper) == pytest.approx(expected, abs=1e-12)
+        assert 0.0 <= lower <= count / total <= upper <= 1.0
+        assert upper - lower > 0  # also for 0 and for all of the estimates
+
+    def test_interval_narrows_with_more_runs(self):
+        from dice.analysis.statistics import proportion_interval
+
+        widths = [upper - lower for lower, upper in
+                  (proportion_interval(total // 5, total) for total in (20, 100, 500, 2500))]
+        assert widths == sorted(widths, reverse=True)
+
+    def test_no_estimates_give_no_interval(self):
+        from dice.analysis.statistics import proportion_interval
+
+        assert all(np.isnan(limit) for limit in proportion_interval(0, 0))
+
+    def test_standard_error_is_that_of_the_mean(self):
+        estimates = np.array([0.009, 0.011, 0.0105, 0.0098, 0.0102, 0.0089])
+        metrics = calculate_accuracy_metrics(estimates, 0.01)
+
+        assert metrics['count'] == 6
+        assert metrics['standard_error'] == pytest.approx(estimates.std(ddof=1) / np.sqrt(6))
+        assert np.isnan(calculate_accuracy_metrics(estimates[:1], 0.01)['standard_error'])
+        empty = calculate_accuracy_metrics(np.array([]), 0.01)
+        assert empty['count'] == 0 and np.isnan(empty['standard_error'])

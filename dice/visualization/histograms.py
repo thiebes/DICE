@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 from scipy.stats import norm
-from typing import Dict, List, Optional, Sequence, Union, Any
+from typing import Dict, List, Optional, Sequence, Tuple, Union, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,51 @@ def histogram_options(parameters: Dict[str, Any]) -> Dict[str, Any]:
         options['x_lim'] = validate_limits(options['x_lim'], "'image x_lim'")
 
     return options
+
+
+def counts_beyond_limits(values: np.ndarray, limits) -> Tuple[int, int]:
+    """Number of finite values below the lower limit and above the upper limit of an axis."""
+    finite = np.asarray(values, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    low, high = min(limits), max(limits)
+    return int(np.count_nonzero(finite < low)), int(np.count_nonzero(finite > high))
+
+
+def note_counts_beyond_axis(ax, values: np.ndarray, limits, along: str, font_size: float) -> None:
+    """
+    Write on a plot how many values lie beyond the limits of one of its axes.
+
+    The default limits of the accuracy plots span three standard deviations
+    around the mean, so a few estimates can fall outside the picture. The
+    note stands just outside the frame, at the end of the axis it refers to;
+    there is none when every value is drawn.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to annotate.
+    values : np.ndarray
+        The plotted values along the axis.
+    limits : sequence of two floats
+        The limits of that axis.
+    along : str
+        'x' for the horizontal axis, 'y' for the vertical one.
+    font_size : float
+        Font size of the figure.
+    """
+    below, above = counts_beyond_limits(values, limits)
+    if along == 'x':
+        if below:
+            ax.text(0.0, 1.01, f'{below} below this range', transform=ax.transAxes,
+                    ha='left', va='bottom', fontsize=font_size)
+        if above:
+            ax.text(1.0, 1.01, f'{above} above this range', transform=ax.transAxes,
+                    ha='right', va='bottom', fontsize=font_size)
+    else:
+        notes = ([f'{above} above this range'] if above else []) + ([f'{below} below this range'] if below else [])
+        if notes:
+            ax.text(1.0, 1.01, ', '.join(notes), transform=ax.transAxes,
+                    ha='right', va='bottom', fontsize=font_size)
 
 
 def plot_accuracy_histogram(
@@ -235,10 +280,16 @@ def plot_accuracy_histogram(
         width=tick_width
     )
 
-    # Plot normal distribution overlay when variance is nonzero
-    stats_label = (f'mean {np.round(mu_dd0, 3)}\n'
-                   f'median {np.round(np.median(dest_over_d0), 3)}\n'
-                   f'stdev {np.round(sigma_dd0, 3)}')
+    # Mark the nominal value, where the ratio is 1
+    ax.axvline(1.0, color=colors['dice_green'], linewidth=1.5, linestyle='--', label='nominal')
+
+    # Plot normal distribution overlay when variance is nonzero. The legend
+    # is text only; each label has the color of what it names. The curve has
+    # the mean and the standard deviation of the estimates; the median is a
+    # property of the estimates alone.
+    mean_label = f'mean {np.round(mu_dd0, 3)}'
+    stdev_label = f'stdev {np.round(sigma_dd0, 3)}'
+    median_label = f'median {np.round(np.median(dest_over_d0), 3)}'
     if sigma_dd0 > 0:
         binspace_dd0 = np.linspace(bins_dd0[0], bins_dd0[-1], 100)
         bin_width = bins_dd0[1] - bins_dd0[0]
@@ -247,16 +298,21 @@ def plot_accuracy_histogram(
             binspace_dd0, y_dd0,
             color=dice_blue,
             linewidth=2,
-            label=stats_label
+            label=f'normal curve\n{mean_label}\n{stdev_label}'
         )
+        ax.plot([], [], ' ', color='black', label=median_label)
     else:
-        ax.plot([], [], ' ', label=stats_label)
+        ax.plot([], [], ' ', color='black', label=f'{mean_label}\n{median_label}\n{stdev_label}')
+
+    # Estimates beyond the limits of the axis are not drawn, so count them.
+    note_counts_beyond_axis(ax, dest_over_d0, x_lim, along='x', font_size=font_size)
 
     # Add legend
     ax.legend(
-        fontsize=font_size, 
-        handlelength=0, 
-        labelspacing=2, 
+        fontsize=font_size,
+        handlelength=0,
+        labelspacing=1,
+        labelcolor='linecolor',
         frameon=False
     )
 
@@ -389,6 +445,8 @@ def plot_accuracy_vs_cnr(
         y_lim = [mean - 3 * std, mean + 3 * std] if std > 0 else [mean - 0.1, mean + 0.1]
     if y_lim is not None:
         ax.set_ylim(y_lim)
+        # Estimates beyond the limits of the axis are not drawn, so count them.
+        note_counts_beyond_axis(ax, finite_ratios, y_lim, along='y', font_size=font_size)
 
     ax.tick_params(
         axis='both',

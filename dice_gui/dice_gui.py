@@ -1258,13 +1258,17 @@ class DiceGUI(QMainWindow):
         if nominal_d == 0:
             return
 
+        # The statistics are the engine's, so the tab and the summary file agree.
         # The standard deviation and bias are reported in a named unit; the ratios are unitless.
+        from dice.analysis.statistics import calculate_accuracy_metrics
+        accuracy = calculate_accuracy_metrics(d_arr, nominal_d)
         d_scale, d_unit = self.interface.diffusion_coefficient_unit()
         metrics = {
-            'std': np.std(d_arr) * d_scale,
-            'relative_std_error': np.std(d_arr) / nominal_d,
-            'bias': (np.mean(d_arr) - nominal_d) * d_scale,
-            'mean_relative_error': np.mean(d_arr) / nominal_d,
+            'std': accuracy['std'] * d_scale,
+            'relative_std_error': accuracy['std'] / nominal_d,
+            'bias': accuracy['bias'] * d_scale,
+            'bias_standard_error': accuracy['standard_error'] * d_scale,
+            'mean_relative_error': accuracy['mean'] / nominal_d,
         }
 
         populate_precision_summary(self, metrics, d_unit)

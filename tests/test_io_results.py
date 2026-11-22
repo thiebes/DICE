@@ -273,8 +273,12 @@ class TestNoiseRangeOutputs:
             wls = np.array([run.wls_slope / 2 for run in runs_in_bin])
             assert f"      Mean estimate:\n          {wls.mean():.5f} micrometer^2/nanosecond\n" in section
             assert f"      Standard deviation:\n          {wls.std():.5f} micrometer^2/nanosecond\n" in section
-            within_10 = np.mean(np.abs(wls / 0.01 - 1) <= 0.1)
-            assert f"    Fraction within ±10% of nominal:\n      WLS: {within_10:.2%}" in section
+            count = int(np.sum(np.abs(wls / 0.01 - 1) <= 0.1))
+            assert (f"    Fraction within ±10% of nominal:\n"
+                    f"      WLS: {count / len(wls):.1%} ({count} of {len(wls)}; ") in section
+            assert f"      Estimates:\n          {len(wls)} of {len(runs_in_bin)} runs (0 without an estimate)\n" in section
+            assert (f"      Standard error of the mean and of the bias:\n"
+                    f"          {wls.std(ddof=1) / np.sqrt(len(wls)):.5f} micrometer^2/nanosecond\n") in section
         # The pooled statistics of all runs are not reported.
         assert "\nDiffusion Coefficient Estimate Statistics:" not in text
         assert text.count("Diffusion Coefficient Estimate Statistics:") == 2
@@ -317,3 +321,38 @@ class TestWritersTakeTheUnitsOfTheRun:
         assert text == explicit.read_text(encoding='utf-8')
         assert 'nanometer' in text and 'picosecond' in text
         assert 'micrometer' not in text and 'nanosecond' not in text
+
+
+class TestSummaryRecordsWhatReproducesIt:
+    """The summary names the DICE version and the seed of the simulation."""
+
+    def test_version_and_seed_of_a_seeded_simulation(self, tmp_path, quick_test_parameters):
+        import dice
+
+        seeded = simulate_quick_test(quick_test_parameters, quick_test_parameters['time series'], num_runs=3)
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(seeded, summary_file, quick_test_parameters, analyze_simulation_results(seeded))
+        text = summary_file.read_text(encoding='utf-8')
+
+        assert seeded.seed == 3
+        assert f"DICE version:\n    {dice.__version__}\nSeed:\n    3\n" in text
+
+    def test_unseeded_simulation_says_so(self, tmp_path, quick_test_simulation, quick_test_parameters,
+                                         quick_test_analysis):
+        summary_file = tmp_path / 'summary.txt'
+        write_summary_file(quick_test_simulation, summary_file, quick_test_parameters, quick_test_analysis)
+
+        assert quick_test_simulation.seed is None
+        assert "Seed:\n    none (another simulation" in summary_file.read_text(encoding='utf-8')
+
+    def test_child_of_a_seed_sequence_records_its_root(self, quick_test_parameters):
+        child = np.random.SeedSequence(41).spawn(2)[1]
+        params = quick_test_parameters
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy as adapt
+        result = run_monte_carlo_simulation(
+            adapt(params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
+                  params['nominal diffusion length']),
+            params['x array'], params['time series'], params['noise series'],
+            num_runs=2, multiprocessing=False, seed=child)
+
+        assert result.seed == 41

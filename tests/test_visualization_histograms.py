@@ -561,3 +561,117 @@ class TestAccuracyVsCnr:
         from dice.visualization.histograms import accuracy_scatter_options
         with pytest.raises(ValueError, match="'image x_lim' must be two increasing finite numbers"):
             accuracy_scatter_options({'image x_lim': [1.5, 0.5]})
+
+
+@pytest.fixture(scope='module')
+def quick_test_ratios() -> np.ndarray:
+    """D estimate / nominal D of a seeded serial simulation of the quick_test example."""
+    from dice.analysis.simulation import run_monte_carlo_simulation
+    from dice.io.parameters import open_parameters
+    from dice.utils.legacy_compatibility import create_parameters_from_legacy
+
+    params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+    result = run_monte_carlo_simulation(
+        create_parameters_from_legacy(
+            params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
+            params['nominal diffusion length']),
+        params['x array'], params['time series'], params['noise series'],
+        num_runs=60, multiprocessing=False, seed=7)
+    return result.d_estimates('wls') / params['nominal diffusion coefficient']
+
+
+@pytest.fixture(scope='module')
+def noise_range_points() -> tuple:
+    """Initial CNR and D estimate / nominal D of each run of the seeded noise_range example."""
+    from dice.analysis.simulation import run_monte_carlo_simulation
+    from dice.io.parameters import noise_range_from_parameters, open_parameters
+    from dice.utils.legacy_compatibility import create_parameters_from_legacy
+
+    noise_draws, runs = np.random.SeedSequence(7).spawn(2)
+    params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'noise_range.txt',
+                             seed=noise_draws)
+    result = run_monte_carlo_simulation(
+        create_parameters_from_legacy(
+            params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
+            params['nominal diffusion length']),
+        params['x array'], params['time series'], params['noise series'],
+        num_runs=params['number of runs'], multiprocessing=False, seed=runs,
+        noise_range=noise_range_from_parameters(params))
+    fitted = [run for run in result.run_results if run.wls_slope is not None]
+    cnr = np.array([params['amplitude_0'] / run.noise_sigma for run in fitted])
+    ratios = np.array([run.wls_slope / 2 for run in fitted]) / params['nominal diffusion coefficient']
+    return cnr, ratios
+
+
+def _figure_texts(fig) -> list:
+    return [text.get_text() for text in fig.axes[0].texts]
+
+
+class TestEstimatesBeyondTheAxis:
+    """The saved plots mark the nominal value and count the estimates their axis does not show."""
+
+    def test_histogram_marks_the_nominal_value(self, tmp_path, quick_test_ratios):
+        from dice.visualization.histograms import plot_accuracy_histogram
+
+        fig = plot_accuracy_histogram(
+            simulation_result={'collated results': {'d_est_over_d_nom': quick_test_ratios.tolist()}},
+            filename=str(tmp_path / 'histogram.png'))
+        ax = fig.axes[0]
+        vertical = [line for line in ax.lines if list(line.get_xdata()) == [1.0, 1.0]]
+        legend = [text.get_text() for text in ax.get_legend().get_texts()]
+        plt.close(fig)
+
+        assert len(vertical) == 1 and vertical[0].get_linestyle() == '--'
+        assert legend[0] == 'nominal'
+        assert legend[1].startswith('normal curve\nmean ') and '\nstdev ' in legend[1]
+        assert 'median' not in legend[1] and legend[2].startswith('median ')
+
+    def test_histogram_counts_what_narrow_limits_cut_off(self, tmp_path, quick_test_ratios):
+        from dice.visualization.histograms import plot_accuracy_histogram
+
+        limits = [0.8, 1.3]
+        below = int(np.sum(quick_test_ratios < limits[0]))
+        above = int(np.sum(quick_test_ratios > limits[1]))
+        assert below > 0 and above > 0  # the limits do cut estimates off on both sides
+
+        fig = plot_accuracy_histogram(
+            simulation_result={'collated results': {'d_est_over_d_nom': quick_test_ratios.tolist()}},
+            filename=str(tmp_path / 'histogram.png'), x_lim=limits)
+        texts = _figure_texts(fig)
+        plt.close(fig)
+
+        assert texts == [f'{below} below this range', f'{above} above this range']
+
+    def test_histogram_with_every_estimate_in_view_has_no_note(self, tmp_path, quick_test_ratios):
+        from dice.visualization.histograms import plot_accuracy_histogram
+
+        limits = [quick_test_ratios.min() - 0.1, quick_test_ratios.max() + 0.1]
+        fig = plot_accuracy_histogram(
+            simulation_result={'collated results': {'d_est_over_d_nom': quick_test_ratios.tolist()}},
+            filename=str(tmp_path / 'histogram.png'), x_lim=limits)
+        texts = _figure_texts(fig)
+        plt.close(fig)
+
+        assert texts == []
+
+    def test_scatter_counts_what_its_default_limits_cut_off(self, tmp_path, noise_range_points):
+        from dice.visualization.histograms import counts_beyond_limits, plot_accuracy_vs_cnr
+
+        cnr, ratios = noise_range_points
+        fig = plot_accuracy_vs_cnr(cnr, ratios, filename=str(tmp_path / 'scatter.png'))
+        ax = fig.axes[0]
+        below, above = counts_beyond_limits(ratios, ax.get_ylim())
+        texts = _figure_texts(fig)
+        plt.close(fig)
+
+        mean, std = ratios.mean(), ratios.std()
+        assert below == int(np.sum(ratios < mean - 3 * std))
+        assert above == int(np.sum(ratios > mean + 3 * std))
+        assert below + above > 0  # the example has estimates beyond three standard deviations
+        expected = ([f'{above} above this range'] if above else []) + ([f'{below} below this range'] if below else [])
+        assert texts == [', '.join(expected)]
+
+    def test_values_that_are_not_numbers_are_not_counted(self):
+        from dice.visualization.histograms import counts_beyond_limits
+
+        assert counts_beyond_limits(np.array([0.5, 1.0, 2.0, np.nan, np.inf, -np.inf]), [0.8, 1.5]) == (1, 1)

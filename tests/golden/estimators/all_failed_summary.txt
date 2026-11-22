@@ -1,6 +1,11 @@
 DICE Simulation Summary
 ==================================================
 
+DICE version:
+    <version>
+Seed:
+    none (another simulation with these parameters draws other noise)
+
 Simulation Parameters:
 ------------------------------
 Number of runs:
@@ -30,22 +35,30 @@ Analysis Results:
 ------------------------------
 Diffusion Coefficient Estimate Statistics:
   Weighted Least Squares:
+    Estimates:
+        0 of 2 runs (2 without an estimate)
     Standard deviation:
         nan micrometer^2/nanosecond
     Relative standard error:
         nan
     Mean estimate:
+        nan micrometer^2/nanosecond
+    Standard error of the mean and of the bias:
         nan micrometer^2/nanosecond
     Bias (mean - nominal):
         nan micrometer^2/nanosecond
     Root Mean Square Error:
         nan micrometer^2/nanosecond
   Ordinary (unweighted) Least Squares:
+    Estimates:
+        0 of 2 runs (2 without an estimate)
     Standard deviation:
         nan micrometer^2/nanosecond
     Relative standard error:
         nan
     Mean estimate:
+        nan micrometer^2/nanosecond
+    Standard error of the mean and of the bias:
         nan micrometer^2/nanosecond
     Bias (mean - nominal):
         nan micrometer^2/nanosecond
@@ -53,13 +66,14 @@ Diffusion Coefficient Estimate Statistics:
         nan micrometer^2/nanosecond
 
 Precision at standard thresholds:
+  (each fraction with its count of estimates and its 95% interval)
   Fraction within ±5% of nominal:
-    WLS: 0.00%    OLS: 0.00%
+    WLS: no estimates    OLS: no estimates
   Fraction within ±10% of nominal:
-    WLS: 0.00%    OLS: 0.00%
+    WLS: no estimates    OLS: no estimates
   Fraction within ±20% of nominal:
-    WLS: 0.00%    OLS: 0.00%
+    WLS: no estimates    OLS: no estimates
   Fraction within ±50% of nominal:
-    WLS: 0.00%    OLS: 0.00%
+    WLS: no estimates    OLS: no estimates
 
-Simulation completed successfully.
+Simulation completed, but no run gave an estimate of the diffusion coefficient.

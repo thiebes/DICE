@@ -6,6 +6,7 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 """
 
 import dataclasses
+from statistics import NormalDist
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Union
@@ -56,6 +57,44 @@ def calculate_precision(
     return np.mean(within_proximity)
 
 
+def proportion_interval(successes: int, total: int, confidence: float = 0.95) -> Tuple[float, float]:
+    """
+    Confidence interval of a proportion estimated from a count.
+
+    The fraction of estimates within a proximity level comes from a finite
+    number of runs: 1 of 20 is not a proportion of exactly 5%. The interval
+    is the score interval for a binomial proportion (the Wilson interval).
+    Unlike the interval from the standard error, it stays inside 0 to 1 and
+    has a width when the count is 0 or equals the total.
+
+    Parameters
+    ----------
+    successes : int
+        Number of estimates within the proximity level.
+    total : int
+        Number of estimates.
+    confidence : float
+        Confidence level, 0.95 for a 95% interval.
+
+    Returns
+    -------
+    tuple of float
+        Lower and upper limit of the proportion (0-1); NaN for no estimates.
+    """
+    if total <= 0:
+        return (np.nan, np.nan)
+    z = NormalDist().inv_cdf(0.5 + confidence / 2)
+    proportion = successes / total
+    denominator = 1 + z ** 2 / total
+    center = (proportion + z ** 2 / (2 * total)) / denominator
+    half_width = z * np.sqrt(proportion * (1 - proportion) / total + z ** 2 / (4 * total ** 2)) / denominator
+    # At a count of none or of all, the interval ends exactly at 0 or at 1;
+    # rounding must not move that end.
+    lower = 0.0 if successes == 0 else max(0.0, float(center - half_width))
+    upper = 1.0 if successes == total else min(1.0, float(center + half_width))
+    return (lower, upper)
+
+
 def calculate_accuracy_metrics(
     estimates: np.ndarray,
     nominal_value: float
@@ -73,13 +112,19 @@ def calculate_accuracy_metrics(
     Returns
     -------
     dict
-        Dictionary containing accuracy metrics.
+        Dictionary containing accuracy metrics. 'count' is the number of
+        estimates, and 'standard_error' the standard error of their mean
+        (sample standard deviation / sqrt(count)), which is also the standard
+        error of the bias, because the nominal value is exact. It is NaN for
+        fewer than two estimates.
     """
     if len(estimates) == 0:
         return {
+            'count': 0,
             'mean': np.nan,
             'median': np.nan,
             'std': np.nan,
+            'standard_error': np.nan,
             'bias': np.nan,
             'relative_bias': np.nan,
             'rmse': np.nan,
@@ -99,10 +144,15 @@ def calculate_accuracy_metrics(
     rmse = np.sqrt(np.mean(errors**2))
     relative_rmse = rmse / nominal_value if nominal_value != 0 else np.nan
     
+    count = len(estimates)
+    standard_error = np.std(estimates, ddof=1) / np.sqrt(count) if count > 1 else np.nan
+
     return {
+        'count': count,
         'mean': mean_est,
         'median': median_est,
         'std': std_est,
+        'standard_error': standard_error,
         'bias': bias,
         'relative_bias': relative_bias,
         'rmse': rmse,
@@ -170,6 +220,7 @@ def analyze_simulation_results(
             'nominal_diffusion_length': result.parameters.physics.diffusion_length,
         },
         'precision': estimates['precision'],
+        'precision_intervals': estimates['precision_intervals'],
         'accuracy': estimates['accuracy'],
         'noise_analysis': noise_analysis,
         'statistics': estimates['statistics'],
@@ -199,6 +250,9 @@ def estimate_statistics(
     dict
         'precision': the fraction of each estimator's estimates within each
         proximity level, keyed by percentage ('10%', '2.5%'), then estimator;
+        'precision_intervals': for the same keys, the count behind each
+        fraction ('count' of 'total' estimates) and its 95% interval
+        ('lower', 'upper'; proportion_interval);
         'accuracy': calculate_accuracy_metrics of each estimator;
         'statistics': each estimator's number of successful and failed fits
         and its success rate.
@@ -210,9 +264,14 @@ def estimate_statistics(
     # Calculate precision at different levels, keyed by percentage ('10%', '2.5%').
     # Formatted, not truncated: 0.29 * 100 is 28.999... in floating point.
     precision_results = {}
+    precision_intervals = {}
     for level in proximity_levels:
-        precision_results[f'{level * 100:g}%'] = {
+        label = f'{level * 100:g}%'
+        precision_results[label] = {
             key: calculate_precision(d_estimates[key], nominal_d, level) for key in keys
+        }
+        precision_intervals[label] = {
+            key: precision_interval(precision_results[label][key], len(d_estimates[key])) for key in keys
         }
 
     # Calculate accuracy metrics
@@ -227,7 +286,30 @@ def estimate_statistics(
         for key in keys
     }
 
-    return {'precision': precision_results, 'accuracy': accuracy, 'statistics': statistics}
+    return {'precision': precision_results, 'precision_intervals': precision_intervals,
+            'accuracy': accuracy, 'statistics': statistics}
+
+
+def precision_interval(fraction: float, total: int) -> Dict[str, float]:
+    """
+    The count behind a fraction of estimates, and the 95% interval of the fraction.
+
+    Parameters
+    ----------
+    fraction : float
+        Fraction of the estimates within a proximity level (calculate_precision).
+    total : int
+        Number of estimates the fraction was taken of.
+
+    Returns
+    -------
+    dict
+        'count' and 'total', and the 'lower' and 'upper' limit of the 95%
+        interval of the fraction (proportion_interval).
+    """
+    count = int(round(fraction * total))
+    lower, upper = proportion_interval(count, total)
+    return {'count': count, 'total': total, 'lower': lower, 'upper': upper}
 
 
 def cnr_bin_count(run_count: int) -> int:

@@ -64,7 +64,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
 
     precision_layout.addRow("Std Dev:", main_window.precision_std_label)
     precision_layout.addRow("Relative Std Error:", main_window.precision_rse_label)
-    precision_layout.addRow("Bias (mean − nominal):", main_window.precision_bias_label)
+    precision_layout.addRow("Bias (mean − nominal) ± standard error:", main_window.precision_bias_label)
     precision_layout.addRow("Mean D_est / D_nom:", main_window.precision_mean_ratio_label)
 
     main_window.precision_placeholder = QLabel("Run a simulation to see results.")
@@ -121,6 +121,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     # Fraction result label
     main_window.proximity_fraction_label = QLabel("")
     main_window.proximity_fraction_label.setStyleSheet("font-weight: bold;")
+    main_window.proximity_fraction_label.setWordWrap(True)
     explore_layout.addWidget(main_window.proximity_fraction_label)
 
     # Histogram of the estimates, with the part within the threshold highlighted
@@ -157,10 +158,14 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
     if main_window.interface.last_result is not None:
         estimator = selected_estimator_key(main_window)
         main_window.proximity_histogram.set_ratios(main_window.interface.estimate_ratios(estimator))
-        fraction = main_window.interface.calculate_proximity_on_demand(value, estimator=estimator)
-        if fraction is not None:
+        detail = main_window.interface.proximity_detail(value, estimator=estimator)
+        if detail is not None:
+            # The fraction comes from a finite number of runs, so it is shown
+            # with its count and its 95% interval.
             main_window.proximity_fraction_label.setText(
-                f"{fraction:.1%} of estimates fall within ±{pct}% of nominal"
+                f"{detail['fraction']:.1%} of estimates fall within ±{pct}% of nominal "
+                f"({detail['count']} of {detail['total']}; "
+                f"95% interval {detail['lower']:.1%} to {detail['upper']:.1%})"
             )
 
 
@@ -169,11 +174,15 @@ def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Op
 
     The standard deviation and bias are diffusion coefficients in the unit
     d_unit (no unit is shown when it is None); the two ratios are unitless.
+    The bias is shown with its standard error ('bias_standard_error'). Three
+    significant digits: the statistics of a simulation are not known more
+    closely.
     """
     unit_suffix = f" {d_unit}" if d_unit else ""
-    main_window.precision_std_label.setText(f"{metrics['std']:.5e}{unit_suffix}")
+    main_window.precision_std_label.setText(f"{metrics['std']:.3g}{unit_suffix}")
     main_window.precision_rse_label.setText(f"{metrics['relative_std_error']:.3f}")
-    main_window.precision_bias_label.setText(f"{metrics['bias']:.5e}{unit_suffix}")
+    main_window.precision_bias_label.setText(
+        f"{metrics['bias']:.3g} ± {metrics['bias_standard_error']:.2g}{unit_suffix}")
     main_window.precision_mean_ratio_label.setText(f"{metrics['mean_relative_error']:.3f}")
     main_window.precision_placeholder.setVisible(False)
 

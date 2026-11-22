@@ -728,6 +728,27 @@ class DiceInterface:
 
         return d_estimates / nominal_d
 
+    def proximity_detail(self, proximity_level: float, estimator: str = 'wls') -> Optional[Dict[str, float]]:
+        """
+        The fraction of estimates within proximity of nominal, with its count and 95% interval.
+
+        Args:
+            proximity_level: Fractional tolerance (e.g., 0.1 for ±10%)
+            estimator: Key of the estimator whose estimates to use (dice.models.estimators)
+
+        Returns:
+            'fraction', 'count', 'total', 'lower' and 'upper'
+            (dice.analysis.statistics.precision_interval), or None if no data available.
+        """
+        fraction = self.calculate_proximity_on_demand(proximity_level, estimator)
+        if fraction is None:
+            return None
+
+        from dice.analysis.statistics import precision_interval
+
+        total = len(self.last_result.d_estimates(estimator))
+        return {'fraction': fraction, **precision_interval(fraction, total)}
+
     def calculate_proximity_on_demand(
         self,
         proximity_level: float,

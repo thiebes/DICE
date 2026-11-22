@@ -24,6 +24,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 import pytest
 
+import dice
 from dice.analysis.statistics import analyze_simulation_results
 from dice.io.results import export_collated_results, write_summary_file
 from dice.models.parameters import OutputUnitPreferences
@@ -117,11 +118,16 @@ CASES: Dict[str, Tuple[Callable[[], MonteCarloOutput], Callable[[MonteCarloOutpu
 
 
 def written_text(name: str, directory: Path) -> str:
-    """Write case `name` with the DICE writer and read it back with universal newlines."""
+    """Write case `name` with the DICE writer and read it back with universal newlines.
+
+    The summary names the DICE version. The golden files hold a placeholder
+    in its place, so that a release does not change them.
+    """
     build, write = CASES[name]
     path = directory / name
     write(build(), path)
-    return path.read_text(encoding='utf-8')
+    text = path.read_text(encoding='utf-8')
+    return text.replace(f"DICE version:\n    {dice.__version__}\n", "DICE version:\n    <version>\n")
 
 
 @pytest.mark.parametrize('name', list(CASES))
@@ -200,11 +206,11 @@ def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
     assert len(global_lines) == len(converted_lines)
     assert all(a.endswith(' micrometer^2/nanosecond') and b.endswith(' centimeter^2/second')
                for a, b in changed)
-    # The nominal value and std, mean, bias, RMSE of both estimators.
-    assert len(changed) == 1 + 4 * 2
+    # The nominal value and std, mean, standard error, bias, RMSE of both estimators.
+    assert len(changed) == 1 + 5 * 2
     assert "    0.10000 centimeter^2/second" in converted_lines
     wls = analysis['accuracy']['wls']
-    for key in ('std', 'mean', 'bias', 'rmse'):
+    for key in ('std', 'mean', 'standard_error', 'bias', 'rmse'):
         assert f"        {wls[key] * 10:.5f} centimeter^2/second" in converted_lines
 
 

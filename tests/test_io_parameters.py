@@ -846,3 +846,36 @@ class TestFilenameSlugIsCheckedBeforeTheRun:
 
     def test_plain_slug_is_accepted(self):
         validate_parameters(parameter_parser(quick_test_raw() | {'filename slug': 'run_2.v3'}))
+
+
+class TestProfileCenterInsideTheFitRange:
+    """validate_parameters rejects a profile centered where the fit does not look for it."""
+
+    @pytest.mark.parametrize('mean', [1.01, -1.3, 2.0])
+    def test_center_outside_the_central_part_of_the_window_is_rejected(self, mean):
+        parsed = parameter_parser(quick_test_raw() | {'mean_0': mean})
+        with pytest.raises(ValueError, match="'mean_0' is .* outside the central 40% of the spatial window"):
+            validate_parameters(parsed)
+
+    @pytest.mark.parametrize('mean', [0.0, 0.9, -1.0, 1.0])
+    def test_center_inside_is_accepted(self, mean):
+        validate_parameters(parameter_parser(quick_test_raw() | {'mean_0': mean}))
+
+    def test_limits_are_those_the_fit_uses(self):
+        """An accepted center at the limit is fitted correctly; this ties the rule to the fit."""
+        from dice.core.fitting import center_search_limits, gauss_fitting
+        from dice.core.profiles import gaussian
+
+        parsed = parameter_parser(quick_test_raw())
+        x_axis = parsed['x array']
+        low, high = center_search_limits(x_axis)
+        assert (low, high) == pytest.approx((-1.0, 1.0))
+
+        sigma2 = parsed['sigma^2_0']
+        at_limit = gaussian(x_axis, high, sigma2, 1.0)
+        beyond = gaussian(x_axis, high + 0.3, sigma2, 1.0)
+        fitted_at_limit = gauss_fitting(x_axis, [at_limit])
+        fitted_beyond = gauss_fitting(x_axis, [beyond])
+
+        assert fitted_at_limit['sigma^2_t estimates'][0] == pytest.approx(sigma2, rel=1e-6)
+        assert fitted_beyond['sigma^2_t estimates'][0] != pytest.approx(sigma2, rel=0.2)

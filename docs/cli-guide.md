@@ -111,9 +111,14 @@ The parameters `output_diffusion_length_unit` and `output_diffusion_time_unit` r
 
 A text report that contains:
 
+- the DICE version and the seed, which together with the parameters file reproduce the simulation (see [Reproducible results](#reproducible-results))
 - the main simulation parameters: number of runs, spatial axis, time points, noise level, initial CNR, initial variance, and the nominal diffusion length, diffusion coefficient, and lifetime
-- for the WLS and the OLS fits: the standard deviation, relative standard error, mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
-- the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
+- for the WLS and the OLS fits: the number of runs with an estimate, and the standard deviation, relative standard error, mean, standard error of the mean, bias, and root-mean-square error (RMSE) of the diffusion coefficient estimates
+- the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value, each with its count and its 95% interval
+
+The statistics come from a finite number of runs, so each has an uncertainty of its own. The standard error of the mean is also the standard error of the bias. Compare a bias with it before you read the bias as real: a bias smaller than about twice its standard error may be chance. A fraction is written as `19.0% (19 of 100; 12.5% to 27.8%)`: 19 of the 100 estimates lie within the level, and the fraction that a much longer simulation would give lies between 12.5% and 27.8% with 95% confidence. More runs narrow the interval. The interval is the score interval for a binomial proportion (the Wilson interval).
+
+A run has no estimate when its linear fit fails. If no run has an estimate, the summary ends with a line that says so.
 
 Each value with a unit is followed by that unit. The standard deviation, mean, bias, and RMSE are in the unit of the nominal diffusion coefficient, for example `micrometer^2/nanosecond`: the global units, or the output units that `output_diffusion_length_unit` and `output_diffusion_time_unit` set. The relative standard error and the fractions have no unit.
 
@@ -126,7 +131,7 @@ In place of the statistics of all runs, it gives the same statistics for each bi
 
 ### Histogram: `<slug>_accuracy_histogram.png`
 
-A histogram of the ratio D_est/D_nom of the WLS estimates to the nominal diffusion coefficient. The y-axis shows the probability of each bin. A normal distribution with the same mean and standard deviation is drawn over the histogram, and a legend reports the mean, median, and standard deviation of the ratio. The file type follows the `image type` parameter.
+A histogram of the ratio D_est/D_nom of the WLS estimates to the nominal diffusion coefficient. The y-axis shows the probability of each bin. A normal distribution with the same mean and standard deviation is drawn over the histogram, a dashed line marks the nominal value at 1, and a legend reports the mean, median, and standard deviation of the ratio. The x-axis spans the mean ± 3 standard deviations, or the limits that `image x_lim` sets. Estimates beyond the axis are not drawn; a note above the plot gives their number on each side. The file type follows the `image type` parameter.
 
 ### Scatter plot: `<slug>_accuracy_vs_cnr.png`
 

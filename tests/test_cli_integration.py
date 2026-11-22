@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import dice
 from dice.cli.main import main
 from seeded_results import assert_seeded_frames_agree
 
@@ -456,9 +457,14 @@ CSV_COLUMNS = [
 ]
 
 # The summary for quick_test.txt with every number on a value line replaced by '#'.
+FRACTION_LINE = "    WLS: #% (# of #; #% to #%)    OLS: #% (# of #; #% to #%)"
+
 SUMMARY_SKELETON = [
     "DICE Simulation Summary",
     "=" * 50,
+    "",
+    "DICE version:", "    <version>",
+    "Seed:", "    #",
     "",
     "Simulation Parameters:",
     "-" * 30,
@@ -478,23 +484,28 @@ SUMMARY_SKELETON = [
     "-" * 30,
     "Diffusion Coefficient Estimate Statistics:",
     "  Weighted Least Squares:",
+    "    Estimates:", "        # of # runs (# without an estimate)",
     "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
     "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
     "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
     "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "  Ordinary (unweighted) Least Squares:",
+    "    Estimates:", "        # of # runs (# without an estimate)",
     "    Standard deviation:", "        # micrometer^2/nanosecond",
     "    Relative standard error:", "        #",
     "    Mean estimate:", "        # micrometer^2/nanosecond",
+    "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
     "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
     "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
     "",
     "Precision at standard thresholds:",
-    "  Fraction within ±5% of nominal:", "    WLS: #%    OLS: #%",
-    "  Fraction within ±10% of nominal:", "    WLS: #%    OLS: #%",
-    "  Fraction within ±20% of nominal:", "    WLS: #%    OLS: #%",
-    "  Fraction within ±50% of nominal:", "    WLS: #%    OLS: #%",
+    "  (each fraction with its count of estimates and its 95% interval)",
+    "  Fraction within ±5% of nominal:", FRACTION_LINE,
+    "  Fraction within ±10% of nominal:", FRACTION_LINE,
+    "  Fraction within ±20% of nominal:", FRACTION_LINE,
+    "  Fraction within ±50% of nominal:", FRACTION_LINE,
     "",
     "Simulation completed successfully.",
 ]
@@ -507,7 +518,11 @@ def summary_skeleton(summary: str) -> list[str]:
     skeleton, previous = [], ""
     for line in summary.splitlines():
         is_value_line = previous.endswith(":") and line.startswith("    ")
-        skeleton.append(SUMMARY_NUMBER.sub("#", line) if is_value_line else line)
+        if previous == "DICE version:":
+            line = line.replace(dice.__version__, "<version>")
+        elif is_value_line:
+            line = SUMMARY_NUMBER.sub("#", line)
+        skeleton.append(line)
         previous = line
     return skeleton
 
@@ -626,9 +641,22 @@ class TestQuickTestOutputSchema:
             f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
         assert values['Relative standard error'] == [
             f"{d_estimates[m].std() / 0.01:.3f}" for m in ('wls', 'ols')]
-        within_10 = {m: np.mean(np.abs(d / 0.01 - 1) <= 0.1) for m, d in d_estimates.items()}
+        assert values['Standard error of the mean and of the bias'] == [
+            f"{d_estimates[m].std(ddof=1) / np.sqrt(100):.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['Estimates'] == ["100 of 100 runs (0 without an estimate)"] * 2
+        assert values['DICE version'] == [dice.__version__]
+        assert values['Seed'] == ['1']
+
+        # The count and the 95% interval of the fraction, recomputed with statsmodels.
+        from statsmodels.stats.proportion import proportion_confint
+
+        def fraction(method: str) -> str:
+            count = int(np.sum(np.abs(d_estimates[method] / 0.01 - 1) <= 0.1))
+            lower, upper = proportion_confint(count, 100, alpha=0.05, method='wilson')
+            return f"{count / 100:.1%} ({count} of 100; {lower:.1%} to {upper:.1%})"
+
         assert values['Fraction within ±10% of nominal'] == [
-            f"WLS: {within_10['wls']:.2%}    OLS: {within_10['ols']:.2%}"]
+            f"WLS: {fraction('wls')}    OLS: {fraction('ols')}"]
 
 
 class TestOutputOptions:
@@ -665,9 +693,14 @@ class TestOutputOptions:
             'both.csv', 'both.json', 'both_summary.txt']
         exported = json.loads((run.output_dir / 'both.json').read_text())
         assert set(exported) == {'analysis', 'parameters', 'summary'}
-        assert exported['summary'] == {'total_runs': self.OPTION_RUNS, 'noise_values': [0.02]}
+        assert exported['summary'] == {'dice_version': dice.__version__, 'seed': None,
+                                       'total_runs': self.OPTION_RUNS, 'noise_values': [0.02]}
         assert set(exported['analysis']) == {
-            'summary', 'precision', 'accuracy', 'noise_analysis', 'statistics'}
+            'summary', 'precision', 'precision_intervals', 'accuracy', 'noise_analysis', 'statistics'}
+        interval = exported['analysis']['precision_intervals']['10%']['wls']
+        assert set(interval) == {'count', 'total', 'lower', 'upper'}
+        assert interval['total'] == self.OPTION_RUNS
+        assert interval['count'] == round(exported['analysis']['precision']['10%']['wls'] * self.OPTION_RUNS)
         assert set(exported['analysis']['precision']) == {'5%', '10%', '20%', '50%'}
         assert set(exported['analysis']['accuracy']) == {'ols', 'wls'}
         assert exported['parameters']['filename slug'] == 'both'

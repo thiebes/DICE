@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
 
+from .. import __version__
 from .arguments import parse_arguments, show_parameter_summary, handle_special_arguments
 from ..io.parameters import noise_range_from_parameters, open_parameters, validate_parameters
 from ..analysis.simulation import run_monte_carlo_simulation
@@ -237,6 +238,8 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
             'analysis': analysis,
             'parameters': {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in parameters.items()},
             'summary': {
+                'dice_version': __version__,
+                'seed': result.seed,
                 'total_runs': len(result.run_results),
                 'noise_values': result.noise_values
             }

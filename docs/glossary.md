@@ -4,6 +4,12 @@ Definitions of the technical terms, abbreviations, and concepts used in DICE.
 
 ## A
 
+### Accuracy
+
+How close the diffusion coefficient estimates are to the nominal value. DICE reports it in two ways: the bias, which is the error of the estimates on average, and the fraction of estimates within a proximity level, which also depends on their spread.
+
+**See also:** Bias, Precision, Proximity Level
+
 ### Amplitude
 
 The peak height of a Gaussian profile. In DICE simulations, the initial amplitude is usually 1.
@@ -17,6 +23,8 @@ Diffusion that proceeds at different rates in different directions. DICE models 
 ### Bias
 
 The mean of the diffusion coefficient estimates minus the nominal diffusion coefficient. A bias of zero means that the estimates are correct on average.
+
+The bias of a simulation is itself an estimate from a finite number of runs. Its standard error is the standard error of the mean. A bias smaller than about twice that standard error may be chance.
 
 ## C
 
@@ -146,6 +154,14 @@ Materials that interact with light and electric current, used for example in sol
 
 The response of an imaging system to a point source. In microscopy, the PSF is often approximated by a Gaussian function.
 
+### Precision
+
+How closely the diffusion coefficient estimates of repeated measurements agree with each other. The standard deviation of the estimates and the relative standard error measure it.
+
+In the summary file, the heading "Precision at standard thresholds" stands over the fractions of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Such a fraction is high only when the estimates are both precise and accurate: a large spread or a large bias lowers it.
+
+**See also:** Accuracy, Proximity Level, Relative Standard Error
+
 ### Proximity Level
 
 A fractional distance from the nominal value, used to count how many estimates are close to it. For example, a proximity level of 0.1 counts the estimates within ±10% of the nominal diffusion coefficient. The fraction of estimates within the proximity level describes the accuracy and precision of a measurement with the simulated parameters.
@@ -156,13 +172,19 @@ The proximity level is not a simulation parameter. The summary file reports the 
 
 ### Relative Standard Error
 
-The standard deviation of the diffusion coefficient estimates divided by the nominal diffusion coefficient.
+The standard deviation of the diffusion coefficient estimates divided by the nominal diffusion coefficient. It is the spread of single estimates as a fraction of the nominal value: 0.25 means that one measurement is typically 25% of the nominal value away from the mean of the estimates.
+
+It is not the standard error of the mean, which is smaller by the square root of the number of runs and describes how well the simulation knows the mean.
 
 ### RMSE (Root-Mean-Square Error)
 
 The square root of the mean squared difference between the estimates and the nominal value. The RMSE combines the bias and the spread of the estimates.
 
 ## S
+
+### Score Interval of a Fraction
+
+The 95% interval that the summary file and the GUI give with each fraction of estimates within a proximity level, for example "19.0% (19 of 100; 12.5% to 27.8%)". The fraction comes from a finite number of runs. The interval is the range in which the fraction of a much longer simulation lies with 95% confidence. It is the score interval for a binomial proportion (the Wilson interval), which stays between 0% and 100% and keeps a width when the count is zero.
 
 ### Sigma (σ)
 
@@ -171,6 +193,10 @@ The standard deviation of a Gaussian distribution, which describes its width.
 **Relationship to variance:** variance = σ²
 
 **Relationship to FWHM:** σ = FWHM / (2√(2 ln 2))
+
+### Standard Error of the Mean
+
+The standard deviation of the estimates divided by the square root of their number. It describes how well a simulation with that number of runs knows the mean of the estimates, and so also the bias.
 
 ### Single-Exponential Decay
 

@@ -122,3 +122,29 @@ def fraction_within(estimates: np.ndarray, nominal: float, threshold: float) -> 
 
 def float_text(line_edit: QLineEdit) -> float:
     return float(line_edit.text())
+
+
+def fraction_sentence(estimates: np.ndarray, nominal: float, threshold: float) -> str:
+    """The Analysis tab's sentence about the estimates within a threshold.
+
+    The count and the 95% interval are recomputed here with statsmodels,
+    independently of DICE.
+    """
+    from statsmodels.stats.proportion import proportion_confint
+
+    ratios = estimates / nominal
+    count = int(np.sum((ratios >= 1 - threshold) & (ratios <= 1 + threshold)))
+    lower, upper = proportion_confint(count, len(estimates), alpha=0.05, method="wilson")
+    return (f"{count / len(estimates):.1%} of estimates fall within ±{round(threshold * 100)}% of nominal "
+            f"({count} of {len(estimates)}; 95% interval {lower:.1%} to {upper:.1%})")
+
+
+def summary_label_texts(estimates: np.ndarray, nominal: float, d_unit: str, scale: float = 1.0) -> list[str]:
+    """The four labels of the Precision Summary, recomputed from the estimates with NumPy."""
+    standard_error = np.std(estimates, ddof=1) / np.sqrt(len(estimates))
+    return [
+        f"{np.std(estimates) * scale:.3g} {d_unit}",
+        f"{np.std(estimates) / nominal:.3f}",
+        f"{(np.mean(estimates) - nominal) * scale:.3g} ± {standard_error * scale:.2g} {d_unit}",
+        f"{np.mean(estimates) / nominal:.3f}",
+    ]

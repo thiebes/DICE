@@ -263,6 +263,7 @@ def run_monte_carlo_simulation(
         noise_values=noise_values,
         estimator_keys=DEFAULT_ESTIMATOR_KEYS,
         noise_range=noise_range,
+        seed=root_seed(seed),
     )
 
     return simulation_result
@@ -289,6 +290,18 @@ def noise_sigma_of_each_run(
             f"got {len(noise_values)}."
         )
     return list(noise_values)
+
+
+def root_seed(seed: Seed) -> Optional[int]:
+    """The integer that reproduces a seeded simulation; None when it is unseeded.
+
+    For an integer seed, the integer. For a SeedSequence, its entropy: the
+    command-line interface passes a child of SeedSequence(N) for --seed N,
+    and the child keeps N as its entropy.
+    """
+    if isinstance(seed, np.random.SeedSequence):
+        seed = seed.entropy
+    return int(seed) if isinstance(seed, (int, np.integer)) else None
 
 
 def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedSequence]]:

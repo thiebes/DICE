@@ -13,6 +13,20 @@ break existing code: classes and fields are renamed, and
 reported numbers also change; read Changed and Fixed before comparing
 results with 1.2.0.
 
+### Results from 1.2.0: what to rerun
+
+Find the row that describes your 1.2.0 simulation. The entries under Changed
+and Fixed give the details.
+
+| Your 1.2.0 simulation | What was wrong | What to do |
+| ------- | ------------- | ------------- |
+| Micrometers and nanoseconds, `amplitude_0` = 1, a fixed `noise value` | Nothing that changes the diffusion coefficient statistics: the estimates change by less than 1e-5 of their value. The `estimated CNR` column changes with the new CNR estimator. | No rerun needed. |
+| Another length or time unit | The diffusion coefficients in cm²/s were too large by the factor (1 micrometer / length unit)² × (time unit / 1 nanosecond): 10^6 for nanometers and nanoseconds, 10^-3 for micrometers and picoseconds. The summary labeled lengths in micrometers. Ratios of estimate to nominal value were correct. | Divide the cm²/s columns by the factor, or rerun. |
+| Lengths in centimeters or meters, a spatial width below about 0.05 in its unit, or `amplitude_0` below about 0.01 | The Gaussian fit stopped early, so the estimates themselves were wrong. | Rerun. |
+| `estimate noise from data` | The noise level came from another CNR estimator, and it was wrong for `amplitude_0` other than 1. For the example profile, whose peak is 4.6 pixels wide, 1.2.0 read a CNR of 176, where the residuals of a Gaussian fit give 59. It simulated too little noise and reported a precision that was too good. | Rerun with a profile whose peak is at least 9 pixels wide, or set `noise value` from your own CNR estimate. For a narrower peak, 2.0.0 reads too low (8.9 for the example profile) and warns. |
+| `amplitude_0` other than 1, with a fixed `noise value` | The nominal CNR in the results file and the summary was 1 / noise, not `amplitude_0` / noise. | Recompute the CNR; rerun only if you chose the noise from that CNR. |
+| A noise-range key | One noise level was drawn for the whole simulation. | The old result is a valid simulation at that one level. Rerun to cover the range. |
+
 ### Added
 
 - Graphical user interface (GUI), started with `dice-gui` or
@@ -53,6 +67,16 @@ results with 1.2.0.
   belongs to no parameter, such as a misspelled one, is rejected with the
   closest key named.
 - Time range of the simulation in the summary file.
+- Uncertainty of the reported statistics. The summary file gives, for each
+  fit, the number of runs with an estimate, the standard error of the mean
+  and of the bias, and each fraction within a proximity level with its count
+  and its 95% interval, for example `19.0% (19 of 100; 12.5% to 27.8%)`. The
+  GUI Analysis Settings tab shows the same for the bias and the fraction.
+  The analysis dictionary and the JSON file carry them as `count`,
+  `standard_error`, and `precision_intervals`.
+- The summary file and the JSON file record the DICE version and the seed of
+  the simulation. A simulation in which no run gives an estimate says so in
+  the summary, in place of "completed successfully".
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), `high_precision.txt` (10000 runs), and
   `noise_range.txt` (100 runs over a range of CNR).
@@ -129,6 +153,19 @@ results with 1.2.0.
   pixels wide, fft-cnr overestimates the noise, so the CNR comes out too low.
   The measured profile `data/examples/example_profile.csv`, whose peak is
   4.6 pixels wide at half maximum, gives a CNR of 8.9, where 1.2.0 gave 176.
+  The residuals of a Gaussian fit to that profile give a CNR of 59, so
+  neither estimator is close for a peak that narrow: 1.2.0 read it three
+  times too high, and 2.0.0 reads it more than six times too low and warns.
+  The percentages are one-time measurements made for this release on
+  simulated profiles; the scripts are not part of the repository. The test
+  suite checks only that the summary reports the CNR that fft-cnr gives for
+  the example profile.
+- Behavior change: `mean_0` must lie in the central 40% of the spatial
+  window, which is where the Gaussian fit looks for the center of a profile.
+  A profile centered outside it was fitted with its center held at the
+  limit: the fit reported a wrong width without failing, and the diffusion
+  coefficient estimates were wrong (10% low for `mean_0` = 1.3 in a window 5
+  wide, at low noise). Such a value is rejected before the simulation.
 - Behavior change: `filename slug` must be a plain file name. A slug with a
   path separator, the slugs `.` and `..`, and a slug that ends with a dot or
   a space are rejected before the simulation runs. Such a slug used to write
@@ -143,7 +180,11 @@ results with 1.2.0.
 - The summary file lists the dispersion statistics of the estimates first,
   followed by the fractions within the standard proximity levels.
 - The accuracy histogram shows the probability of each bin on the y-axis,
-  with the normal curve scaled to match, and draws no proximity limits.
+  with the normal curve scaled to match, and draws no proximity limits. A
+  dashed line marks the nominal value, the legend names the normal curve,
+  and a note counts the estimates beyond the limits of the axis, which the
+  plot does not show. The scatter plot of a noise-range simulation has the
+  same note. The fractions in the summary file have one decimal.
 - The diffusion coefficient columns of the results file are labeled
   `[cm²/s]` instead of `[cm^2/s]`. Scripts that select these columns by name
   need the new label.
@@ -182,8 +223,11 @@ results with 1.2.0.
 
 ### Fixed
 
-- The Gaussian fit of each frame gives the same estimates in any length
-  unit and for any `amplitude_0`. The fit stopped on tolerances relative to
+- The Gaussian fit of each frame gives the same estimates in the length
+  units and at the amplitudes that the tests cover: nanometers, millimeters,
+  centimeters, and meters against micrometers, and `amplitude_0` from 1e-5 to
+  1e3, on the geometry of the `quick_test.txt` example, with agreement to a
+  relative 1e-6. The fit stopped on tolerances relative to
   its parameter values, so it ended early when the numbers were small: in
   meters the spread of the diffusion coefficient estimates was 28 times too
   large, and with `amplitude_0` = 1e-5 every estimate was 0. The error
@@ -210,10 +254,13 @@ results with 1.2.0.
   correct only for `amplitude_0` = 1.
 - `--seed N` makes runs reproducible: repeated runs with the same parameters
   and seed give the same results, in serial and in parallel. The flag had no
-  effect on the noise draws. The results repeat bit for bit on Linux, Windows,
-  and Macs with Apple silicon. On Macs with Intel processors, the linear
-  algebra library of NumPy and SciPy can change the last digit of a few fitted
-  values from one run to the next (relative differences up to about 1e-15).
+  effect on the noise draws. The tests require agreement to within
+  floating-point rounding (a relative difference of 1e-12), for the same
+  versions of DICE and its dependencies on the same platform. On Linux,
+  Windows, and Macs with Apple silicon, the results have repeated bit for bit.
+  On Macs with Intel processors, the linear algebra library of NumPy and
+  SciPy can change the last digit of a few fitted values from one run to the
+  next (relative differences up to about 1e-15).
 - `--multiprocessing N` sets the number of worker processes. Any value other
   than 0 used all CPU cores.
 - Gaussian fits no longer fail because the starting point lies outside the

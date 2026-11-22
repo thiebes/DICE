@@ -1,6 +1,11 @@
 DICE Simulation Summary
 ==================================================
 
+DICE version:
+    <version>
+Seed:
+    none (another simulation with these parameters draws other noise)
+
 Simulation Parameters:
 ------------------------------
 Number of runs:
@@ -30,36 +35,45 @@ Analysis Results:
 ------------------------------
 Diffusion Coefficient Estimate Statistics:
   Weighted Least Squares:
+    Estimates:
+        4 of 6 runs (2 without an estimate)
     Standard deviation:
         0.01391 centimeter^2/second
     Relative standard error:
         0.139
     Mean estimate:
         0.10712 centimeter^2/second
+    Standard error of the mean and of the bias:
+        0.00803 centimeter^2/second
     Bias (mean - nominal):
         0.00712 centimeter^2/second
     Root Mean Square Error:
         0.01563 centimeter^2/second
   Ordinary (unweighted) Least Squares:
+    Estimates:
+        4 of 6 runs (2 without an estimate)
     Standard deviation:
         0.01066 centimeter^2/second
     Relative standard error:
         0.107
     Mean estimate:
         0.10175 centimeter^2/second
+    Standard error of the mean and of the bias:
+        0.00616 centimeter^2/second
     Bias (mean - nominal):
         0.00175 centimeter^2/second
     Root Mean Square Error:
         0.01081 centimeter^2/second
 
 Precision at standard thresholds:
+  (each fraction with its count of estimates and its 95% interval)
   Fraction within ±5% of nominal:
-    WLS: 50.00%    OLS: 25.00%
+    WLS: 50.0% (2 of 4; 15.0% to 85.0%)    OLS: 25.0% (1 of 4; 4.6% to 69.9%)
   Fraction within ±10% of nominal:
-    WLS: 75.00%    OLS: 50.00%
+    WLS: 75.0% (3 of 4; 30.1% to 95.4%)    OLS: 50.0% (2 of 4; 15.0% to 85.0%)
   Fraction within ±20% of nominal:
-    WLS: 75.00%    OLS: 100.00%
+    WLS: 75.0% (3 of 4; 30.1% to 95.4%)    OLS: 100.0% (4 of 4; 51.0% to 100.0%)
   Fraction within ±50% of nominal:
-    WLS: 100.00%    OLS: 100.00%
+    WLS: 100.0% (4 of 4; 51.0% to 100.0%)    OLS: 100.0% (4 of 4; 51.0% to 100.0%)
 
 Simulation completed successfully.

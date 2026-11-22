@@ -636,6 +636,20 @@ def validate_parameters(params) -> None:
         validate_time_unit(global_time_unit(params))
         validate_output_units(params)
 
+        # The Gaussian fit looks for the center of a profile only in the
+        # central 40% of the window. Outside it, the fit holds the center at
+        # the limit and reports a wrong width without failing.
+        center = params.get('mu_0', params.get('mean_0'))
+        if center is not None and 'x array' in params:
+            from ..core.fitting import center_search_limits
+            low, high = center_search_limits(params['x array'])
+            if not low <= center <= high:
+                raise ValueError(
+                    f"'mean_0' is {center:g}, outside the central 40% of the spatial window "
+                    f"({low:g} to {high:g}), where the fit looks for the center of the profile. "
+                    "Move the profile toward the center, or increase 'spatial width'."
+                )
+
         # The slug names the output folder and every output file, so it must
         # be a plain name; a path separator or '..' would write outside it.
         validate_filename_slug(

@@ -13,7 +13,8 @@ import pytest
 
 from gui_support import (
     EXAMPLES_DIR, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
-    choose_global_units, d_estimates_from_csv, enter_text, fraction_within, run_and_wait,
+    choose_global_units, d_estimates_from_csv, enter_text, fraction_sentence, fraction_within, run_and_wait,
+    summary_label_texts,
 )
 
 pytestmark = pytest.mark.gui
@@ -60,15 +61,12 @@ class TestRunFromTheWindow:
         )
         window = finished_window
         # The standard deviation and bias carry the run's diffusion coefficient unit.
-        assert window.precision_std_label.text() == f"{np.std(estimates):.5e} μm²/ns"
-        assert window.precision_rse_label.text() == f"{np.std(estimates) / nominal:.3f}"
-        assert window.precision_bias_label.text() == f"{np.mean(estimates) - nominal:.5e} μm²/ns"
-        assert window.precision_mean_ratio_label.text() == f"{np.mean(estimates) / nominal:.3f}"
+        assert [window.precision_std_label.text(), window.precision_rse_label.text(),
+                window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] \
+            == summary_label_texts(estimates, nominal, "μm²/ns")
         assert window.precision_placeholder.isHidden()
         assert window.explore_proximity_group.isEnabled()
-        assert window.proximity_fraction_label.text() == (
-            f"{fraction_within(estimates, nominal, 0.10):.1%} of estimates fall within ±10% of nominal"
-        )
+        assert window.proximity_fraction_label.text() == fraction_sentence(estimates, nominal, 0.10)
 
 
 def _enter_quick_test_physics(qtbot, window, fwhm: float, spatial_width: float, d: float) -> None:

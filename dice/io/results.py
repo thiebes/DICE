@@ -186,6 +186,34 @@ def export_collated_results(
     return df
 
 
+def fraction_text(fraction: float, interval: Optional[Dict[str, float]] = None) -> str:
+    """
+    A fraction of the estimates as text, with its count and 95% interval when they are known.
+
+    Parameters
+    ----------
+    fraction : float
+        Fraction of the estimates within a proximity level (0-1).
+    interval : dict, optional
+        'count', 'total', 'lower' and 'upper' of the fraction
+        (dice.analysis.statistics.precision_interval).
+
+    Returns
+    -------
+    str
+        For example "19.0% (19 of 100; 12.5% to 27.8%)", or "19.0%" without
+        an interval, or "no estimates" when the fraction is of none. One
+        decimal, because no simulation of practical size fixes the fraction
+        more closely.
+    """
+    if interval is None:
+        return f"{fraction:.1%}"
+    if not interval['total']:
+        return "no estimates"
+    return (f"{fraction:.1%} ({interval['count']} of {interval['total']}; "
+            f"{interval['lower']:.1%} to {interval['upper']:.1%})")
+
+
 def write_summary_file(
     results: MonteCarloOutput,
     filename: Union[str, Path],
@@ -279,6 +307,12 @@ def write_summary_file(
             for spec in in_display_order(statistics['accuracy']):
                 metrics = statistics['accuracy'][spec.key]
                 f.write(f"{indent}  {spec.summary_name}:\n")
+                if 'statistics' in statistics:
+                    fits = statistics['statistics'][spec.key]
+                    runs = fits['num_successful'] + fits['num_failed']
+                    f.write(f"{indent}    Estimates:\n")
+                    f.write(f"{indent}        {fits['num_successful']} of {runs} runs "
+                            f"({fits['num_failed']} without an estimate)\n")
                 f.write(f"{indent}    Standard deviation:\n")
                 f.write(f"{indent}        {d_text(metrics['std'])} {d_unit}\n")
                 if nominal_d and nominal_d != 0:
@@ -287,18 +321,25 @@ def write_summary_file(
                     f.write(f"{indent}        {rse:.3f}\n")
                 f.write(f"{indent}    Mean estimate:\n")
                 f.write(f"{indent}        {d_text(metrics['mean'])} {d_unit}\n")
+                if 'standard_error' in metrics:
+                    f.write(f"{indent}    Standard error of the mean and of the bias:\n")
+                    f.write(f"{indent}        {d_text(metrics['standard_error'])} {d_unit}\n")
                 f.write(f"{indent}    Bias (mean - nominal):\n")
                 f.write(f"{indent}        {d_text(metrics['bias'])} {d_unit}\n")
                 f.write(f"{indent}    Root Mean Square Error:\n")
                 f.write(f"{indent}        {d_text(metrics['rmse'])} {d_unit}\n")
 
         if 'precision' in statistics:
+            intervals = statistics.get('precision_intervals', {})
             f.write(f"\n{indent}Precision at standard thresholds:\n")
+            if intervals:
+                f.write(f"{indent}  (each fraction with its count of estimates and its 95% interval)\n")
             for level, values in statistics['precision'].items():
                 f.write(f"{indent}  Fraction within ±{level} of nominal:\n")
-                # One line in display order, e.g. "    WLS: 19.00%    OLS: 15.00%"
+                # One line in display order, e.g.
+                # "    WLS: 19.0% (19 of 100; 12.5% to 27.8%)    OLS: 15.0% (15 of 100; 9.3% to 23.3%)"
                 f.write(indent + "".join(
-                    f"    {spec.short_name}: {values[spec.key]:.2%}"
+                    f"    {spec.short_name}: {fraction_text(values[spec.key], intervals.get(level, {}).get(spec.key))}"
                     for spec in in_display_order(values)
                 ) + "\n")
 
@@ -306,6 +347,17 @@ def write_summary_file(
         # Write header
         f.write("DICE Simulation Summary\n")
         f.write("=" * 50 + "\n\n")
+
+        # What reproduces the simulation
+        from .. import __version__
+        f.write("DICE version:\n")
+        f.write(f"    {__version__}\n")
+        f.write("Seed:\n")
+        if results.seed is None:
+            f.write("    none (another simulation with these parameters draws other noise)\n")
+        else:
+            f.write(f"    {results.seed}\n")
+        f.write("\n")
         
         # Write parameters
         f.write("Simulation Parameters:\n")
@@ -359,7 +411,11 @@ def write_summary_file(
             f.write("\n")
         
         # Write completion message
-        f.write("Simulation completed successfully.\n")
+        fits = (analysis or {}).get('statistics', {})
+        if fits and all(entry['num_successful'] == 0 for entry in fits.values()):
+            f.write("Simulation completed, but no run gave an estimate of the diffusion coefficient.\n")
+        else:
+            f.write("Simulation completed successfully.\n")
 
 
 def load_results_csv(filename: Union[str, Path]) -> pd.DataFrame:

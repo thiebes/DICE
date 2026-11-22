@@ -18,7 +18,8 @@ from PyQt6.QtWidgets import QMessageBox
 
 from gui_support import (
     EXAMPLE_PROFILE_CSV, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
-    d_estimates_from_csv, fit_method_radio, fraction_within, trigger_menu_action,
+    d_estimates_from_csv, fit_method_radio, fraction_sentence, fraction_within, summary_label_texts,
+    trigger_menu_action,
 )
 
 pytestmark = pytest.mark.gui
@@ -43,16 +44,7 @@ def _expected_summary(
     estimates: np.ndarray, nominal: float, d_unit: str = RUN_D_UNIT, scale: float = 1.0,
 ) -> list[str]:
     """The four labels; the standard deviation and bias are diffusion coefficients in d_unit."""
-    return [
-        f"{np.std(estimates) * scale:.5e} {d_unit}",
-        f"{np.std(estimates) / nominal:.3f}",
-        f"{(np.mean(estimates) - nominal) * scale:.5e} {d_unit}",
-        f"{np.mean(estimates) / nominal:.3f}",
-    ]
-
-
-def _fraction_text(fraction: float, threshold: float) -> str:
-    return f"{fraction:.1%} of estimates fall within ±{round(threshold * 100)}% of nominal"
+    return summary_label_texts(estimates, nominal, d_unit, scale)
 
 
 def _select_fit_method(window, method: str) -> None:
@@ -75,9 +67,7 @@ class TestPrecisionSummary:
 
         estimates, nominal = d_estimates_from_csv(completed_run.csv_path, FIT_METHOD_COLUMNS[method])
         assert _summary_labels(window) == _expected_summary(estimates, nominal)
-        assert window.proximity_fraction_label.text() == _fraction_text(
-            fraction_within(estimates, nominal, 0.10), 0.10
-        )
+        assert window.proximity_fraction_label.text() == fraction_sentence(estimates, nominal, 0.10)
 
     @pytest.mark.parametrize("method", ["ols", "wls"])
     def test_changing_fit_method_after_a_run_updates_the_summary(
@@ -90,9 +80,7 @@ class TestPrecisionSummary:
 
         estimates, nominal = d_estimates_from_csv(completed_run.csv_path, FIT_METHOD_COLUMNS[method])
         assert _summary_labels(window_with_results) == _expected_summary(estimates, nominal)
-        assert window_with_results.proximity_fraction_label.text() == _fraction_text(
-            fraction_within(estimates, nominal, 0.2), 0.2
-        )
+        assert window_with_results.proximity_fraction_label.text() == fraction_sentence(estimates, nominal, 0.2)
 
     def test_results_enable_the_threshold_tool(self, window_with_results):
         assert window_with_results.precision_placeholder.isHidden()
@@ -145,9 +133,7 @@ class TestAccuracyThresholdTool:
 
         estimates, nominal = d_estimates_from_csv(completed_run.csv_path, WLS_SLOPE_COLUMN)
         assert window_with_results.proximity_pct_label.text() == f"(±{round(threshold * 100)}%)"
-        assert window_with_results.proximity_fraction_label.text() == _fraction_text(
-            fraction_within(estimates, nominal, threshold), threshold
-        )
+        assert window_with_results.proximity_fraction_label.text() == fraction_sentence(estimates, nominal, threshold)
 
     def test_fraction_never_decreases_as_the_threshold_widens(self, window_with_results):
         fractions = []

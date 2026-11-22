@@ -177,6 +177,9 @@ class MonteCarloOutput:
     noise_range : NoiseRange, optional
         The range from which each run drew its own noise sigma; None when
         the runs used fixed noise levels.
+    seed : int, optional
+        The seed the simulation ran with, which reproduces it; None when it
+        drew fresh entropy, or for results loaded from a file.
     """
     parameters: Any
     run_results: List[RunResult]
@@ -184,6 +187,7 @@ class MonteCarloOutput:
     noise_values: List[float] = field(default_factory=list)
     estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
     noise_range: Optional[NoiseRange] = None
+    seed: Optional[int] = None
 
     def d_estimates(self, key: str) -> np.ndarray:
         """Estimator `key`'s D estimates (slope / 2) of the runs that have a fit, in run order."""
