@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import time
 from typing import Callable, NamedTuple
 
 import pandas as pd
@@ -47,6 +48,29 @@ def _run_to_signal(qtbot, parameters: dict, signal_name: str) -> tuple[Simulatio
         thread.start()
     thread.wait()
     return thread, log
+
+
+@pytest.fixture
+def slow_serial_runs(monkeypatch) -> None:
+    """Make each run of a serial simulation take at least 20 ms.
+
+    A test that stops or closes during a simulation must find it still
+    running. On a fast machine, 300 runs of the quick_test example end before
+    the test has reacted to the first progress signal. The pause sits where
+    the engine reports its progress, between two runs, so a stop request is
+    still noticed at once.
+    """
+    run_simulation = DiceInterface.run_simulation
+
+    def run_slowly(interface, parameters, progress_callback=None):
+        def report_then_pause(current: int, total: int) -> None:
+            progress_callback(current, total)
+            time.sleep(0.02)
+
+        return run_simulation(interface, parameters,
+                              progress_callback=report_then_pause if progress_callback else None)
+
+    monkeypatch.setattr(DiceInterface, "run_simulation", run_slowly)
 
 
 class TestSuccessfulRun:
@@ -137,7 +161,7 @@ class TestFailedRun:
 class TestCancellation:
     """A stop request ends the run as a cancellation, not as a failure."""
 
-    def test_stop_request_emits_cancelled_and_no_error(self, qtbot):
+    def test_stop_request_emits_cancelled_and_no_error(self, qtbot, slow_serial_runs):
         thread = SimulationThread(DiceInterface(), quick_test_engine_parameters(number_of_runs=300))
         log = _SignalLog(thread)
         thread.iteration_progress.connect(lambda current, total: thread.request_stop())
@@ -165,7 +189,7 @@ class TestCancellation:
         assert 1 <= len(log.iterations) < len(split_into_batches(300, effective_n_jobs(-1)))
         assert process_pool.new_children() == set()
 
-    def test_stop_button_reports_a_stop_without_an_error_dialog(self, qtbot, window, dialogs):
+    def test_stop_button_reports_a_stop_without_an_error_dialog(self, qtbot, window, dialogs, slow_serial_runs):
         window.num_runs_spin.setValue(300)
         window.multiprocessing_check.setChecked(False)
         qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
@@ -242,7 +266,7 @@ class TestThreadRelease:
         assert dialogs.titles("information") == ["Simulation Complete"]
         assert [finished for _, finished in released] == [True]
 
-    def test_stopped_run_is_released_after_it_returns(self, qtbot, window, dialogs, released):
+    def test_stopped_run_is_released_after_it_returns(self, qtbot, window, dialogs, released, slow_serial_runs):
         window.num_runs_spin.setValue(300)
         window.multiprocessing_check.setChecked(False)
         qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
@@ -279,6 +303,7 @@ def _stop_and_wait(qtbot, window) -> None:
     qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
 
 
+@pytest.mark.usefixtures("slow_serial_runs")
 class TestOneSimulationAtATime:
     """While a simulation runs, nothing in the form can start another one."""
 
@@ -318,6 +343,7 @@ class TestOneSimulationAtATime:
         assert window.status_label.text() == "Ready to run"
 
 
+@pytest.mark.usefixtures("slow_serial_runs")
 class TestClosingDuringARun:
     """Closing the window asks first, then waits for the run; it never terminates the thread."""
 
