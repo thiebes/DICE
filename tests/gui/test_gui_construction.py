@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QAbstractButton, QDoubleSpinBox, QGroupBox, QLabel, 
 
 from dice import __version__
 from dice.utils.units import length_abbreviation
-from gui_support import TAB_NAMES, fit_method_radio
+from gui_support import TAB_NAMES, fit_method_radio, trigger_menu_action
 
 pytestmark = pytest.mark.gui
 
@@ -94,8 +94,37 @@ class TestMainWindow:
         assert _menu_action_texts(window, "&Plots")[0] == "&Accuracy Histogram"
         assert _menu_action_texts(window, "&Settings") == ["&Global Units..."]
         assert _menu_action_texts(window, "&Help") == [
-            "&Documentation", "&Keyboard Shortcuts", "&About DICE",
+            "&Documentation", "&Keyboard Shortcuts", "&Licenses", "&About DICE",
         ]
+
+    def test_licenses_of_an_installed_copy_name_the_gpl_of_pyqt(self, window, dialogs):
+        trigger_menu_action(window, "&Help", "&Licenses")
+
+        assert dialogs.titles("information") == ["Licenses"]
+        text = dialogs.texts("information")[0]
+        assert "MIT License" in text
+        assert "PyQt6" in text and "GNU General Public License version 3" in text
+
+    def test_licenses_of_a_standalone_application_show_its_notice(self, window, dialogs, tmp_path, monkeypatch):
+        from PyQt6.QtWidgets import QDialog, QPlainTextEdit
+
+        notice = tmp_path / "THIRD-PARTY-LICENSES.txt"
+        notice.write_text("DICE: licenses of the standalone application\nGNU GENERAL PUBLIC LICENSE",
+                          encoding="utf-8")
+        monkeypatch.setattr("dice_gui.dice_gui.bundled_license_notice", lambda: notice)
+        shown = []
+
+        def record(dialog: QDialog) -> int:
+            editor = dialog.findChild(QPlainTextEdit)
+            shown.append((dialog.windowTitle(), editor.toPlainText(), editor.isReadOnly()))
+            return 0
+
+        monkeypatch.setattr(QDialog, "exec", record)
+
+        trigger_menu_action(window, "&Help", "&Licenses")
+
+        assert shown == [("Licenses", notice.read_text(encoding="utf-8"), True)]
+        assert dialogs.titles("information") == []
 
     def test_control_panel_starts_ready_to_run(self, window):
         assert window.run_button.isEnabled()

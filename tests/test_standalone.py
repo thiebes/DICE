@@ -94,6 +94,23 @@ class TestSelfTestRun:
         assert standalone.run_self_test(sys.stdout) is False
         assert 'use: joblib' in capsys.readouterr().out
 
+    @pytest.mark.parametrize('bundles_notice', [True, False])
+    def test_standalone_build_must_carry_its_license_notice(self, monkeypatch, capsys, tmp_path, ten_runs,
+                                                             bundles_notice):
+        import dice.utils.runtime as runtime
+
+        examples = runtime.examples_directory()
+        if bundles_notice:
+            (tmp_path / runtime.LICENSE_NOTICE_FILE_NAME).write_text('notice', encoding='utf-8')
+        monkeypatch.setattr(simulation, 'run_in_process_pool', serial_pool)
+        monkeypatch.setattr(runtime, 'examples_directory', lambda: examples)
+        monkeypatch.setattr(runtime, 'is_standalone_build', lambda: True)
+        monkeypatch.setattr(sys, '_MEIPASS', str(tmp_path), raising=False)
+        monkeypatch.setattr(simulation, 'default_parallel_backend', lambda: simulation.PROCESS_POOL_BACKEND)
+
+        assert standalone.run_self_test(sys.stdout) is bundles_notice
+        assert f"License notice bundled: {'yes' if bundles_notice else 'no'}" in capsys.readouterr().out
+
     def test_missing_example_fails(self, monkeypatch, tmp_path):
         import dice.utils.runtime as runtime
 

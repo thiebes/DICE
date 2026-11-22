@@ -113,6 +113,12 @@ For release 2.0.0, for example, the Windows file is `DICE-2.0.0-Windows-x86_64.e
 
 The Linux application is built on Ubuntu 22.04. It should run on any distribution with the same or a newer GNU C Library (glibc 2.35 or later).
 
+### Licenses
+
+The source code of DICE is under the MIT License. A standalone application also contains the packages DICE depends on. One of them, PyQt6, is under the GNU General Public License (GPL) version 3, so each standalone application is distributed under the GPL version 3. You may copy, change, and redistribute it under those terms.
+
+The Assets list has a license notice for each application, for example `DICE-2.0.0-Windows-x86_64-licenses.txt`. It gives the license text of DICE and of every package in the application, and says where the source code is. The same notice is in the application under Help > Licenses, and in the Linux archive as `THIRD-PARTY-LICENSES.txt`.
+
 ### Check the download
 
 `SHA256SUMS.txt` lists the SHA-256 checksum of every file of the release. If the checksum of your file matches its line, your copy is identical to the file that the release build produced. Run the command for your system in the folder that contains both files.

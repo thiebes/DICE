@@ -139,17 +139,25 @@ jobs:
       # One file per platform: the Windows executable; the Linux executable
       # in a .tar.gz, which keeps its executable bit; and the macOS app
       # bundle zipped with ditto, which keeps the symbolic links inside the
-      # bundle that zip -r would replace with copies.
+      # bundle that zip -r would replace with copies. The application is
+      # distributed under the GPL because it bundles PyQt6, so the license
+      # notice that dice-gui.spec wrote is published next to each binary; the
+      # Linux archive holds a copy, and every application bundles one.
       - name: Package
         shell: bash
         env:
           ASSET: ${{ steps.asset.outputs.name }}
         run: |
           mkdir release
+          cp build/THIRD-PARTY-LICENSES.txt "release/${ASSET}-licenses.txt"
           case "$RUNNER_OS" in
             Windows) cp dist/DICE.exe "release/${ASSET}.exe" ;;
             macOS) ditto -c -k --keepParent dist/DICE.app "release/${ASSET}.zip" ;;
-            Linux) tar --owner=0 --group=0 --numeric-owner -czf "release/${ASSET}.tar.gz" -C dist DICE ;;
+            Linux)
+              cp build/THIRD-PARTY-LICENSES.txt dist/
+              tar --owner=0 --group=0 --numeric-owner -czf "release/${ASSET}.tar.gz" \
+                -C dist DICE THIRD-PARTY-LICENSES.txt
+              ;;
           esac
           ls -l release
 

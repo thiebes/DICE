@@ -59,6 +59,12 @@ results with 1.2.0.
   nominal diffusion coefficient against the initial CNR, in place of the
   accuracy histogram, and summary statistics in bins of initial CNR with
   equal numbers of runs: one bin per 20 runs, at most five.
+- License notice of the standalone applications. They contain PyQt6, which
+  is under the GNU General Public License (GPL) version 3, so they are
+  distributed under the GPL version 3; the source code of DICE stays under
+  the MIT License. Each release has a `-licenses.txt` file for each
+  application, with the license text of every package it contains, and the
+  application shows the same notice under Help > Licenses.
 - The GUI warns when it opens a parameters file with a noise range, which the
   GUI cannot edit, instead of silently keeping its own noise setting.
 - Python interface: `run_monte_carlo_simulation()` takes `noise_range`, a

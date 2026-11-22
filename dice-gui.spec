@@ -91,6 +91,18 @@ datas = [
     (str(root_path / 'data'), 'data'),
 ]
 
+# License notice of DICE and of every package in the build environment
+# (scripts/collect_licenses.py). PyQt6 is under the GPL version 3, so the
+# application is distributed under the GPL and must carry the license texts.
+# Help > Licenses shows the bundled file, the self-test requires it, and the
+# release workflow also publishes it next to each binary. It is written
+# outside PyInstaller's work folder (build/dice-gui), which --clean empties.
+sys.path.insert(0, str(root_path / 'scripts'))
+from collect_licenses import NOTICE_FILE_NAME, write_license_notice
+
+license_notice = write_license_notice(root_path / 'build' / NOTICE_FILE_NAME, app_version)
+datas.append((str(license_notice), '.'))
+
 a = Analysis(
     [str(root_path / 'dice_gui' / 'standalone.py')],
     pathex=[str(root_path)],

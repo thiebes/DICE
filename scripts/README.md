@@ -2,6 +2,20 @@
 
 The `scripts/` directory contains scripts for maintaining the DICE project.
 
+## License notice of the standalone applications
+
+### collect_licenses.py
+
+Writes the license notice that a standalone application carries: the MIT License of DICE, and the declared license and license files of every package installed in the current environment. The standalone applications contain PyQt6, which is under the GNU General Public License (GPL) version 3, so they are distributed under the GPL and must carry these texts.
+
+`dice-gui.spec` calls the script when PyInstaller builds the application, bundles the notice, and leaves a copy in `build/THIRD-PARTY-LICENSES.txt` for the release workflow. The script stops with an error if the environment lacks the text of the GPL or of the GNU Lesser General Public License, which come with PyQt6 and the Qt libraries.
+
+To write the notice of the current environment by hand:
+
+```bash
+python scripts/collect_licenses.py THIRD-PARTY-LICENSES.txt
+```
+
 ## Version management
 
 ### bump_version.py
@@ -56,7 +70,7 @@ python scripts/bump_version.py 1.3.0 --no-confirm
 7. Commit the changes: `git add -A && git commit -m "Bump version to X.Y.Z"`.
 8. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`.
 9. Push the commit and the tag: `git push && git push --tags`.
-10. On GitHub, publish a release for the tag. Publishing it, not pushing the tag, starts `.github/workflows/build-release.yml`, which builds the standalone executables and attaches them and `SHA256SUMS.txt` to the release.
+10. On GitHub, publish a release for the tag. Publishing it, not pushing the tag, starts `.github/workflows/build-release.yml`, which builds the standalone executables and attaches them, their license notices, and `SHA256SUMS.txt` to the release.
 
 #### Version format
 

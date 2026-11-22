@@ -4,6 +4,10 @@ Facts about the running program that change what DICE can do.
 
 import sys
 from pathlib import Path
+from typing import Optional
+
+# File name of the license notice that dice-gui.spec bundles (scripts/collect_licenses.py).
+LICENSE_NOTICE_FILE_NAME = 'THIRD-PARTY-LICENSES.txt'
 
 
 def is_standalone_build() -> bool:
@@ -54,3 +58,23 @@ def examples_directory() -> Path:
     if is_standalone_build():
         return Path(sys._MEIPASS) / 'data' / 'examples'
     return Path(__file__).resolve().parents[2] / 'data' / 'examples'
+
+
+def bundled_license_notice() -> Optional[Path]:
+    """
+    The license notice that a standalone build carries.
+
+    The notice gives the license of DICE and of every package the
+    application bundles. Only a standalone build has it.
+
+    Returns
+    -------
+    Path or None
+        The notice file, or None outside a standalone build or when the
+        build did not bundle it.
+    """
+    bundle_folder = getattr(sys, '_MEIPASS', None)
+    if not is_standalone_build() or bundle_folder is None:
+        return None
+    notice = Path(bundle_folder) / LICENSE_NOTICE_FILE_NAME
+    return notice if notice.is_file() else None

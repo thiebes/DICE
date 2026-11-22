@@ -128,3 +128,5 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 The full license text, including the warranty disclaimer, is in [LICENSE.md](LICENSE.md).
+
+The GUI uses PyQt6, which is licensed under the GNU General Public License (GPL) version 3. The standalone applications of a release contain PyQt6, so they are distributed under the GPL version 3. Each one carries a notice with the license text of every package it contains; see [Licenses](docs/installation.md#licenses) in the installation guide.

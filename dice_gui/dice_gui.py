@@ -13,12 +13,13 @@ from PyQt6.QtWidgets import (
     QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
     QProgressBar, QMessageBox, QStatusBar, QMenu,
     QAbstractButton, QAbstractSpinBox, QDoubleSpinBox, QLineEdit, QPlainTextEdit, QSpinBox,
+    QDialog, QDialogButtonBox,
 )
 from PyQt6.QtCore import QLocale, Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
 
 from dice import __version__
-from dice.utils.runtime import examples_directory
+from dice.utils.runtime import bundled_license_notice, examples_directory
 from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
     validate_time_range, validate_time_series,
@@ -273,6 +274,12 @@ class DiceGUI(QMainWindow):
         help_menu.addAction(shortcuts_action)
 
         help_menu.addSeparator()
+
+        # Licenses
+        licenses_action = QAction("&Licenses", self)
+        licenses_action.setStatusTip("Licenses of DICE and of the packages it uses")
+        licenses_action.triggered.connect(self.show_licenses_dialog)
+        help_menu.addAction(licenses_action)
 
         # About
         about_action = QAction("&About DICE", self)
@@ -2261,9 +2268,44 @@ Thiebes, J. J. (2023). <i>Diffusion Insight Computation Engine (DICE)</i> <br>
 
 <p><b>GitHub:</b> <a href="https://github.com/thiebes/DICE">https://github.com/thiebes/DICE</a></p>
 
-<p><b>License:</b> MIT</p>
+<p><b>License:</b> MIT for the source code of DICE. Help &gt; Licenses gives the
+licenses of the packages DICE uses.</p>
 """
         QMessageBox.about(self, "About DICE", about_text)
+
+    def show_licenses_dialog(self):
+        """Show the licenses of DICE and of the packages it uses.
+
+        A standalone application shows the license notice it carries, with
+        the license text of every bundled package. An installed copy has no
+        such file, so it names the licenses that matter most.
+        """
+        notice = bundled_license_notice()
+        if notice is None:
+            QMessageBox.information(
+                self, "Licenses",
+                "The source code of DICE is licensed under the MIT License (LICENSE.md).\n\n"
+                "The GUI uses PyQt6, which is licensed under the GNU General Public License "
+                "version 3, and the Qt libraries, under the GNU Lesser General Public License "
+                "version 3. Every installed package carries its own license.\n\n"
+                "The standalone DICE applications are distributed under the GNU General Public "
+                "License version 3 and carry the license text of every package they contain."
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Licenses")
+        layout = QVBoxLayout(dialog)
+        text = QPlainTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText(notice.read_text(encoding='utf-8'))
+        text.setAccessibleName("Licenses of DICE and of the packages in this application")
+        layout.addWidget(text)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.resize(760, 560)
+        dialog.exec()
 
     def open_documentation(self):
         """Open DICE documentation on GitHub."""

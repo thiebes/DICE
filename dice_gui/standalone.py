@@ -67,7 +67,7 @@ def run_self_test(output: Optional[TextIO]) -> bool:
         (dice.analysis.simulation.seeded_results_agree), the progress
         reached every run, no worker process remained afterwards, and, in a
         standalone build, the application's parallel simulations use the
-        process pool.
+        process pool and the application carries its license notice.
     """
     import time
 
@@ -84,7 +84,7 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     )
     from dice.io.parameters import open_parameters
     from dice.utils.legacy_compatibility import create_parameters_from_legacy
-    from dice.utils.runtime import examples_directory, is_standalone_build
+    from dice.utils.runtime import bundled_license_notice, examples_directory, is_standalone_build
 
     example = examples_directory() / SELF_TEST_EXAMPLE
     parameters = open_parameters(example)
@@ -128,6 +128,9 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     remaining_workers = set(multiprocessing.active_children()) - earlier_children
     application_backend = default_parallel_backend()
     backend_tested = application_backend == PROCESS_POOL_BACKEND or not is_standalone_build()
+    # A standalone build bundles PyQt6 and must carry the license texts.
+    license_notice = bundled_license_notice()
+    notice_carried = license_notice is not None or not is_standalone_build()
 
     print(f"Results agree to within rounding (relative {SEEDED_RESULTS_RTOL:g}): {'yes' if agree else 'no'}",
           file=output)
@@ -135,8 +138,10 @@ def run_self_test(output: Optional[TextIO]) -> bool:
           file=output)
     print(f"Worker processes still running: {len(remaining_workers)}", file=output)
     print(f"Parallel simulations of this application use: {application_backend}", file=output)
+    if is_standalone_build():
+        print(f"License notice bundled: {'yes' if license_notice is not None else 'no'}", file=output)
 
-    passed = agree and progress_complete and not remaining_workers and backend_tested
+    passed = agree and progress_complete and not remaining_workers and backend_tested and notice_carried
     print(f"Self-test {'passed' if passed else 'failed'}", file=output)
     return passed
 
