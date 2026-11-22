@@ -43,7 +43,8 @@ results with 1.2.0.
   the tab shows the standard deviation, relative standard error, and bias of
   the estimates, and the fraction of estimates within any proximity level
   from 1% to 50% of the nominal value, for the weighted least squares (WLS)
-  or the ordinary least squares (OLS) fit.
+  or the ordinary least squares (OLS) fit. A histogram of the estimates
+  highlights the part within the chosen level.
 - Per-parameter units. In a parameters file, a key that ends in `_unit` (for
   example `FWHM_0_unit` or `lifetime_unit`) gives the unit of one value, and
   DICE converts it to the global `length unit` and `time unit`. In the GUI,

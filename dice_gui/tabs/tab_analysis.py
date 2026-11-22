@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 from dice_gui.tabs.base import create_scrollable_tab
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 
-from dice_gui.proximity_widget import ProximityTargetWidget
+from dice_gui.proximity_widget import ProximityHistogramWidget
 
 if TYPE_CHECKING:
     from dice_gui.dice_gui import DiceGUI
@@ -84,7 +84,8 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
 
     explore_description = QLabel(
         "Adjust the threshold to see what fraction of estimates\n"
-        "fall within a given percentage of the nominal value."
+        "fall within a given percentage of the nominal value.\n"
+        "The histogram highlights that part of the estimates."
     )
     explore_description.setWordWrap(True)
     explore_description.setProperty("class", "info-text")
@@ -122,9 +123,9 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     main_window.proximity_fraction_label.setStyleSheet("font-weight: bold;")
     explore_layout.addWidget(main_window.proximity_fraction_label)
 
-    # Target visualization
-    main_window.proximity_target = ProximityTargetWidget(proximity=0.10)
-    explore_layout.addWidget(main_window.proximity_target)
+    # Histogram of the estimates, with the part within the threshold highlighted
+    main_window.proximity_histogram = ProximityHistogramWidget(proximity=0.10)
+    explore_layout.addWidget(main_window.proximity_histogram)
 
     # Disabled until results exist
     explore_group.setEnabled(False)
@@ -147,16 +148,16 @@ def selected_estimator_key(main_window: "DiceGUI") -> str:
 
 
 def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
-    """Handle proximity spin box value change — update label, target, and fraction."""
+    """Handle proximity spin box value change: update the label, the histogram, and the fraction."""
     pct = int(round(value * 100))
     main_window.proximity_pct_label.setText(f"(±{pct}%)")
-    main_window.proximity_target.set_proximity(value)
+    main_window.proximity_histogram.set_proximity(value)
 
     # Recalculate fraction if results are available
     if main_window.interface.last_result is not None:
-        fraction = main_window.interface.calculate_proximity_on_demand(
-            value, estimator=selected_estimator_key(main_window)
-        )
+        estimator = selected_estimator_key(main_window)
+        main_window.proximity_histogram.set_ratios(main_window.interface.estimate_ratios(estimator))
+        fraction = main_window.interface.calculate_proximity_on_demand(value, estimator=estimator)
         if fraction is not None:
             main_window.proximity_fraction_label.setText(
                 f"{fraction:.1%} of estimates fall within ±{pct}% of nominal"
@@ -191,4 +192,5 @@ def reset_precision_summary(main_window: "DiceGUI") -> None:
     main_window.precision_mean_ratio_label.setText("—")
     main_window.precision_placeholder.setVisible(True)
     main_window.proximity_fraction_label.setText("")
+    main_window.proximity_histogram.set_ratios(None)
     main_window.explore_proximity_group.setEnabled(False)

@@ -116,6 +116,27 @@ class TestPrecisionSummary:
         assert window.results_status_label.text() == "Simulation results: quick_test (30 runs)"
 
 
+def _bar_pixel_counts(histogram) -> tuple[dict, dict]:
+    """Count the pixels of the highlighted and of the other bar color in the painted histogram.
+
+    Returns, for each of the two colors, the number of pixels and the set of
+    pixel columns that hold the color. The bars are drawn without
+    antialiasing, so their pixels have the exact colors.
+    """
+    image = histogram.grab().toImage()
+    scale = image.devicePixelRatio()
+    colors = [color.rgb() for color in histogram.bar_colors()]
+    found = [{"pixels": 0, "columns": set()} for _ in colors]
+    for y in range(image.height()):
+        for x in range(image.width()):
+            pixel = image.pixel(x, y)
+            for color, entry in zip(colors, found):
+                if pixel == color:
+                    entry["pixels"] += 1
+                    entry["columns"].add(int(x / scale))
+    return found[0], found[1]
+
+
 class TestAccuracyThresholdTool:
 
     @pytest.mark.parametrize("threshold", [0.01, 0.05, 0.2, 0.5])
@@ -135,11 +156,91 @@ class TestAccuracyThresholdTool:
             fractions.append(float(window_with_results.proximity_fraction_label.text().split("%")[0]))
         assert fractions == sorted(fractions)
 
-    def test_target_graphic_paints_across_the_threshold_range(self, window_with_results):
-        target = window_with_results.proximity_target
-        for threshold in (window_with_results.proximity_spin.minimum(), 0.1, window_with_results.proximity_spin.maximum()):
+    def test_histogram_shows_the_estimates_of_the_selected_fit(self, window_with_results, completed_run):
+        histogram = window_with_results.proximity_histogram
+        for abbreviation, column in (("WLS", WLS_SLOPE_COLUMN), ("OLS", OLS_SLOPE_COLUMN)):
+            fit_method_radio(window_with_results, abbreviation).setChecked(True)
+            estimates, nominal = d_estimates_from_csv(completed_run.csv_path, column)
+            np.testing.assert_allclose(histogram.ratios(), estimates / nominal, rtol=1e-9)
+            counts, edges = histogram.histogram()
+            assert counts.sum() + histogram.count_outside_axis() == len(estimates)
+            assert edges[0] < 1 < edges[-1]
+            assert (edges[0] + edges[-1]) / 2 == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("threshold", [0.01, 0.05, 0.1, 0.2, 0.5])
+    def test_highlighted_part_of_the_bars_is_the_fraction_within_the_threshold(
+            self, window_with_results, completed_run, threshold):
+        histogram = window_with_results.proximity_histogram
+        histogram.resize(900, 300)
+        window_with_results.proximity_spin.setValue(threshold)
+        highlight, muted = _bar_pixel_counts(histogram)
+
+        # Highlighted pixels lie only inside the band of the threshold.
+        band = histogram.band_rect()
+        assert highlight["columns"] <= set(range(band.left(), band.left() + band.width()))
+
+        # Bar height is the count of a bin, so the highlighted share of the
+        # bar area is the count-weighted share of each bin that the band covers.
+        counts, edges = histogram.histogram()
+        covered = np.clip(np.minimum(edges[1:], 1 + threshold) - np.maximum(edges[:-1], 1 - threshold), 0, None)
+        expected = (counts * covered / np.diff(edges)).sum() / counts.sum()
+        assert highlight["pixels"] + muted["pixels"] > 0
+        assert highlight["pixels"] / (highlight["pixels"] + muted["pixels"]) == pytest.approx(expected, abs=0.03)
+
+    def test_highlight_grows_with_the_threshold(self, window_with_results):
+        histogram = window_with_results.proximity_histogram
+        highlighted = []
+        for threshold in (0.01, 0.05, 0.2, 0.5):
             window_with_results.proximity_spin.setValue(threshold)
-            assert not target.grab().isNull()
+            highlighted.append(_bar_pixel_counts(histogram)[0]["pixels"])
+        assert highlighted == sorted(highlighted)
+        assert highlighted[0] < highlighted[-1]
+
+    def test_axis_does_not_move_when_the_threshold_changes(self, window_with_results):
+        histogram = window_with_results.proximity_histogram
+        window_with_results.proximity_spin.setValue(0.01)
+        narrow = histogram.axis_range()
+        window_with_results.proximity_spin.setValue(0.5)
+        assert histogram.axis_range() == narrow
+
+    def test_histogram_describes_itself_for_a_screen_reader(self, window_with_results, completed_run):
+        window_with_results.proximity_spin.setValue(0.2)
+        estimates, nominal = d_estimates_from_csv(completed_run.csv_path, WLS_SLOPE_COLUMN)
+        within = int(round(fraction_within(estimates, nominal, 0.2) * len(estimates)))
+        description = window_with_results.proximity_histogram.accessibleDescription()
+        assert f"Histogram of {len(estimates)} estimates" in description
+        assert f"{within} of them are within ±20%" in description
+
+    def test_axis_is_centered_on_nominal_and_counts_the_estimates_beyond_it(
+            self, window_with_results, completed_run):
+        histogram = window_with_results.proximity_histogram
+        estimates, nominal = d_estimates_from_csv(completed_run.csv_path, WLS_SLOPE_COLUMN)
+        distance = np.abs(estimates / nominal - 1)
+
+        low, high = histogram.axis_range()
+
+        assert high - 1 == pytest.approx(1.08 * np.percentile(distance, 99.5))
+        assert 1 - low == pytest.approx(high - 1)
+        assert histogram.count_outside_axis() == np.count_nonzero(distance > high - 1)
+
+    def test_values_that_are_not_numbers_are_left_out(self, window_with_results, completed_run):
+        histogram = window_with_results.proximity_histogram
+        estimates, nominal = d_estimates_from_csv(completed_run.csv_path, WLS_SLOPE_COLUMN)
+        ratios = estimates / nominal
+        axis_range = histogram.axis_range()
+
+        histogram.set_ratios(np.concatenate([ratios, [np.nan, np.inf, -np.inf]]))
+
+        np.testing.assert_allclose(histogram.ratios(), ratios, rtol=1e-9)
+        assert histogram.axis_range() == pytest.approx(axis_range)
+        assert not histogram.grab().isNull()
+
+    def test_histogram_without_results_shows_no_bars(self, window):
+        histogram = window.proximity_histogram
+        assert histogram.ratios().size == 0
+        assert histogram.accessibleDescription() == "No estimates to show."
+        highlight, muted = _bar_pixel_counts(histogram)
+        assert highlight["pixels"] == muted["pixels"] == 0
 
 
 class TestRegeneratePlot:

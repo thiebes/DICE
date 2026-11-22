@@ -705,6 +705,29 @@ class DiceInterface:
         except Exception as e:
             raise RuntimeError(f"Failed to load and plot from CSV: {e}")
 
+    def estimate_ratios(self, estimator: str = 'wls'):
+        """
+        The estimates of the last results as ratios to the nominal diffusion coefficient.
+
+        Args:
+            estimator: Key of the estimator whose estimates to use (dice.models.estimators)
+
+        Returns:
+            Array of D estimate / nominal D, or None if no data available.
+        """
+        if self.last_result is None:
+            return None
+
+        d_estimates = self.last_result.d_estimates(estimator)
+        if len(d_estimates) == 0:
+            return None
+
+        nominal_d = self.last_result.run_results[0].nominal_diffusion_coefficient
+        if nominal_d == 0:
+            return None
+
+        return d_estimates / nominal_d
+
     def calculate_proximity_on_demand(
         self,
         proximity_level: float,
