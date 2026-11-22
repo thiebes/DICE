@@ -22,11 +22,6 @@ CSV_D_SCALE_KEY = 'diffusion coefficient scale'
 WHOLE_NUMBER_KEYS = ('number of runs', 'pixel width', 'image dpi', 'image numbins')
 
 
-def write_error_text(error: OSError) -> str:
-    """The file and the reason of a failed write, for a dialog: 'C:\\...\\run.csv: Permission denied'."""
-    if error.filename and error.strerror:
-        return f"{error.filename}: {error.strerror}"
-    return str(error)
 
 
 def parameters_for_form(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,9 +111,11 @@ class DiceInterface:
 
         After a run, the estimates are in the global units of its parameters,
         and are reported in the unit of the summary file's diffusion
-        coefficients. A loaded results CSV does not name the global units, so
-        the unit is that of its labeled nominal column, or None when the CSV
-        has no such column.
+        coefficients. The estimates of a loaded results file are reported in
+        the output unit its columns name (cm²/s by default), or in the unit
+        of its slopes when it has no column in another unit. The unit is
+        None for a file of DICE 1.2.0 without a column in cm²/s, whose
+        slopes name no unit, and for a label that DICE does not write.
         """
         from dice.io.results import output_unit_preferences, summary_diffusion_units
         from dice.utils.units import (
@@ -194,8 +191,8 @@ class DiceInterface:
                 time_values = [float(v.strip()) for v in gui_params['time_series'].split(',') if v.strip()]
             except ValueError:
                 raise ValueError("Time series must be comma-separated numbers (e.g., '0, 1, 2, 3')")
-            if len(time_values) == 0:
-                raise ValueError("Time series must contain at least one value")
+            if len(time_values) < 2:
+                raise ValueError("Time series must contain at least two time points")
             if len(time_values) != len(set(time_values)):
                 raise ValueError("Time series contains duplicate values")
             params['time series'] = sorted(time_values)
@@ -312,7 +309,8 @@ class DiceInterface:
         try:
             self.write_outputs(result, processed_params)
         except OSError as e:
-            self.last_output_error = write_error_text(e)
+            from dice.io.results import file_error_text
+            self.last_output_error = file_error_text(e)
         return result, processed_params
 
     def write_outputs(self, result: MonteCarloOutput, processed_params: Dict[str, Any]) -> None:
@@ -395,12 +393,16 @@ class DiceInterface:
         Write the output files of the last simulation again.
 
         Returns:
-            None when the files are written, or the reason they could not be.
+            None when the files are written or no simulation waits for its
+            files, or the reason they could not be written.
         """
+        if self.last_output_error is None:
+            return None
         try:
             self.write_outputs(self.last_result, self.last_parameters)
         except OSError as e:
-            self.last_output_error = write_error_text(e)
+            from dice.io.results import file_error_text
+            self.last_output_error = file_error_text(e)
         else:
             self.last_output_error = None
         return self.last_output_error
@@ -565,6 +567,7 @@ class DiceInterface:
 
             # Load CSV
             from dice.io.results import NOMINAL_D_COLUMN, column_unit, results_column
+            from dice.utils.units import known_diffusion_coefficient_label
             from dice.visualization.histograms import use_file_backend
 
             use_file_backend()
@@ -587,14 +590,15 @@ class DiceInterface:
 
             # Validate required columns exist
             if slope_col is None:
+                # The column names of the file are not repeated: they are
+                # text from the file and would reach a dialog.
                 raise ValueError(
-                    f"CSV missing {method_name} slope column. "
-                    f"Available columns: {list(df.columns)}"
+                    f"The file has no column '{spec.csv_label} diffusion slope' of the {method_name} fit. "
+                    "It is not a results file of DICE, or it holds no fit of that kind."
                 )
             if nom_col is None:
                 raise ValueError(
-                    f"CSV missing nominal diffusion coefficient column. "
-                    f"Available columns: {list(df.columns)}"
+                    f"The file has no column '{NOMINAL_D_COLUMN}'. It is not a results file of DICE."
                 )
 
             # Extract slopes and nominal values
@@ -621,6 +625,9 @@ class DiceInterface:
                 d_scale = float(df[output_nom_col].iloc[0] / d_nominal)
             else:
                 d_unit, d_scale = column_unit(nom_col), 1.0
+            # The label comes from the file and is shown on the Analysis tab,
+            # so only a unit that DICE writes is passed on.
+            d_unit = known_diffusion_coefficient_label(d_unit)
 
             # Calculate diffusion estimates (D = slope/2)
             d_estimates = slopes / 2
@@ -697,6 +704,9 @@ class DiceInterface:
                 CSV_D_UNIT_KEY: d_unit,
                 CSV_D_SCALE_KEY: d_scale,
             }
+            # The loaded results replace those of a simulation; nothing of
+            # that simulation is left to write.
+            self.last_output_error = None
 
         except ImportError as e:
             raise ImportError(f"Failed to import required modules: {e}")

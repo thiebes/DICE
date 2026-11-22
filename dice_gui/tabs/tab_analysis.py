@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Optional
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QGroupBox, QLabel, QDoubleSpinBox, QRadioButton
@@ -63,6 +64,10 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     main_window.precision_rse_label = QLabel("—")
     main_window.precision_bias_label = QLabel("—")
     main_window.precision_mean_ratio_label = QLabel("—")
+    # The unit beside these values can come from a results file: no markup.
+    for value_label in (main_window.precision_std_label, main_window.precision_rse_label,
+                        main_window.precision_bias_label, main_window.precision_mean_ratio_label):
+        value_label.setTextFormat(Qt.TextFormat.PlainText)
 
     precision_layout.addRow("Std Dev:", main_window.precision_std_label)
     precision_layout.addRow("Relative Std Error:", main_window.precision_rse_label)
@@ -87,7 +92,8 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     explore_description = QLabel(
         "Adjust the threshold to see what fraction of estimates\n"
         "fall within a given percentage of the nominal value.\n"
-        "The histogram highlights that part of the estimates."
+        "In the histogram, each bar is colored from its foot up to the\n"
+        "share of its estimates within the threshold; dashed lines mark the limits."
     )
     explore_description.setWordWrap(True)
     explore_description.setProperty("class", "info-text")
@@ -169,8 +175,8 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
             # with its count and its 95% interval, as in the summary file.
             from dice.io.results import fraction_text
             main_window.proximity_fraction_label.setText(
-                f"Within ±{pct}% of nominal: {fraction_text(detail['fraction'], detail)}. "
-                "The range is the 95% interval."
+                f"Within ±{pct}% of nominal: "
+                f"{fraction_text(detail['fraction'], detail, interval_label='95% interval ')}"
             )
 
 
@@ -180,15 +186,17 @@ def value_with_uncertainty(value: float, uncertainty: float) -> str:
 
     The uncertainty is given with two significant digits and the value is
     rounded to its last digit, for example '-0.00042 ± 0.00087'. Numbers
-    that need more than eight decimals share one power of ten, for example
-    '(3.1 ± 8.7)e-10'. A value without a finite uncertainty (the standard
+    that need more than eight decimals share the power of ten of the
+    uncertainty, for example '(3.1 ± 8.7)e-10' or '(500.0 ± 4.6)e-12'. A
+    value without a finite uncertainty (the standard
     error of one estimate) is given alone, with three significant digits.
     """
     if not math.isfinite(uncertainty) or uncertainty <= 0 or not math.isfinite(value):
         return f"{value:.3g}"
     decimals = 1 - math.floor(math.log10(uncertainty))
     if decimals > 8:
-        exponent = math.floor(math.log10(max(abs(value), uncertainty)))
+        # The power of ten of the uncertainty, so that it keeps its two digits.
+        exponent = math.floor(math.log10(uncertainty))
         scale = 10.0 ** exponent
         return f"({value / scale:.1f} ± {uncertainty / scale:.1f})e{exponent}"
     decimals = max(decimals, 0)

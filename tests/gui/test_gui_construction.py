@@ -382,7 +382,13 @@ class TestKeyboardAndScreenReader:
         assert unnamed == []
 
     def test_names_come_from_the_labels_and_the_quantities(self, window):
-        assert window.diffusion_length_input.accessibleName() == "Diffusion Length (L)"
+        assert window.diffusion_length_input.accessibleName() == "Diffusion length"
+        # A label that is one short word, or holds a symbol, is replaced by a name that stands alone.
+        assert window.time_stop_input.accessibleName() == "Stop time"
+        assert window.noise_file_input.accessibleName() == "Measured profile file"
+        assert window.noise_value_input.accessibleName() == "Noise standard deviation"
+        assert window.image_width_spin.accessibleName() == "Image width"
+        assert window.proximity_spin.accessibleName() == "Accuracy threshold"
         assert window.diffusion_length_unit_combo.accessibleName() == "Diffusion length unit"
         assert window.diffusion_coeff_length_unit_combo.accessibleName() == "Diffusion coefficient length unit"
         assert window.time_stop_unit_combo.accessibleName() == "Stop time unit"
@@ -418,8 +424,23 @@ class TestKeyboardAndScreenReader:
         qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
 
         assert dialogs.titles("warning") == ["Missing or Invalid Parameters"]
-        assert dialogs.texts("warning")[0].startswith("Amplitude\u2080: ")
+        assert dialogs.texts("warning")[0].startswith("Initial amplitude: ")
         assert "has the focus now" in dialogs.texts("warning")[0]
         assert window.tabs.currentIndex() == 1
         assert window.focusWidget() is window.amplitude_input
         assert window.simulation_thread is None
+
+
+def test_field_that_blocks_a_run_is_scrolled_into_view(qtbot, window, dialogs):
+    """A scroll area follows the Tab key, not a focus that the program sets."""
+    window.show()
+    window.resize(900, 320)
+    window.tabs.setCurrentIndex(1)
+    qtbot.wait(50)
+    window.width_input.setText("abc")
+    window.tabs.setCurrentIndex(0)
+
+    qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+
+    assert window.tabs.currentIndex() == 1
+    assert not window.width_input.visibleRegion().isEmpty()

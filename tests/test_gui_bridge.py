@@ -199,7 +199,9 @@ class TestLoadAndPlotFromCsv:
                 str(ols_only), str(tmp_path / 'plot.png'), IMAGE_SETTINGS,
                 **METHOD_ARGUMENTS['wls'])
         assert str(error.value).startswith(
-            "CSV missing WLS slope column. Available columns: ['run number',")
+            "The file has no column 'weighted fit diffusion slope' of the WLS fit.")
+        # The message does not repeat the column names of the file, which are text from the file.
+        assert "unweighted" not in str(error.value) and "run number" not in str(error.value)
         assert plotted == []
         assert interface.last_result is None
 

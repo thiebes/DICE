@@ -323,6 +323,25 @@ def diffusion_coefficient_label(length_unit: str, time_unit: str) -> str:
     return f"{l_abbr}\u00b2/{t_abbr}"
 
 
+def known_diffusion_coefficient_label(text: Optional[str]) -> Optional[str]:
+    """
+    A diffusion coefficient unit label read from a file, if it is one DICE writes; otherwise None.
+
+    A results file can come from someone else, and its column names reach
+    the screen. Only a label that diffusion_coefficient_label can produce is
+    passed on ('cm²/s', 'μm²/ns', ...; DICE 1.2.0 wrote 'cm^2/s').
+    """
+    if text is None:
+        return None
+    labels = {
+        f"{length}{square}/{time}"
+        for length in LENGTH_ABBREVIATIONS.values()
+        for time in TIME_ABBREVIATIONS.values()
+        for square in ("\u00b2", "^2")
+    }
+    return text if text in labels else None
+
+
 def global_length_unit(parameters: Dict[str, Any]) -> str:
     """Global simulation length unit of a parameters dictionary (default 'micrometer')."""
     return parameters.get('length_unit', parameters.get('length unit', 'micrometer'))

@@ -53,8 +53,8 @@ The main window has five tabs, a control panel at the bottom, a status bar, and 
 The analysis acts on the results of the last simulation. It does not change the simulation.
 
 - **Fit Method**: show results for the weighted least squares (WLS) or the ordinary least squares (OLS) fit of the mean squared displacement (MSD) against time.
-- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, which does not record the global units, they are in the unit of the file's `nominal diffusion coeff [...]` column, cm²/s by default.
-- **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, for example "within ±10%". A target diagram shows the threshold. You can change the threshold as often as you like without running the simulation again.
+- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The bias is shown with its standard error. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, they are in the output unit that the columns of the file name, cm²/s by default. If the selected fit has no estimates, the summary says so.
+- **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, with its count and its 95% interval. A histogram of the estimates shows the threshold: dashed lines mark the limits, and each bar is colored from its foot up to the share of its estimates within them. You can change the threshold as often as you like without running the simulation again.
 
 ### Output Settings
 
@@ -66,12 +66,12 @@ The analysis acts on the results of the last simulation. It does not change the 
 
 - **Load Example...**: fill all tabs with example parameters.
 - **Run Simulation (Ctrl+R)**: check the inputs and start the simulation. Before the run starts, the GUI warns about settings that make the fits unreliable: a low CNR at the last time point, an initial profile that is narrow compared with the pixel size, or very few time points. You can continue or go back.
-- **Stop**: stop a running simulation. A serial simulation stops after the current run; a parallel simulation stops after the current batch of runs (about a tenth of a large simulation). The status line reads "Stopping..." until then.
+- **Stop (Ctrl+.)**: stop a running simulation. A serial simulation stops after the current run; a parallel simulation stops after the current batch of runs (about a tenth of a large simulation). The status line reads "Stopping..." until then. Closing the window during a run asks first; the window then stays until the run has stopped, and closes.
 - A progress bar with elapsed and estimated remaining time.
 
 ### Menus
 
-- **File**: new, open, and save parameters files (the same text format that the command-line interface reads), recently used parameters files, and **Load Results...** (Ctrl+L) for a results CSV file.
+- **File**: new, open, and save parameters files (the same text format that the command-line interface reads), recently used parameters files, and **Load Results...** (Ctrl+L) for a results CSV file. **Write Output Files** is available when the output files of a finished simulation could not be written, for example because the results file was open in another program; the GUI keeps the results until then, and asks before a new simulation, a loaded results file, or the exit discards them.
 - **Plots**: **Accuracy Histogram** (Ctrl+H) redraws the histogram from the loaded results. The other entries in the menu are disabled.
 - **Settings**: **Global Units...** sets the default length unit and time unit.
 - **Help**: a link to the documentation, the list of keyboard shortcuts, and version information.
@@ -89,12 +89,12 @@ Available units:
 
 The GUI checks each field as you type and shows an error message below a field with an invalid value. A tab that contains an invalid field is marked. The rules are:
 
-- Number of runs and number of pixels: positive integers
+- Number of runs: a whole number, 1 or more. Number of pixels: a whole number, 16 or more
 - Diffusion coefficient, profile width, and spatial width: positive numbers
 - Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers. A lifetime of zero means no decay, and the diffusion length is then infinite and shows as `inf`.
 - Mean position: any number
 - Time range: numeric start and stop, with start less than stop
-- Time series: comma-separated finite numbers, without duplicates
+- Time series: two or more comma-separated finite numbers, without duplicates
 - Filename slug: not empty, with no characters that are invalid in file names
 - Noise data file: the file must exist
 

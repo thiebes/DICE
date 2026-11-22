@@ -41,6 +41,9 @@ class ProximityHistogramWidget(QWidget):
         super().__init__(parent)
         self._proximity = proximity
         self._ratios = np.array([], dtype=float)
+        # The axis range, the histogram and the counts within the threshold,
+        # computed once for the data and the threshold, not at every paint.
+        self._cache = {}
         self.setMinimumSize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setAccessibleName("Histogram of the estimates around the nominal value")
@@ -51,6 +54,7 @@ class ProximityHistogramWidget(QWidget):
     def set_proximity(self, proximity: float) -> None:
         """Set the accuracy threshold (0.1 for within 10% of nominal) and redraw."""
         self._proximity = proximity
+        self._cache.pop('within', None)
         self._describe()
         self.update()
 
@@ -58,6 +62,7 @@ class ProximityHistogramWidget(QWidget):
         """Set the estimates as D estimate / nominal D; None or an empty sequence clears the histogram."""
         values = np.asarray([] if ratios is None else ratios, dtype=float)
         self._ratios = values[np.isfinite(values)]
+        self._cache.clear()
         self._describe()
         self.update()
 
@@ -65,24 +70,38 @@ class ProximityHistogramWidget(QWidget):
         """The finite ratios the histogram shows or counts."""
         return self._ratios
 
+    def _cached(self, key: str, compute):
+        if key not in self._cache:
+            self._cache[key] = compute()
+        return self._cache[key]
+
     def axis_range(self) -> Optional[Tuple[float, float]]:
         """The ratio at the left and right end of the axis; None without estimates."""
+        return self._cached('axis', self._axis_range)
+
+    def histogram(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Counts and bin edges of the ratios inside the axis range."""
+        return self._cached('histogram', self._histogram)
+
+    def counts_within_threshold(self) -> np.ndarray:
+        """For each bin of histogram(), the number of its estimates within the threshold."""
+        return self._cached('within', self._counts_within_threshold)
+
+    def _axis_range(self) -> Optional[Tuple[float, float]]:
         if self._ratios.size == 0:
             return None
         distance = np.abs(self._ratios - 1.0)
         half_span = max(float(np.percentile(distance, 99.5)), 1e-9) * 1.08
         return 1.0 - half_span, 1.0 + half_span
 
-    def histogram(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Counts and bin edges of the ratios inside the axis range."""
+    def _histogram(self) -> Tuple[np.ndarray, np.ndarray]:
         low, high = self.axis_range()
         inside = self._ratios[(self._ratios >= low) & (self._ratios <= high)]
         automatic = len(np.histogram_bin_edges(inside, bins='auto', range=(low, high))) - 1
         bin_count = int(min(max(automatic, self.MIN_BINS), self.MAX_BINS))
         return np.histogram(inside, bins=bin_count, range=(low, high))
 
-    def counts_within_threshold(self) -> np.ndarray:
-        """For each bin of histogram(), the number of its estimates within the threshold."""
+    def _counts_within_threshold(self) -> np.ndarray:
         low, high = self.axis_range()
         _, edges = self.histogram()
         inside = self._ratios[(self._ratios >= low) & (self._ratios <= high)]
@@ -192,10 +211,15 @@ class ProximityHistogramWidget(QWidget):
             painter.fillRect(part, highlight)
 
         # Limits of the threshold, where they fall on the axis.
-        painter.setPen(QPen(text_color, 1, Qt.PenStyle.DashLine))
+        # A line in the window color under each dashed line keeps the limit
+        # visible where it crosses a bar, in either theme.
+        background = self.palette().color(group, QPalette.ColorRole.Window)
         for limit in (1.0 - self._proximity, 1.0 + self._proximity):
             if low <= limit <= high:
                 column = self.x_position(limit)
+                painter.setPen(QPen(background, 3))
+                painter.drawLine(column, plot.top() - 4, column, bottom)
+                painter.setPen(QPen(text_color, 1, Qt.PenStyle.DashLine))
                 painter.drawLine(column, plot.top() - 4, column, bottom)
 
         # Label of the band, above the plot and centered on the nominal value.

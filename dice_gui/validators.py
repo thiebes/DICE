@@ -146,8 +146,9 @@ def validate_time_series(value: str) -> ValidationResult:
     except ValueError:
         return ValidationResult(False, "Time series must be comma-separated numbers")
 
-    if len(parsed) == 0:
-        return ValidationResult(False, "Time series must contain at least one value")
+    # The fit of the diffusion coefficient needs two time points, as in the parser.
+    if len(parsed) < 2:
+        return ValidationResult(False, "Time series must contain at least two time points")
 
     try:
         validated = _validate_time_values(parsed, name="Time series")

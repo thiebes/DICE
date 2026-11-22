@@ -252,7 +252,8 @@ def export_collated_results(
     return df
 
 
-def fraction_text(fraction: float, interval: Optional[Dict[str, float]] = None) -> str:
+def fraction_text(fraction: float, interval: Optional[Dict[str, float]] = None,
+                  interval_label: str = "") -> str:
     """
     A fraction of the estimates as text, with its count and 95% interval when they are known.
 
@@ -277,7 +278,7 @@ def fraction_text(fraction: float, interval: Optional[Dict[str, float]] = None) 
     if not interval['total']:
         return "no estimates"
     return (f"{fraction:.1%} ({interval['count']} of {interval['total']}; "
-            f"{interval['lower']:.1%} to {interval['upper']:.1%})")
+            f"{interval_label}{interval['lower']:.1%} to {interval['upper']:.1%})")
 
 
 def write_summary_file(

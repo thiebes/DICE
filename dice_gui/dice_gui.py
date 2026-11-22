@@ -9,6 +9,7 @@ import sys
 import webbrowser
 from pathlib import Path
 from PyQt6.QtWidgets import (
+    QScrollArea,
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
     QProgressBar, QMessageBox, QStatusBar, QMenu,
@@ -712,6 +713,9 @@ class DiceGUI(QMainWindow):
         """Load results from CSV and generate plot."""
         from pathlib import Path
 
+        if not self._confirm_discard_unwritten_results("A results file"):
+            return
+
         # Get default directory from filename slug output path
         root = output_root()
         default_dir = root / self.filename_slug_input.text()
@@ -753,6 +757,7 @@ class DiceGUI(QMainWindow):
                 image_settings=image_settings,
                 estimator=estimator
             )
+            self.write_outputs_action.setEnabled(self.interface.last_output_error is not None)
 
             # Update status bar
             self.loaded_data_file = csv_file
@@ -998,6 +1003,7 @@ class DiceGUI(QMainWindow):
             convert_diffusion_coefficient, convert_time, convert_length, time_abbreviation, length_abbreviation,
         )
         from dice.utils.converters import fwhm_to_sigma
+        from dice.core.profiles import diffusion_sigma2_t
 
         messages = []
         global_length = gui_params['length_unit']
@@ -1047,7 +1053,7 @@ class DiceGUI(QMainWindow):
             )
 
             decay = math.exp(-t_stop / lifetime) if lifetime > 0 else 1.0
-            final_variance = sigma_0 ** 2 + 2 * diffusion_coefficient * t_stop
+            final_variance = float(diffusion_sigma2_t(diffusion_coefficient, sigma_0 ** 2, t_stop))
             spreading = sigma_0 / math.sqrt(final_variance) if final_variance > 0 else 1.0
             final_amplitude = amplitude * decay * spreading
 
@@ -1091,7 +1097,9 @@ class DiceGUI(QMainWindow):
             from dice.io.parameters import narrow_peak_warning
             noise_file = gui_params['noise_data_file']
             try:
-                message = narrow_peak_warning(np.loadtxt(noise_file, delimiter=','), noise_file)
+                # The encoding of the parser, which accepts a byte-order mark.
+                message = narrow_peak_warning(
+                    np.loadtxt(noise_file, delimiter=',', encoding='utf-8-sig'), noise_file)
             except (OSError, ValueError):
                 message = None  # the run itself reports a file it cannot read
             if message:
@@ -1106,6 +1114,12 @@ class DiceGUI(QMainWindow):
                 self.tabs.setCurrentIndex(index)
                 break
         widget.setFocus(Qt.FocusReason.OtherFocusReason)
+        # A scroll area follows the Tab key, not a focus set by the program.
+        parent = widget.parentWidget()
+        while parent is not None and not isinstance(parent, QScrollArea):
+            parent = parent.parentWidget()
+        if parent is not None:
+            parent.ensureWidgetVisible(widget)
 
     def run_simulation(self):
         """Run the DICE simulation."""
@@ -1163,6 +1177,11 @@ class DiceGUI(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
+        if not self._confirm_discard_unwritten_results("A new simulation"):
+            return
+        self.interface.last_output_error = None
+        self.write_outputs_action.setEnabled(False)
+
         # Update UI for running state
         self.run_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1211,6 +1230,9 @@ class DiceGUI(QMainWindow):
 
     def update_progress(self, message: str):
         """Update progress display."""
+        # A message queued before a stop request must not replace "Stopping...".
+        if self.simulation_thread is not None and self.simulation_thread.stop_requested():
+            return
         self.status_label.setText(message)
 
     def _update_iteration_progress(self, current: int, total: int):
@@ -1275,6 +1297,28 @@ class DiceGUI(QMainWindow):
             f"{message}\n\n"
             "Results have been saved to output files."
         )
+
+    def _confirm_discard_unwritten_results(self, action: str) -> bool:
+        """
+        Ask before an action replaces the results of a simulation whose output files are not written.
+
+        Args:
+            action: What replaces the results, as the start of a sentence, for example "A new simulation".
+
+        Returns:
+            True when no results wait for their files, or the user agrees to lose them.
+        """
+        if self.interface.last_output_error is None:
+            return True
+        reply = QMessageBox.question(
+            self, "Output Files Not Written",
+            f"The output files of the last simulation are not written. {action} replaces its "
+            "results, and they are lost. Continue?\n\n"
+            "File > Write Output Files writes them.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def _offer_to_write_output_files(self) -> bool:
         """
@@ -1982,6 +2026,8 @@ class DiceGUI(QMainWindow):
         # The left side names the results in use. A label, not a status
         # message: the status tip of a menu entry replaces a message for good.
         self.results_status_label = QLabel()
+        # It shows the name of a loaded file, which is not markup.
+        self.results_status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_bar.addWidget(self.results_status_label)
         self.update_status_bar()
 
@@ -2395,6 +2441,11 @@ licenses of the packages DICE uses.</p>
 
     def closeEvent(self, event):
         """Handle window close event to check for unsaved changes."""
+        if self._close_requested and self.simulation_thread is not None:
+            # Already stopping: the window closes when the run has ended.
+            event.ignore()
+            return
+
         if self.parameters_modified and not self._close_requested:
             reply = QMessageBox.question(
                 self, "Unsaved Changes",
@@ -2427,12 +2478,13 @@ licenses of the packages DICE uses.</p>
                 return
 
             # The thread is not terminated, because a terminated parallel run
-            # leaves its worker processes behind. The window stays, disabled
-            # and with a message, and closes when the thread reports its end.
+            # leaves its worker processes behind. The window stays, with its
+            # inputs disabled and a message, and closes when the thread
+            # reports its end.
             self.simulation_thread.request_stop()
             self._close_requested = True
-            self.centralWidget().setEnabled(False)
-            self.menuBar().setEnabled(False)
+            self._set_inputs_enabled(False)
+            self.stop_button.setEnabled(False)
             self.status_label.setText("Stopping. DICE exits when the current run or batch has ended...")
             event.ignore()
             return
@@ -2452,12 +2504,16 @@ licenses of the packages DICE uses.</p>
 
         event.accept()
 
+    def _set_inputs_enabled(self, enabled: bool) -> None:
+        """Enable or disable the tabs, the example list and the menus; the status line stays readable."""
+        for widget in (self.tabs, self.example_button, self.menuBar()):
+            widget.setEnabled(enabled)
+
     def _exit_if_requested(self) -> None:
         """Close the window after a run that the user stopped by closing the window."""
         if not self._close_requested:
             return
-        self.centralWidget().setEnabled(True)
-        self.menuBar().setEnabled(True)
+        self._set_inputs_enabled(True)
         if self.interface.last_output_error is not None:
             # The run finished before the stop took effect and its files are
             # not written: the user decides, so the window stays.

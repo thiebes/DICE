@@ -376,7 +376,16 @@ class TestClosingDuringARun:
         assert dialogs.titles("question") == ["Simulation Running"]
         assert thread.stop_requested()
         assert window.isVisible()
-        assert not window.centralWidget().isEnabled() and not window.menuBar().isEnabled()
+        assert not window.tabs.isEnabled() and not window.menuBar().isEnabled()
+        assert not window.stop_button.isEnabled() and not window.run_button.isEnabled()
+        # The message stays readable (an enabled label) and is not replaced by queued progress.
+        assert window.status_label.isEnabled()
+        assert window.status_label.text().startswith("Stopping. DICE exits when")
+
+        # A second close while DICE waits asks nothing and changes nothing.
+        assert window.close() is False
+        assert dialogs.titles("question") == ["Simulation Running"]
+        window.update_progress("Running 5 iterations...")
         assert window.status_label.text().startswith("Stopping. DICE exits when")
 
         qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
@@ -477,6 +486,50 @@ class TestOutputFilesThatCannotBeWritten:
         ]
         assert not window.write_outputs_action.isEnabled()
         assert window.status_label.text() == "Output files written"
+
+    def test_loading_results_asks_before_it_replaces_unwritten_results(
+            self, qtbot, window, dialogs, work_dir, completed_run):
+        self._block_the_results_file(work_dir)
+        self._run_quick_test(qtbot, window, dialogs)
+        unwritten = window.interface.last_result
+        dialogs.shown.clear()
+
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+        window.load_results_button.click()
+
+        assert dialogs.titles("question") == ["Output Files Not Written"]
+        assert "A results file replaces its results" in dialogs.texts("question")[0]
+        assert window.interface.last_result is unwritten
+        assert window.write_outputs_action.isEnabled()
+
+        dialogs.shown.clear()
+        dialogs.question_answers.append(QMessageBox.StandardButton.Yes)
+        dialogs.open_paths.append(str(completed_run.csv_path))
+        window.load_results_button.click()
+
+        assert window.interface.last_result is not unwritten
+        assert window.interface.last_output_error is None
+        assert not window.write_outputs_action.isEnabled()
+        # Nothing waits for its files now: the action writes nothing and fails on nothing.
+        assert window.interface.retry_write_outputs() is None
+        window.write_output_files()
+        window.parameters_modified = False
+        dialogs.shown.clear()
+        assert window.close() is True
+        assert dialogs.titles("question") == []
+
+    def test_new_run_asks_before_it_replaces_unwritten_results(self, qtbot, window, dialogs, work_dir):
+        self._block_the_results_file(work_dir)
+        self._run_quick_test(qtbot, window, dialogs)
+        dialogs.shown.clear()
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+
+        assert dialogs.titles("question") == ["Output Files Not Written"]
+        assert "A new simulation replaces its results" in dialogs.texts("question")[0]
+        assert window.simulation_thread is None
+        assert window.write_outputs_action.isEnabled()
 
     def test_exit_with_unwritten_files_asks_first(self, qtbot, window, dialogs, work_dir):
         self._block_the_results_file(work_dir)

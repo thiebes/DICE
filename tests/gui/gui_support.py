@@ -137,7 +137,7 @@ def fraction_sentence(estimates: np.ndarray, nominal: float, threshold: float) -
     count = int(np.sum((ratios >= 1 - threshold) & (ratios <= 1 + threshold)))
     lower, upper = proportion_confint(count, len(estimates), alpha=0.05, method="wilson")
     return (f"Within ±{round(threshold * 100)}% of nominal: {count / len(estimates):.1%} "
-            f"({count} of {len(estimates)}; {lower:.1%} to {upper:.1%}). The range is the 95% interval.")
+            f"({count} of {len(estimates)}; 95% interval {lower:.1%} to {upper:.1%})")
 
 
 def summary_label_texts(estimates: np.ndarray, nominal: float, d_unit: str, scale: float = 1.0) -> list[str]:

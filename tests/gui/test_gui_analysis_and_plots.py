@@ -14,6 +14,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import pytest
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMessageBox
 
 from gui_support import (
@@ -307,7 +308,8 @@ class TestLoadResults:
         window.load_results_button.click()
 
         assert dialogs.titles("critical") == ["Error"]
-        assert dialogs.texts("critical")[0].startswith("CSV missing WLS slope column.")
+        assert dialogs.texts("critical")[0].startswith(
+            "The file has no column 'weighted fit diffusion slope' of the WLS fit.")
         assert window.results_status_label.text() == "No data loaded"
         assert window.interface.last_result is None
         assert sorted(p.name for p in work_dir.iterdir()) == ["profile.csv"]
@@ -372,6 +374,9 @@ class TestPlotThatCannotBeSaved:
     (12.345, 2.5, "12.3 ± 2.5"),
     (1234.6, 250.0, "1235 ± 250"),
     (3.1e-10, 8.7e-10, "(3.1 ± 8.7)e-10"),
+    # A value much larger than its uncertainty keeps both digits of the uncertainty.
+    (5.0e-10, 4.6e-12, "(500.0 ± 4.6)e-12"),
+    (3e-7, 2e-9, "(300.0 ± 2.0)e-9"),
     (0.5, float("nan"), "0.5"),
     (0.5, 0.0, "0.5"),
 ])
@@ -379,3 +384,49 @@ def test_value_and_uncertainty_share_one_notation_and_decimal_place(value, uncer
     from dice_gui.tabs.tab_analysis import value_with_uncertainty
 
     assert value_with_uncertainty(value, uncertainty) == text
+
+
+class TestTextFromAResultsFile:
+    """The unit of a results file reaches the screen only if it is a unit DICE writes, and never as markup."""
+
+    def test_results_file_of_dice_1_2_shows_its_unit(self, completed_run, tmp_path):
+        """1.2.0 wrote the slopes without a unit and the diffusion coefficients in 'cm^2/s'."""
+        from dice_gui.dice_interface import DiceInterface
+
+        frame = pd.read_csv(completed_run.csv_path)
+        frame = frame.rename(columns=lambda c: c.replace(" (2D)", "").replace("cm²/s", "cm^2/s")
+                             if "cm²/s" in c else c.split(" [")[0].replace(" (2D)", ""))
+        assert "nominal diffusion coeff" in frame.columns and "nominal diffusion coeff [cm^2/s]" in frame.columns
+        old_file = tmp_path / "results_1_2.csv"
+        frame.to_csv(old_file, index=False)
+
+        interface = DiceInterface()
+        interface.load_and_plot_from_csv(str(old_file), str(tmp_path / "plot.png"), {"image_type": "png"})
+
+        scale, unit = interface.diffusion_coefficient_unit()
+        assert unit == "cm^2/s" and scale == pytest.approx(10, rel=1e-12)
+
+    def test_unit_that_dice_does_not_write_is_not_shown(self, window, dialogs, completed_run, work_dir):
+        frame = pd.read_csv(completed_run.csv_path)
+        markup = '<img src="//host/share/x.png">'
+        crafted = work_dir / "crafted.csv"
+        frame.rename(columns={"nominal diffusion coeff [cm²/s]": f"nominal diffusion coeff [{markup}]"}).to_csv(
+            crafted, index=False)
+        dialogs.open_paths.append(str(crafted))
+
+        window.load_results_button.click()
+
+        assert window.interface.diffusion_coefficient_unit() == (pytest.approx(10, rel=1e-12), None)
+        assert all(markup not in text for text in _summary_labels(window))
+        assert "<" not in window.precision_std_label.text()
+        for label in (window.precision_std_label, window.precision_bias_label, window.results_status_label):
+            assert label.textFormat() == Qt.TextFormat.PlainText
+
+    @pytest.mark.parametrize("label, known", [
+        ("cm²/s", True), ("μm²/ns", True), ("nm²/ps", True), ("cm^2/s", True),
+        ("furlong²/s", False), ('<img src="x">', False), ("", False), (None, False),
+    ])
+    def test_only_labels_built_from_the_unit_tables_are_known(self, label, known):
+        from dice.utils.units import known_diffusion_coefficient_label
+
+        assert known_diffusion_coefficient_label(label) == (label if known else None)

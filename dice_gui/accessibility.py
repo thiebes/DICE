@@ -278,9 +278,25 @@ UNIT_SELECTOR_QUANTITIES = {
     'image_tick_width_unit_combo': 'Tick width',
 }
 
-# Inputs that have neither a label with a shortcut nor a text of their own.
-UNLABELED_INPUT_NAMES = {
+# Fields whose label is too short to stand alone ("Stop", "File", "Width"),
+# holds a symbol, or does not exist. A screen reader says these names, and
+# the message of a blocked run starts with them.
+FIELD_NAMES = {
+    'diffusion_length_input': 'Diffusion length',
+    'diffusion_coeff_input': 'Diffusion coefficient',
+    'lifetime_input': 'Lifetime',
+    'amplitude_input': 'Initial amplitude',
+    'mean_input': 'Initial mean position',
+    'width_input': 'Initial profile width',
+    'noise_value_input': 'Noise standard deviation',
+    'noise_cnr_input': 'Contrast-to-noise ratio',
+    'noise_file_input': 'Measured profile file',
+    'time_start_input': 'Start time',
+    'time_stop_input': 'Stop time',
+    'time_steps_input': 'Number of time steps',
     'time_series_input': 'Time series',
+    'image_width_spin': 'Image width',
+    'image_height_spin': 'Image height',
     'proximity_spin': 'Accuracy threshold',
 }
 
@@ -298,9 +314,15 @@ def name_inputs_for_screen_readers(window: QWidget) -> None:
     siblings in one layout. Most fields here share a row with a unit
     selector, so a screen reader would announce them as "edit" or "combo
     box" without a name. A field takes the text of the label it is the
-    buddy of; a unit selector is named after its quantity. A name that is
-    already set is kept.
+    buddy of; a unit selector is named after its quantity. The fields of
+    FIELD_NAMES get their own names first, and a name that is already set
+    is kept.
     """
+    for attribute, name in FIELD_NAMES.items():
+        widget = getattr(window, attribute, None)
+        if widget is not None and not widget.accessibleName():
+            widget.setAccessibleName(name)
+
     for label in window.findChildren(QLabel):
         buddy = label.buddy()
         if buddy is not None and not buddy.accessibleName():
@@ -311,7 +333,3 @@ def name_inputs_for_screen_readers(window: QWidget) -> None:
         if selector is not None and not selector.accessibleName():
             selector.setAccessibleName(f"{quantity} unit")
 
-    for attribute, name in UNLABELED_INPUT_NAMES.items():
-        widget = getattr(window, attribute, None)
-        if widget is not None and not widget.accessibleName():
-            widget.setAccessibleName(name)

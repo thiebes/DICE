@@ -236,7 +236,9 @@ class TestMalformedInput:
     @pytest.mark.parametrize(("series_text", "message"), [
         ("0, 1, 1", "duplicate"),
         ("0, one, 2", "comma-separated numbers"),
-        (" , ", "at least one value"),
+        (" , ", "at least two time points"),
+        # The engine needs two time points; the form says so before the run starts.
+        ("0.5", "at least two time points"),
     ])
     def test_malformed_time_series_is_rejected(self, window, series_text, message):
         window.time_series_radio.setChecked(True)

@@ -35,10 +35,16 @@ def set_spin_value(spin, value: float, name: str) -> None:
     ValueError
         If the value is outside the range of the spin box.
     """
-    if not spin.minimum() <= value <= spin.maximum():
+    def text(number) -> str:
+        return str(number) if isinstance(number, int) else f"{number:g}"
+
+    if value < spin.minimum():
+        raise ValueError(f"{name} is {text(value)}; it must be {text(spin.minimum())} or more.")
+    if value > spin.maximum():
+        # Only the form has this limit; the command-line interface runs the file.
         raise ValueError(
-            f"{name} is {value:g}, and the form takes {spin.minimum():g} to {spin.maximum():g}. "
-            "Change the value in the file, or run the file with the command-line interface."
+            f"{name} is {text(value)}, and the form takes at most {text(spin.maximum())}. "
+            "Lower the value in the file, or run the file with the command-line interface."
         )
     spin.setValue(value)
 

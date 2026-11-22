@@ -48,8 +48,8 @@ and Fixed give the details.
   run has stopped in the same way, and closes. If the output files cannot be
   written, for example because a results file is open in another program,
   the GUI keeps the results and offers to write the files again, at once or
-  later with File > Write Output Files, and asks before it exits without
-  them. A value of a parameters file that a field of the form cannot hold is
+  later with File > Write Output Files, and asks before a new simulation,
+  a loaded results file, or the exit discards them. A value of a parameters file that a field of the form cannot hold is
   reported; the form is not changed. The
   GUI saves
   results in `output/<slug>/` in the folder it was started from, or in
