@@ -9,7 +9,7 @@ factors, and display abbreviations.
 
 import difflib
 from enum import Enum
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, List, Union
 import warnings
 
 
@@ -378,6 +378,24 @@ def validate_output_units(parameters: Dict[str, Any]) -> None:
         validate_time_unit(time, OUTPUT_DIFFUSION_TIME_UNIT_KEY)
 
 
+def single_spelling(parameters: Dict[str, Any], spellings: List[str]) -> Optional[str]:
+    """
+    The spelling of a unit key that the dictionary holds, or None.
+
+    Raises
+    ------
+    ValueError
+        If the dictionary holds two spellings of the key: one value would be
+        applied and the other ignored.
+    """
+    present = [key for key in spellings if key in parameters]
+    if len(present) > 1:
+        raise ValueError(
+            f"'{present[0]}' and '{present[1]}' are two spellings of one unit key. Give only one of them."
+        )
+    return present[0] if present else None
+
+
 def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize all parameter values to the global simulation unit system.
@@ -410,7 +428,7 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     # Length-dimension parameters and their override key mappings.
     # Each entry: (value_keys, override_keys)
     # value_keys are checked in order; the first one found is converted.
-    # override_keys are checked in order; the first one found is used.
+    # override_keys are the spellings of the unit key; a file gives at most one.
     length_params = [
         (['FWHM_0', 'fwhm_0'], ['FWHM_0_unit', 'fwhm_0_unit']),
         (['sigma_0'], ['sigma_0_unit']),
@@ -421,7 +439,7 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     ]
 
     for value_keys, override_keys in length_params:
-        matched_key = next((k for k in override_keys if k in result), None)
+        matched_key = single_spelling(result, override_keys)
         if matched_key is not None:
             from_unit = result[matched_key]
             if from_unit != target_length:
@@ -446,7 +464,7 @@ def resolve_units(parameters: Dict[str, Any]) -> Dict[str, Any]:
     ]
 
     for value_keys, override_keys in time_params:
-        matched_key = next((k for k in override_keys if k in result), None)
+        matched_key = single_spelling(result, override_keys)
         if matched_key is not None:
             from_unit = result[matched_key]
             if from_unit != target_time:

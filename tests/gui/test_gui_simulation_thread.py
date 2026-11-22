@@ -143,7 +143,9 @@ class TestFailedRun:
 
         _, log = _run_to_signal(qtbot, parameters, "error")
 
-        assert log.errors == ["Error reading CSV for noise estimation."]
+        [error] = log.errors
+        assert error.startswith("Error reading CSV for noise estimation: ")
+        assert "absent.csv" in error and "could not be read" in error
         assert log.results == []
         assert log.messages == [f"Running 5 iterations ({os.cpu_count()} CPU cores)..."]
 

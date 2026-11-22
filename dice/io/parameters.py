@@ -16,7 +16,7 @@ from typing import Dict, Any, List, Optional, Sequence, Union
 from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
-from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.axes import make_x_axis, make_time_axis, make_time_series
 from ..utils.validators import validate_filename_slug, validate_integer, validate_limits
 from ..utils.units import (
     global_length_unit, global_time_unit, validate_length_unit, validate_time_unit,
@@ -24,7 +24,9 @@ from ..utils.units import (
 )
 from fft_cnr import fft_cnr
 from ..core.diffusion import calculate_diffusion_length
-from ..core.noise import MIN_CNR_PEAK_FWHM, Seed, make_noise_distribution, peak_fwhm_samples
+from ..core.noise import (
+    MIN_CNR_PEAK_FWHM, MINIMUM_PROFILE_POINTS, Seed, make_noise_distribution, peak_fwhm_samples,
+)
 from ..models.parameters import NoiseRange, SimulationParameters
 from ..models.parameter_keys import (
     normalize_parameters, normalize_parameter_key, add_legacy_keys,
@@ -228,7 +230,17 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
     parameters_dictionary : dict
         Dictionary containing time parameters.
 
-    Updates the dictionary with 'time series' key.
+    Updates the dictionary with 'time series' key: at least two time points
+    in ascending order. A 'time series' is sorted, as the GUI sorts it.
+
+    Raises
+    ------
+    TypeError
+        If the number of steps of a 'time range' is not a whole number.
+    ValueError
+        If the time axis has fewer than two points, a 'time range' does not
+        run forward, or a 'time series' repeats a time or holds a value that
+        is not a finite number.
     """
     unique_time_key = check_for_unique_key(
         parameters_dictionary,
@@ -246,9 +258,27 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
         if not all(isinstance(value, (int, float)) for value in [t_start, t_end, t_steps]):
             raise ValueError("The 'time range' values must be numeric.")
 
-        parameters_dictionary['time series'] = make_time_axis(t_start, t_end, int(t_steps))
+        # The fit of the diffusion coefficient is a line through the widths,
+        # so it needs two time points or more.
+        t_steps = validate_integer(t_steps, "The number of steps in 'time range'", min_val=2)
+        if t_start >= t_end:
+            raise ValueError(
+                f"The start of 'time range' ({t_start:g}) must be less than its stop ({t_end:g})."
+            )
+        parameters_dictionary['time series'] = make_time_axis(t_start, t_end, t_steps)
         if unique_time_key in parameters_dictionary:
             del parameters_dictionary[unique_time_key]
+    else:
+        try:
+            time_series = make_time_series(parameters_dictionary[unique_time_key])
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Invalid 'time series': {e}") from e
+        if len(time_series) < 2:
+            raise ValueError(
+                f"'time series' holds {len(time_series)} time point; "
+                "the fit of the diffusion coefficient needs at least two time points."
+            )
+        parameters_dictionary[unique_time_key] = time_series
 
 
 def narrow_peak_warning(profile: Sequence[float], source: str) -> Optional[str]:
@@ -356,15 +386,21 @@ def handle_noise_parameters(
             noise_value = parameters_dictionary[unique_noise_key]
             if not isinstance(noise_value, (int, float)):
                 raise ValueError(f"Invalid noise value {noise_value}. Must be numeric.")
+            if not np.isfinite(noise_value) or noise_value < 0:
+                raise ValueError(f"'noise value' must be 0 or greater, got {noise_value}.")
             parameters_dictionary['noise series'] = [noise_value]
 
         elif unique_noise_key in ('estimate noise from data', 'estimate_noise_from_data'):
             try:
                 noise_filename = parameters_dictionary[unique_noise_key]
-                t0_profile_strings = np.loadtxt(noise_filename, delimiter=',')
+                # A spreadsheet program may save a CSV file as UTF-8 with a
+                # byte-order mark, which this encoding accepts and removes.
+                t0_profile_strings = np.loadtxt(noise_filename, delimiter=',', encoding='utf-8-sig')
                 t0_profile_y = t0_profile_strings.astype(float).tolist()
             except Exception as e:
-                raise ValueError("Error reading CSV for noise estimation.") from e
+                raise ValueError(
+                    f"Error reading CSV for noise estimation: {noise_filename!r} could not be read ({e})."
+                ) from e
             # fft-cnr and the narrow-peak check take one profile; a single
             # column also loads as one.
             if t0_profile_strings.ndim > 1:
@@ -427,11 +463,15 @@ def handle_profile_width_parameters(parameters_dictionary: Dict[str, Any]) -> fl
             fwhm = parameters_dictionary[unique_width_key]
             if not isinstance(fwhm, (int, float)):
                 raise ValueError(f"Invalid FWHM_0 value: {fwhm}. Must be numeric.")
+            if fwhm <= 0:
+                raise ValueError(f"'FWHM_0' must be greater than 0, got {fwhm}.")
             return fwhm_to_sigma2(fwhm)
         else:  # sigma_0
             sigma = parameters_dictionary['sigma_0']
             if not isinstance(sigma, (int, float)):
                 raise ValueError(f"Invalid sigma_0 value: {sigma}. Must be numeric.")
+            if sigma <= 0:
+                raise ValueError(f"'sigma_0' must be greater than 0, got {sigma}.")
             return sigma ** 2
     except KeyError as e:
         raise ValueError(f"The key {e} was not found in the parameters dictionary.") from e
@@ -559,13 +599,23 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Process spatial axis (support both key formats)
     spatial_width = parameters_dictionary.get('spatial width', parameters_dictionary.get('spatial_width'))
     pixel_width = parameters_dictionary.get('pixel width', parameters_dictionary.get('pixel_width'))
+    pixel_width = validate_integer(pixel_width, "'pixel width'")
+    if pixel_width < MINIMUM_PROFILE_POINTS:
+        raise ValueError(
+            f"'pixel width' (the number of pixels) is {pixel_width}; a profile needs at least "
+            f"{MINIMUM_PROFILE_POINTS} pixels for the estimate of its contrast-to-noise ratio."
+        )
+    if not isinstance(spatial_width, (int, float)) or spatial_width <= 0:
+        raise ValueError(f"'spatial width' must be a number greater than 0, got {spatial_width!r}.")
     parameters_dictionary['x array'] = make_x_axis(spatial_width, pixel_width)
     
     # Process time parameters
     handle_time_parameters(parameters_dictionary)
     
     # Process noise parameters; a noise range draws one value for each run
-    number_of_runs = parameters_dictionary.get('number of runs', parameters_dictionary.get('number_of_runs'))
+    runs_key = 'number of runs' if 'number of runs' in parameters_dictionary else 'number_of_runs'
+    number_of_runs = validate_integer(parameters_dictionary[runs_key], "'number of runs'")
+    parameters_dictionary[runs_key] = number_of_runs
     handle_noise_parameters(parameters_dictionary, num_vals=number_of_runs, seed=seed)
     
     # Process profile width

@@ -242,6 +242,15 @@ def validate_file_path(path: str, must_exist: bool = False,
     return path
 
 
+# Windows reserves these names for devices in every folder, with or without
+# an extension: a folder or file of such a name cannot be created.
+WINDOWS_RESERVED_NAMES = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + [f'COM{number}' for number in range(1, 10)]
+    + [f'LPT{number}' for number in range(1, 10)]
+)
+
+
 def validate_filename_slug(value: str, name: str = "filename") -> str:
     """
     Validate that a filename slug is a plain file name.
@@ -267,8 +276,10 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     TypeError
         If the value is not a string.
     ValueError
-        If the value is empty, contains forbidden characters, is '.' or '..',
-        or ends with a dot or a space.
+        If the value is empty, contains forbidden or control characters, is
+        '.' or '..', ends with a dot or a space, or is a name that Windows
+        reserves for a device (the check applies on every system, so that a
+        parameter file runs everywhere).
     """
     if not isinstance(value, str):
         raise TypeError(f"{name} must be a string, got {type(value).__name__}")
@@ -281,8 +292,14 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
         if char in value:
             raise ValueError(f"{name} cannot contain: {', '.join(invalid_chars)}")
 
+    if any(ord(char) < 32 for char in value):
+        raise ValueError(f"{name} cannot contain control characters such as a tab or a line break")
+
     if value in ('.', '..'):
         raise ValueError(f"{name} cannot be '.' or '..'")
+
+    if value.split('.')[0].strip().upper() in WINDOWS_RESERVED_NAMES:
+        raise ValueError(f"{name} cannot be {value!r}: Windows reserves that name for a device")
 
     if value.endswith(('.', ' ')):
         raise ValueError(f"{name} cannot end with a dot or a space")

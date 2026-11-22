@@ -30,11 +30,11 @@ A prefix for the output files. DICE writes the output to the directory `output/<
 - `output/example/example_summary.txt`: parameters and summary statistics
 - `output/example/example_accuracy_histogram.png`: histogram of the estimates, or with a noise range, `output/example/example_accuracy_vs_cnr.png`: the estimates against the initial CNR
 
-The slug must be a plain file name. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?` or `*`, the slugs `.` and `..`, and a slug that ends with a dot or a space. If the key is missing, the slug is `dice_simulation`.
+The slug must be a plain file name. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*`, a tab or a line break, the slugs `.` and `..`, and a slug that ends with a dot or a space. It also rejects the names that Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), on every system, so that a parameters file runs everywhere. If the key is missing, the slug is `dice_simulation`.
 
 ### `number of runs`
 
-The number of runs (Monte Carlo iterations). More runs give more precise statistics and take longer.
+The number of runs (Monte Carlo iterations): a whole number, 1 or more. More runs give more precise statistics and take longer.
 
 **Typical values:** 100 for a quick check; 1000 to 10000 for final results.
 
@@ -219,7 +219,7 @@ Choose a width several times larger than the width of the profile at the last ti
 
 ### `pixel width`
 
-The number of points (pixels) on the spatial axis. The axis includes both end points, so the spacing between points is `spatial width` / (`pixel width` − 1).
+The number of points (pixels) on the spatial axis: a whole number, 16 or more. The estimate of the contrast-to-noise ratio of a profile needs 16 points. The axis includes both end points, so the spacing between points is `spatial width` / (`pixel width` − 1).
 
 ### Matching a real detector
 
@@ -247,7 +247,7 @@ Give **either** a time range **or** a time series. The linear fit needs at least
 
 Evenly spaced time points.
 
-**Format:** `[start, stop, steps]`, where `steps` is the number of time points. Both `start` and `stop` are included, and `start` must be less than `stop`.
+**Format:** `[start, stop, steps]`, where `steps` is the number of time points: a whole number, 2 or more. Both `start` and `stop` are included, and `start` must be less than `stop`.
 
 **Example:**
 
@@ -261,7 +261,7 @@ Evenly spaced time points.
 
 An explicit list of time points.
 
-**Format:** `[t1, t2, t3, ...]`
+**Format:** `[t1, t2, t3, ...]`, with two or more time points. DICE sorts the time points into ascending order and rejects a list that repeats a time.
 
 **Example:**
 

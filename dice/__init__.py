@@ -43,13 +43,14 @@ def dice_runner(parameters_filename):
     MonteCarloOutput
         The simulation results.
     """
-    from .io.parameters import noise_range_from_parameters, open_parameters
+    from .io.parameters import noise_range_from_parameters, open_parameters, validate_parameters
     from .analysis.simulation import run_monte_carlo_simulation
     from .analysis.statistics import analyze_simulation_results
     from .utils.legacy_compatibility import create_parameters_from_legacy
 
     # Load parameters
     parameters = open_parameters(parameters_filename)
+    validate_parameters(parameters)
 
     # Create axes
     x_axis = parameters['x array']

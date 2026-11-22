@@ -24,6 +24,10 @@ Seed = Optional[Union[int, SeedSequence]]
 # a peak 4.6 samples wide.
 MIN_CNR_PEAK_FWHM = 9.0
 
+# fft-cnr needs this many points for its estimate of the noise spectrum, and
+# each run estimates the CNR of its first profile.
+MINIMUM_PROFILE_POINTS = 16
+
 
 def add_noise(nominal_profiles: np.ndarray, noise_sigma: float, 
               seed: Seed = None) -> Dict[str, np.ndarray]:

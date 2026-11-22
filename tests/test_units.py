@@ -659,6 +659,16 @@ class TestUnknownUnitKeys:
         with pytest.raises(ValueError, match=f"Unknown unit key '{key}'. Did you mean '{suggestion}'"):
             resolve_units(self.BASE | {key: 'nanometer'})
 
+    @pytest.mark.parametrize('first, second', [
+        ('FWHM_0_unit', 'fwhm_0_unit'),
+        ('spatial_width_unit', 'spatial width unit'),
+        ('diffusion_length_unit', 'diffusion length unit'),
+    ])
+    def test_unit_key_in_two_spellings_is_rejected(self, first, second):
+        """One of the two would be applied and the other ignored, even when they disagree."""
+        with pytest.raises(ValueError, match=f"'{first}' and '{second}' are two spellings of one unit key"):
+            resolve_units(self.BASE | {first: 'nanometer', second: 'micrometer'})
+
     def test_every_documented_unit_key_is_accepted(self):
         from dice.utils.units import GLOBAL_AND_OUTPUT_UNIT_KEYS, PER_PARAMETER_UNIT_KEYS
         time_keys = {'lifetime_unit', 'time_range_unit', 'time_series_unit', 'time_start_unit',

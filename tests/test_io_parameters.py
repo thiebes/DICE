@@ -511,6 +511,22 @@ class TestEstimateNoiseFromData:
         with pytest.raises(ValueError, match="finite, positive CNR"):
             open_parameters(params_file)
 
+    def test_profile_with_a_byte_order_mark_reads_as_without(self, tmp_path):
+        """A spreadsheet program saves "CSV UTF-8" with a byte-order mark."""
+        marked_file = tmp_path / 'marked.csv'
+        marked_file.write_bytes(b'\xef\xbb\xbf' + EXAMPLE_PROFILE.read_bytes())
+        with pytest.warns(UserWarning, match="pixels wide at half maximum"):
+            marked = open_parameters(self._write_parameters(tmp_path, marked_file, 1.0))
+            plain = open_parameters(self._write_parameters(tmp_path, EXAMPLE_PROFILE, 1.0))
+        assert marked['noise series'] == plain['noise series']
+
+    def test_unreadable_profile_names_the_file_and_the_cause(self, tmp_path):
+        absent = tmp_path / 'absent.csv'
+        params_file = self._write_parameters(tmp_path, absent, 1.0)
+        with pytest.raises(ValueError, match="Error reading CSV for noise estimation: .*absent.csv.* could not be read") as error:
+            open_parameters(params_file)
+        assert "absent.csv not found" in str(error.value)
+
     def test_short_profile_rejected(self, tmp_path):
         measured = np.loadtxt(EXAMPLE_PROFILE, delimiter=',')
         short_file = self._write_profile(tmp_path, measured[:10])
@@ -838,7 +854,8 @@ class TestOptionalKeysInEitherSpelling:
 class TestFilenameSlugIsCheckedBeforeTheRun:
     """validate_parameters rejects a slug that would write outside the output folder."""
 
-    @pytest.mark.parametrize('slug', ['../elsewhere/run', 'sub/run', 'C:/somewhere/run', '..', '.', 'run.', 'run '])
+    @pytest.mark.parametrize('slug', ['../elsewhere/run', 'sub/run', 'C:/somewhere/run', '..', '.', 'run.', 'run ',
+                                      'NUL', 'com1.v2', 'run\tone'])
     def test_slug_that_is_not_a_plain_name_is_rejected(self, slug):
         parsed = parameter_parser(quick_test_raw() | {'filename slug': slug})
         with pytest.raises(ValueError, match="'filename slug' cannot"):
@@ -879,3 +896,59 @@ class TestProfileCenterInsideTheFitRange:
 
         assert fitted_at_limit['sigma^2_t estimates'][0] == pytest.approx(sigma2, rel=1e-6)
         assert fitted_beyond['sigma^2_t estimates'][0] != pytest.approx(sigma2, rel=0.2)
+
+
+class TestFileThatCannotRunIsRejected:
+    """A value the run would fail on, or would read differently from the GUI, fails when the file is parsed."""
+
+    @pytest.mark.parametrize('changes, removed, error, message', [
+        ({'time range': [0, 1, 1]}, (), ValueError, r"The number of steps in 'time range' must be >= 2, got 1"),
+        ({'time range': [0, 1, 5.5]}, (), TypeError, r"The number of steps in 'time range' must be an integer"),
+        ({'time range': [1, 0, 5]}, (), ValueError, r"The start of 'time range' \(1\) must be less than its stop \(0\)"),
+        ({'time range': [1, 1, 5]}, (), ValueError, r"The start of 'time range'"),
+        ({'time series': []}, ('time range',), ValueError, r"'time series'"),
+        ({'time series': [0.5]}, ('time range',), ValueError, r"'time series' holds 1 time point"),
+        ({'time series': [0, 0.5, 0.5]}, ('time range',), ValueError,
+         r"Invalid 'time series': Time points must be unique"),
+        ({'time series': [0, float('nan')]}, ('time range',), ValueError, r"Invalid 'time series': .*finite"),
+        ({'number of runs': 3.5}, (), TypeError, r"'number of runs' must be an integer"),
+        ({'noise value': -0.02}, (), ValueError, r"'noise value' must be 0 or greater, got -0.02"),
+        ({'FWHM_0': 0}, (), ValueError, r"'FWHM_0' must be greater than 0"),
+        ({'sigma_0': 0}, ('FWHM_0',), ValueError, r"'sigma_0' must be greater than 0"),
+        ({'sigma_0': -0.4}, ('FWHM_0',), ValueError, r"'sigma_0' must be greater than 0"),
+        ({'pixel width': 1}, (), ValueError, r"'pixel width' \(the number of pixels\) is 1; a profile needs at least 16"),
+        ({'pixel width': 15}, (), ValueError, r"'pixel width' \(the number of pixels\) is 15"),
+        ({'pixel width': 50.5}, (), TypeError, r"'pixel width' must be an integer"),
+        ({'spatial width': 0}, (), ValueError, r"'spatial width' must be a number greater than 0"),
+    ])
+    def test_value_is_rejected_with_the_key_of_the_file(self, changes, removed, error, message):
+        raw = {key: value for key, value in quick_test_raw().items() if key not in removed}
+        with pytest.raises(error, match=message):
+            parameter_parser(raw | changes)
+
+    def test_time_series_is_sorted_as_the_gui_sorts_it(self):
+        raw = {key: value for key, value in quick_test_raw().items() if key != 'time range'}
+        parsed = parameter_parser(raw | {'time series': [1, 0, 0.5]})
+        assert parsed['time series'].tolist() == [0.0, 0.5, 1.0]
+
+    def test_whole_number_given_as_a_float_becomes_an_int(self):
+        parsed = parameter_parser(quick_test_raw() | {'number of runs': 100.0, 'pixel width': 50.0})
+        assert parsed['number of runs'] == 100 and isinstance(parsed['number of runs'], int)
+        assert len(parsed['x array']) == 50
+
+    def test_smallest_profile_the_cnr_estimate_takes_is_accepted_and_runs(self):
+        """The limit is the one of the CNR estimate: a run with it gives an estimate."""
+        from dice.core.noise import MINIMUM_PROFILE_POINTS
+        from dice.analysis.simulation import run_single_simulation
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+
+        parsed = parameter_parser(quick_test_raw() | {'pixel width': MINIMUM_PROFILE_POINTS})
+        parameters = create_parameters_from_legacy(
+            parameters_dict=parsed,
+            diffusion_coefficient=parsed['nominal diffusion coefficient'],
+            lifetime=parsed['nominal lifetime (tau)'],
+            diffusion_length=parsed['nominal diffusion length'],
+        )
+        run = run_single_simulation(0, parsed['x array'], parsed['time series'], parameters,
+                                    parsed['noise series'][0], seed=1)
+        assert np.isfinite(run.cnr_0_estimate)

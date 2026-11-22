@@ -5,7 +5,6 @@ This module handles parameter conversion and simulation execution.
 """
 
 from typing import Dict, Any, Optional, Callable
-import math
 import sys
 import os
 
@@ -24,23 +23,6 @@ CSV_D_SCALE_KEY = 'diffusion coefficient scale'
 
 # Keys of a parameter file whose value the form holds in a whole-number field.
 WHOLE_NUMBER_KEYS = ('number of runs', 'pixel width', 'image dpi', 'image numbins')
-
-
-def whole_number(value: Any, name: str) -> int:
-    """
-    A whole number given as an int or as a float without a fraction.
-
-    The command-line interface accepts 50.0 for 50, so the form does too.
-
-    Raises
-    ------
-    ValueError
-        If the value is not a number or has a fraction.
-    """
-    is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
-    if not is_number or not math.isfinite(value) or value != int(value):
-        raise ValueError(f"{name} must be a whole number, got {value!r}")
-    return int(value)
 
 
 def parameters_for_form(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,22 +51,26 @@ def parameters_for_form(params: Dict[str, Any]) -> Dict[str, Any]:
 
     Raises
     ------
+    TypeError
+        If a whole-number field is given a number with a fraction (the
+        command-line interface rejects it too; 50.0 stands for 50 in both).
     ValueError
         If a value cannot be shown in the form. Nothing has been changed then.
     """
     from dice.utils.units import convert_time, global_time_unit, validate_time_unit
+    from dice.utils.validators import validate_integer
 
     prepared = dict(params)
 
     for key in WHOLE_NUMBER_KEYS:
         if key in prepared:
-            prepared[key] = whole_number(prepared[key], f"'{key}'")
+            prepared[key] = validate_integer(prepared[key], f"'{key}'")
 
     if 'time range' in prepared:
         time_range = prepared['time range']
         if not isinstance(time_range, (list, tuple)) or len(time_range) != 3:
             raise ValueError(f"'time range' must be [start, stop, steps], got {time_range!r}")
-        steps = whole_number(time_range[2], "The number of steps in 'time range'")
+        steps = validate_integer(time_range[2], "The number of steps in 'time range'")
         prepared['time range'] = [time_range[0], time_range[1], steps]
 
     if 'time series' in prepared and not isinstance(prepared['time series'], (list, tuple)):

@@ -331,6 +331,12 @@ class TestDryRun:
     INVALID_VALUES = [
         ({'noise value': 'loud'}, "Invalid noise value loud"),
         ({'number of runs': 0}, "Number of runs must be positive"),
+        ({'number of runs': 3.5}, "'number of runs' must be an integer"),
+        ({'time range': [0, 1, 1]}, "The number of steps in 'time range' must be >= 2"),
+        ({'noise value': -0.02}, "'noise value' must be 0 or greater"),
+        ({'FWHM_0': 0}, "'FWHM_0' must be greater than 0"),
+        ({'pixel width': 1}, "'pixel width' (the number of pixels) is 1"),
+        ({'mean_0': 1.3}, "outside the central 40% of the spatial window"),
         ({'length unit': 'um'}, "Unknown length unit 'um'"),
         ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
         ({'output_length_unit': 'nanometer'}, "'output_length_unit' is not supported"),
@@ -358,6 +364,32 @@ class TestDryRun:
         assert dry_error == real_error
         assert dry_error.startswith("Error: ") and message in dry_error
         assert not (tmp_path / 'output').exists()
+
+    @pytest.mark.parametrize('series, message', [
+        ([], "'time series'"),
+        ([0.5], "'time series' holds 1 time point"),
+        ([0, 0.5, 0.5], "Time points must be unique"),
+    ])
+    def test_invalid_time_series_fails_like_a_real_run(self, tmp_path, capsys, series, message):
+        params_file = write_quick_test_variant(
+            tmp_path, 'invalid_series', {'time series': series}, removed=('time range',))
+        with contextlib.chdir(tmp_path):
+            dry_exit = main([str(params_file), '--dry-run'])
+            dry_error = capsys.readouterr().out.splitlines()[-1]
+            real_exit = main([str(params_file), '--quiet'])
+            real_error = capsys.readouterr().out.splitlines()[-1]
+        assert dry_exit == real_exit == 1
+        assert dry_error == real_error
+        assert dry_error.startswith("Error: ") and message in dry_error
+        assert not (tmp_path / 'output').exists()
+
+    def test_unsorted_time_series_runs_in_ascending_order(self, tmp_path):
+        params_file = write_quick_test_variant(
+            tmp_path, 'unsorted', {'time series': [1, 0, 0.5], 'number of runs': 3, 'multiprocessing': False},
+            removed=('time range',))
+        run = run_cli(tmp_path, params_file, 'unsorted')
+        assert run.exit_code == 0
+        assert "Time range:\n    0.000 to 1.000 nanosecond" in run.read_summary()
 
     def test_missing_file_fails_like_a_real_run(self, tmp_path, capsys):
         missing = str(tmp_path / 'missing.txt')
@@ -1033,6 +1065,13 @@ class TestNoiseRangeExample:
         assert run.exit_code == 1
         assert message in capsys.readouterr().out
         assert not (tmp_path / 'output').exists()
+
+    def test_dice_runner_rejects_what_the_command_line_rejects(self, tmp_path):
+        """The Python entry point validates the file, so an off-center profile does not run."""
+        import dice
+        params_file = write_quick_test_variant(tmp_path, 'runner_off_center', {'mean_0': 1.3, 'number of runs': 3})
+        with pytest.raises(ValueError, match="'mean_0' is 1.3, outside the central 40% of the spatial window"):
+            dice.dice_runner(str(params_file))
 
     def test_dice_runner_draws_a_noise_level_for_each_run(self, tmp_path):
         import dice

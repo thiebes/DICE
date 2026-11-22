@@ -630,8 +630,8 @@ class TestFileThatCannotBeLoaded:
         return window
 
     @pytest.mark.parametrize("changes, message", [
-        ({"pixel width": 50.5}, "'pixel width' must be a whole number, got 50.5"),
-        ({"time range": [0, 1, 2.5]}, "The number of steps in 'time range' must be a whole number"),
+        ({"pixel width": 50.5}, "'pixel width' must be an integer, got float 50.5"),
+        ({"time range": [0, 1, 2.5]}, "The number of steps in 'time range' must be an integer"),
         ({"time range": [0, 1]}, "'time range' must be"),
         ({"time_range_unit": "fortnight"}, "fortnight"),
         # This one fails after the first fields of the form are filled.

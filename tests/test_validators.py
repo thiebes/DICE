@@ -252,17 +252,20 @@ class TestValidateFilenameSlug:
         with pytest.raises(TypeError, match="must be a string"):
             validate_filename_slug(123)
 
-    def test_null_byte(self):
-        """Test that null bytes pass through (not currently forbidden)."""
-        # Documents current behavior: null bytes are not in the forbidden list
-        result = validate_filename_slug("file\x00name")
-        assert result == "file\x00name"
+    @pytest.mark.parametrize('slug', ["file\x00name", "file\tname", "file\nname"])
+    def test_control_characters_are_rejected(self, slug):
+        with pytest.raises(ValueError, match="cannot contain control characters"):
+            validate_filename_slug(slug)
 
-    def test_control_characters(self):
-        """Test that control characters pass through (not currently forbidden)."""
-        # Documents current behavior: control chars are not in the forbidden list
-        assert validate_filename_slug("file\tname") == "file\tname"
-        assert validate_filename_slug("file\nname") == "file\nname"
+    @pytest.mark.parametrize('slug', ['NUL', 'nul', 'Con', 'COM1', 'lpt9', 'aux.v2', 'NUL.tar.gz'])
+    def test_windows_device_names_are_rejected(self, slug):
+        """No folder of these names can be created on Windows, with or without an extension."""
+        with pytest.raises(ValueError, match="Windows reserves that name"):
+            validate_filename_slug(slug)
+
+    @pytest.mark.parametrize('slug', ['null', 'console', 'COM10', 'run_nul', 'com', 'lpt0'])
+    def test_names_that_only_resemble_device_names_are_accepted(self, slug):
+        assert validate_filename_slug(slug) == slug
 
     def test_unicode(self):
         """Test that Unicode characters are accepted."""
