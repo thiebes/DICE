@@ -53,8 +53,8 @@ The main window has five tabs, a control panel at the bottom, a status bar, and 
 The analysis acts on the results of the last simulation. It does not change the simulation.
 
 - **Fit Method**: show results for the weighted least squares (WLS) or the ordinary least squares (OLS) fit of the mean squared displacement (MSD) against time.
-- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The bias is shown with its standard error. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, they are in the output unit that the columns of the file name, cm²/s by default. If the selected fit has no estimates, the summary says so.
-- **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, with its count and its 95% interval. A histogram of the estimates shows the threshold: dashed lines mark the limits, and each bar is colored from its foot up to the share of its estimates within them. You can change the threshold as often as you like without running the simulation again.
+- **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard error (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The bias is shown with its standard error. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, they are in the unit of the file's diffusion coefficient columns, cm²/s by default. If the selected fit has no estimates, the summary says so.
+- **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, with its count and its 95% interval. A histogram of the estimates shows the threshold: dashed lines mark the limits, and the blue part of each bar, from the bottom, is the share of its estimates within them. You can change the threshold as often as you like without running the simulation again.
 
 ### Output Settings
 
@@ -93,9 +93,9 @@ The GUI checks each field as you type and shows an error message below a field w
 - Diffusion coefficient, profile width, and spatial width: positive numbers
 - Diffusion length, lifetime, amplitude, and noise σ: zero or positive numbers. A lifetime of zero means no decay, and the diffusion length is then infinite and shows as `inf`.
 - Mean position: any number
-- Time range: numeric start and stop, with start less than stop
-- Time series: two or more comma-separated finite numbers, without duplicates
-- Filename slug: not empty, with no characters that are invalid in file names
+- Time range: numeric start and stop, with start 0 or greater and less than stop
+- Time series: two or more comma-separated finite numbers, 0 or greater, without duplicates
+- Filename slug: not empty, at most 64 characters, with no characters that are invalid in file names
 - Noise data file: the file must exist
 
 ## Output

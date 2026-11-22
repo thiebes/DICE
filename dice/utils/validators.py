@@ -251,9 +251,10 @@ WINDOWS_RESERVED_NAMES = frozenset(
 )
 
 # The slug names the output folder and is the start of every file name in
-# it. File systems take names of 255 characters, and Windows by default
-# paths of 260, so a long slug would fail when the outputs are written.
-MAX_FILENAME_SLUG_LENGTH = 100
+# it, so it appears twice in the path of each output file. File systems take
+# names of 255 characters, and Windows by default paths of 260. The limit
+# leaves about 100 characters for the folder that holds output/.
+MAX_FILENAME_SLUG_LENGTH = 64
 
 
 def validate_filename_slug(value: str, name: str = "filename") -> str:
@@ -281,7 +282,7 @@ def validate_filename_slug(value: str, name: str = "filename") -> str:
     TypeError
         If the value is not a string.
     ValueError
-        If the value is empty, longer than 100 characters, contains
+        If the value is empty, longer than 64 characters, contains
         forbidden or control characters, is '.' or '..', ends with a dot or
         a space, or is a name that Windows
         reserves for a device (the check applies on every system, so that a
@@ -354,6 +355,8 @@ def validate_time_values(values: List[float], name: str = "time values") -> List
         float_v = float(v)
         if not np.isfinite(float_v):
             raise ValueError(f"All {name} must be finite, got {float_v}")
+        if float_v < 0:
+            raise ValueError(f"{name} must be 0 or greater, got {float_v:g}")
         validated.append(float_v)
 
     if len(validated) != len(set(validated)):
@@ -393,6 +396,9 @@ def validate_range(start: float, stop: float, steps: int,
     start = validate_numeric(start, name=f"{name} start")
     stop = validate_numeric(stop, name=f"{name} stop")
     steps = validate_integer(steps, name=f"{name} steps", min_val=1)
+
+    if start < 0:
+        raise ValueError(f"{name} start must be 0 or greater, got {start}")
 
     if start >= stop:
         raise ValueError(f"{name} start must be less than stop, got {start} >= {stop}")

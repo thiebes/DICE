@@ -365,6 +365,11 @@ class DiceInterface:
         d_estimates = result.d_estimates('wls')
         d_nominal = processed_params['nominal diffusion coefficient']
 
+        # A plot of an earlier run must not stay beside the new results,
+        # whether this run draws a plot or not.
+        plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
+        plot_file.unlink(missing_ok=True)
+
         if len(d_estimates) > 0:
             d_ratios = d_estimates / d_nominal
 
@@ -376,7 +381,6 @@ class DiceInterface:
             }
 
             # Create plot
-            plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
 
             figure = plot_accuracy_histogram(
                 simulation_result=legacy_result,

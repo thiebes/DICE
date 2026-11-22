@@ -262,7 +262,8 @@ class TestValidateFilenameSlug:
         from dice.utils.validators import MAX_FILENAME_SLUG_LENGTH
 
         assert validate_filename_slug('r' * MAX_FILENAME_SLUG_LENGTH) == 'r' * MAX_FILENAME_SLUG_LENGTH
-        with pytest.raises(ValueError, match="cannot be longer than 100 characters; it has 101"):
+        assert MAX_FILENAME_SLUG_LENGTH == 64
+        with pytest.raises(ValueError, match="cannot be longer than 64 characters; it has 65"):
             validate_filename_slug('r' * (MAX_FILENAME_SLUG_LENGTH + 1))
 
     @pytest.mark.parametrize('slug', ['NUL', 'nul', 'Con', 'COM1', 'lpt9', 'aux.v2', 'NUL.tar.gz',

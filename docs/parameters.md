@@ -30,7 +30,7 @@ A prefix for the output files. DICE writes the output to the directory `output/<
 - `output/example/example_summary.txt`: parameters and summary statistics
 - `output/example/example_accuracy_histogram.png`: histogram of the estimates, or with a noise range, `output/example/example_accuracy_vs_cnr.png`: the estimates against the initial CNR
 
-The slug must be a plain file name of at most 100 characters. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*`, a tab or a line break, the slugs `.` and `..`, and a slug that ends with a dot or a space. It also rejects the names that Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), on every system, so that a parameters file runs everywhere. If the key is missing, the slug is `dice_simulation`.
+The slug must be a plain file name of at most 64 characters. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*`, a tab or a line break, the slugs `.` and `..`, and a slug that ends with a dot or a space. It also rejects the names that Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`, with or without an extension), on every system, so that a parameters file runs everywhere. If the key is missing, the slug is `dice_simulation`.
 
 ### `number of runs`
 
@@ -241,7 +241,7 @@ The GUI shows the resulting pixel size, `spatial width` / (`pixel width` − 1),
 
 ## Temporal axis
 
-Give **either** a time range **or** a time series. The linear fit needs at least two time points.
+Give **either** a time range **or** a time series. The linear fit needs at least two time points, and no time may be below 0: the profile spreads from time 0.
 
 ### `time range`
 

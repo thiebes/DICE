@@ -911,6 +911,8 @@ class TestFileThatCannotRunIsRejected:
         ({'time series': [0, 0.5, 0.5]}, ('time range',), ValueError,
          r"Invalid 'time series': Time points must be unique"),
         ({'time series': [0, float('nan')]}, ('time range',), ValueError, r"Invalid 'time series': .*finite"),
+        ({'time range': [-1, 1, 5]}, (), ValueError, r"The time axis starts at -1; every time must be 0 or greater"),
+        ({'time series': [-2, -1]}, ('time range',), ValueError, r"The time axis starts at -2"),
         ({'number of runs': 3.5}, (), TypeError, r"'number of runs' must be an integer"),
         ({'noise value': -0.02}, (), ValueError, r"'noise value' must be 0 or greater, got -0.02"),
         ({'FWHM_0': 0}, (), ValueError, r"'FWHM_0' must be greater than 0"),

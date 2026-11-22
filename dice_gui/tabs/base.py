@@ -22,13 +22,28 @@ TIME_UNITS_DISPLAY = [
 ]
 
 
-def set_spin_value(spin, value: float, name: str) -> None:
+def set_spin_value(spin, value: float, name: str, minimum_is_a_rule: bool = False) -> None:
     """
     Show a value of a parameter file in a spin box, or raise if the box cannot hold it.
 
     A spin box replaces a value outside its range with the nearest limit
     and gives no sign, so the simulation would run with another value than
     the file gives.
+
+    Parameters
+    ----------
+    spin : QSpinBox or QDoubleSpinBox
+        The field.
+    value : float
+        The value of the file.
+    name : str
+        The key of the file, for the message.
+    minimum_is_a_rule : bool
+        True when the minimum of the field is also the minimum of the
+        simulation (runs, pixels, time steps), so that the command-line
+        interface rejects the value too. Otherwise the limits are those of
+        the form alone, and the message says that the command-line
+        interface runs the file.
 
     Raises
     ------
@@ -38,14 +53,15 @@ def set_spin_value(spin, value: float, name: str) -> None:
     def text(number) -> str:
         return str(number) if isinstance(number, int) else f"{number:g}"
 
+    command_line = "Change the value in the file, or run the file with the command-line interface."
     if value < spin.minimum():
-        raise ValueError(f"{name} is {text(value)}; it must be {text(spin.minimum())} or more.")
-    if value > spin.maximum():
-        # Only the form has this limit; the command-line interface runs the file.
+        if minimum_is_a_rule:
+            raise ValueError(f"{name} is {text(value)}; it must be {text(spin.minimum())} or more.")
         raise ValueError(
-            f"{name} is {text(value)}, and the form takes at most {text(spin.maximum())}. "
-            "Lower the value in the file, or run the file with the command-line interface."
-        )
+            f"{name} is {text(value)}, and the form takes at least {text(spin.minimum())}. {command_line}")
+    if value > spin.maximum():
+        raise ValueError(
+            f"{name} is {text(value)}, and the form takes at most {text(spin.maximum())}. {command_line}")
     spin.setValue(value)
 
 

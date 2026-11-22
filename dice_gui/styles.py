@@ -130,8 +130,7 @@ class DiceTheme:
 
             QPushButton:focus {{
                 border: 2px solid {to_css(colors['link'])};
-                outline: 2px solid {to_css(colors['link'])};
-                outline-offset: 2px;
+                outline: none;
             }}
 
             /* Button styling - respects system theme */

@@ -238,9 +238,9 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
     TypeError
         If the number of steps of a 'time range' is not a whole number.
     ValueError
-        If the time axis has fewer than two points, a 'time range' does not
-        run forward, or a 'time series' repeats a time or holds a value that
-        is not a finite number.
+        If the time axis has fewer than two points or a time below 0, a
+        'time range' does not run forward, or a 'time series' repeats a time
+        or holds a value that is not a finite number.
     """
     unique_time_key = check_for_unique_key(
         parameters_dictionary,
@@ -279,6 +279,12 @@ def handle_time_parameters(parameters_dictionary: Dict[str, Any]) -> None:
                 "the fit of the diffusion coefficient needs at least two time points."
             )
         parameters_dictionary[unique_time_key] = time_series
+
+    # The profile spreads from time 0 (sigma^2 = sigma_0^2 + 2 D t), so no time is before it.
+    time_key = 'time series' if 'time series' in parameters_dictionary else 'time_series'
+    first_time = float(np.min(parameters_dictionary[time_key]))
+    if first_time < 0:
+        raise ValueError(f"The time axis starts at {first_time:g}; every time must be 0 or greater.")
 
 
 def narrow_peak_warning(profile: Sequence[float], source: str) -> Optional[str]:

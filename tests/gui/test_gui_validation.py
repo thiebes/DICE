@@ -240,6 +240,27 @@ class TestConsistencyWarnings:
         assert window.run_button.isEnabled()
         assert window.status_label.text() == "Ready to run"
 
+    @pytest.mark.parametrize("series", ["-2, -1", "-1, 0, 1"])
+    def test_time_before_zero_is_an_input_error_and_does_not_reach_the_checks_of_a_run(
+            self, qtbot, window, dialogs, series):
+        """The profile spreads from time 0; the form says so in the field."""
+        window.time_series_radio.click()
+        window.time_series_input.setPlainText(series)
+
+        _click_run(qtbot, window)
+
+        assert window.simulation_thread is None
+        assert dialogs.titles("warning") == ["Missing or Invalid Parameters"]
+        assert "Time series must be 0 or greater" in dialogs.texts("warning")[0]
+
+    def test_negative_start_of_a_time_range_is_an_input_error(self, qtbot, window, dialogs):
+        enter_text(qtbot, window.time_start_input, "-1")
+
+        _click_run(qtbot, window)
+
+        assert window.simulation_thread is None
+        assert any("start must be 0 or greater" in text for text in dialogs.texts("warning"))
+
     def test_final_cnr_counts_the_spreading_of_the_profile(self, qtbot, window, dialogs):
         """
         The peak falls by the decay and by sigma_0 / sigma_t. Here the decay

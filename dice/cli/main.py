@@ -309,6 +309,11 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
         d_estimates = result.d_estimates('wls')
         d_nominal = parameters['nominal diffusion coefficient']
 
+        # A plot of an earlier run must not stay beside the new results,
+        # whether this run draws a plot or not.
+        plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
+        plot_file.unlink(missing_ok=True)
+
         if len(d_estimates) > 0:
             d_ratios = d_estimates / d_nominal
 
@@ -320,10 +325,6 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
             }
 
             # Create accuracy histogram
-            plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
-            # A plot of an earlier run must not stay beside the new results if this save fails.
-            plot_file.unlink(missing_ok=True)
-
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
                 filename=str(plot_file),
@@ -332,7 +333,8 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
 
             if not args.quiet:
                 print(f"Accuracy histogram saved to: {plot_file}")
-        # Without estimates there is no plot; main() reports that no run gave one.
+        else:
+            report_missing_plot(result)
 
     except OSError as e:
         raise PlotError(
@@ -371,11 +373,12 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
     try:
         amplitude_0 = result.parameters.profile.amplitude_0
         fitted_runs = [run for run in result.run_results if run.slope_fit('wls') is not None]
+        # A plot of an earlier run must not stay beside the new results,
+        # whether this run draws a plot or not.
+        slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
+        plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
+        plot_file.unlink(missing_ok=True)
         if fitted_runs:
-            slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
-            plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
-            # A plot of an earlier run must not stay beside the new results if this save fails.
-            plot_file.unlink(missing_ok=True)
             fig = plot_accuracy_vs_cnr(
                 [nominal_cnr(amplitude_0, run.noise_sigma) for run in fitted_runs],
                 [run.accuracy('wls') for run in fitted_runs],
@@ -386,7 +389,8 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
 
             if not args.quiet:
                 print(f"Accuracy scatter plot saved to: {plot_file}")
-        # Without estimates there is no plot; main() reports that no run gave one.
+        else:
+            report_missing_plot(result)
 
     except OSError as e:
         raise PlotError(
@@ -397,6 +401,28 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
         if fig is not None:
             import matplotlib.pyplot as plt
             plt.close(fig)
+
+
+def report_completion(result: MonteCarloOutput, quiet: bool) -> None:
+    """
+    Print how the simulation ended.
+
+    A simulation without estimates is reported as a warning on the error
+    stream, also with --quiet. It is printed directly: Python shows a
+    warning from one place only once in a process, and a program can call
+    main() several times.
+    """
+    if not result.has_estimates():
+        print(f"Warning: {completion_message(result)}", file=sys.stderr)
+    elif not quiet:
+        print(completion_message(result))
+
+
+def report_missing_plot(result: MonteCarloOutput) -> None:
+    """Say that no plot was drawn because the weighted fit, which the plots show, gave no estimate."""
+    if result.has_estimates():
+        # Without any estimate, report_completion says so.
+        print("Warning: No plot was drawn: the weighted fit gave no estimate.", file=sys.stderr)
 
 
 def console_warning(message, category, filename, lineno, line=None) -> str:
@@ -490,11 +516,7 @@ def run_command(argv: Optional[list] = None) -> int:
         # Create plots
         create_plots(result, parameters, output_dir, args)
         
-        if not result.has_estimates():
-            # A warning, so that --quiet prints it too.
-            warnings.warn(completion_message(result), stacklevel=1)
-        elif not args.quiet:
-            print(completion_message(result))
+        report_completion(result, args.quiet)
         
         return 0
     

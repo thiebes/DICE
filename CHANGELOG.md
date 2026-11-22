@@ -192,7 +192,7 @@ and Fixed give the details.
   path separator, a tab or a line break, the slugs `.` and `..`, a slug that
   ends with a dot or a space, and a name that Windows reserves for a device
   (`NUL`, `CON`, `COM1`, ...) are rejected before the simulation runs, and so
-  is a slug of more than 100 characters. Such a
+  is a slug of more than 64 characters. Such a
   slug used to write the output outside `output/`, or fail after the
   simulation had run.
 - Behavior change: a parameters file that cannot run is rejected when it is
@@ -201,7 +201,7 @@ and Fixed give the details.
   for 50); `pixel width` is 16 or more, the number of points the CNR
   estimate needs; `time range` has a whole number of steps, 2 or more, and
   a start below its stop; `time series` has two or more time points and
-  repeats none; `noise value` is 0 or greater; `FWHM_0` or `sigma_0` is
+  repeats none; no time is below 0; `noise value` is 0 or greater; `FWHM_0` or `sigma_0` is
   greater than 0; the nominal diffusion coefficient is greater than 0;
   `image numbins` is a whole number, 1 or more. These files used to fail
   during the run or at the plot, or to run without an estimate. The command-line interface used to cut a `time

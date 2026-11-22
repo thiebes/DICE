@@ -397,6 +397,27 @@ class TestClosingDuringARun:
         # The questions were answered before the wait and are not asked again.
         assert dialogs.titles("question") == ["Simulation Running"]
 
+    def test_run_that_ends_while_the_question_is_open_lets_the_window_close(
+            self, qtbot, window, dialogs, monkeypatch):
+        """The question runs an event loop; the run can end and release its thread before the answer."""
+        window.show()
+        _start_long_serial_run(qtbot, window)
+        window.parameters_modified = False
+        asked = []
+
+        def end_the_run_then_answer_yes(parent, title, text, *args, **kwargs):
+            asked.append(title)
+            window.stop_simulation()
+            qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+            return QMessageBox.StandardButton.Yes
+
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(end_the_run_then_answer_yes))
+
+        assert window.close() is True
+
+        assert asked == ["Simulation Running"]
+        assert not window.isVisible()
+
     def test_close_with_unsaved_changes_asks_once(self, qtbot, window, dialogs, thread_calls):
         window.show()
         _start_long_serial_run(qtbot, window)
@@ -498,7 +519,10 @@ class TestOutputFilesThatCannotBeWritten:
         window.load_results_button.click()
 
         assert dialogs.titles("question") == ["Output Files Not Written"]
-        assert "A results file replaces its results" in dialogs.texts("question")[0]
+        assert dialogs.texts("question")[0].startswith(
+            "Loading a results file discards the results of the last simulation, whose output files "
+            "have not been written. Discard them?")
+        assert "choose No, then File > Write Output Files" in dialogs.texts("question")[0]
         assert window.interface.last_result is unwritten
         assert window.write_outputs_action.isEnabled()
 
@@ -512,7 +536,9 @@ class TestOutputFilesThatCannotBeWritten:
         assert not window.write_outputs_action.isEnabled()
         # Nothing waits for its files now: the action writes nothing and fails on nothing.
         assert window.interface.retry_write_outputs() is None
+        assert window.status_label.text() == "Results loaded"
         window.write_output_files()
+        assert window.status_label.text() == "Results loaded"  # not "Output files written"
         window.parameters_modified = False
         dialogs.shown.clear()
         assert window.close() is True
@@ -527,7 +553,7 @@ class TestOutputFilesThatCannotBeWritten:
         qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
 
         assert dialogs.titles("question") == ["Output Files Not Written"]
-        assert "A new simulation replaces its results" in dialogs.texts("question")[0]
+        assert dialogs.texts("question")[0].startswith("A new simulation discards the results of the last simulation")
         assert window.simulation_thread is None
         assert window.write_outputs_action.isEnabled()
 

@@ -92,7 +92,7 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     explore_description = QLabel(
         "Adjust the threshold to see what fraction of estimates\n"
         "fall within a given percentage of the nominal value.\n"
-        "In the histogram, each bar is colored from its foot up to the\n"
+        "In the histogram, the blue part of each bar, from the bottom, is the\n"
         "share of its estimates within the threshold; dashed lines mark the limits."
     )
     explore_description.setWordWrap(True)
@@ -186,21 +186,28 @@ def value_with_uncertainty(value: float, uncertainty: float) -> str:
 
     The uncertainty is given with two significant digits and the value is
     rounded to its last digit, for example '-0.00042 ± 0.00087'. Numbers
-    that need more than eight decimals share the power of ten of the
-    uncertainty, for example '(3.1 ± 8.7)e-10' or '(500.0 ± 4.6)e-12'. A
-    value without a finite uncertainty (the standard
+    that need more than eight decimals share one power of ten, that of the
+    larger number, for example '(3.1 ± 8.7)e-10' or '(5.000 ± 0.046)e-10'.
+    A value without a finite uncertainty (the standard
     error of one estimate) is given alone, with three significant digits.
     """
     if not math.isfinite(uncertainty) or uncertainty <= 0 or not math.isfinite(value):
         return f"{value:.3g}"
+
+    def shown(number: float, decimals: int) -> str:
+        rounded = round(number, decimals)
+        return f"{rounded + 0.0:.{decimals}f}"  # + 0.0 turns -0.0 into 0.0
+
     decimals = 1 - math.floor(math.log10(uncertainty))
-    if decimals > 8:
-        # The power of ten of the uncertainty, so that it keeps its two digits.
-        exponent = math.floor(math.log10(uncertainty))
-        scale = 10.0 ** exponent
-        return f"({value / scale:.1f} ± {uncertainty / scale:.1f})e{exponent}"
-    decimals = max(decimals, 0)
-    return f"{value:.{decimals}f} ± {uncertainty:.{decimals}f}"
+    if decimals <= 8:
+        decimals = max(decimals, 0)
+        return f"{shown(value, decimals)} ± {shown(uncertainty, decimals)}"
+    # The power of ten of the larger number, as a number alone would be
+    # written (5.0e-10), and decimals for two digits of the uncertainty.
+    exponent = math.floor(math.log10(max(abs(value), uncertainty)))
+    scale = 10.0 ** exponent
+    decimals = max(1 - math.floor(math.log10(uncertainty / scale)), 1)
+    return f"({shown(value / scale, decimals)} ± {shown(uncertainty / scale, decimals)})e{exponent}"
 
 
 def populate_precision_summary(main_window: "DiceGUI", metrics: dict, d_unit: Optional[str] = None) -> None:

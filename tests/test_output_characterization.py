@@ -293,3 +293,59 @@ def regenerate() -> None:
 
 if __name__ == '__main__':
     sys.exit(regenerate())
+
+
+def weighted_fit_without_estimates_output() -> MonteCarloOutput:
+    """Every run has an OLS fit and none has a WLS fit, whose estimates the plots show."""
+    return _output([
+        _run(0, 0.02, (0.0213, 0.0011, 0.0004, 0.0002), None),
+        _run(1, 0.02, (0.0191, 0.0010, -0.0002, 0.0003), None),
+    ], noise_values=[0.02])
+
+
+class TestCommandLineReportsHowARunEnded:
+    """A simulation without estimates, and a plot that is not drawn, are reported, also with --quiet."""
+
+    @pytest.mark.parametrize('quiet', [False, True])
+    def test_no_estimates_is_a_warning_on_the_error_stream(self, capsys, quiet):
+        from dice.cli.main import report_completion
+
+        # Twice: a warning of Python from one place would be shown only once.
+        for _ in range(2):
+            report_completion(all_failed_output(), quiet)
+            captured = capsys.readouterr()
+            assert captured.out == ""
+            assert captured.err == ("Warning: Simulation completed, but no run gave an estimate "
+                                    "of the diffusion coefficient.\n")
+
+    def test_success_is_printed_unless_quiet(self, capsys):
+        from dice.cli.main import report_completion
+
+        report_completion(edge_case_output(), quiet=False)
+        assert capsys.readouterr() == ("Simulation completed successfully.\n", "")
+        report_completion(edge_case_output(), quiet=True)
+        assert capsys.readouterr() == ("", "")
+
+    def test_missing_plot_is_reported_and_an_older_plot_is_removed(self, tmp_path, capsys):
+        """The plots show the weighted fit. Without its estimates no plot is drawn, and none of an earlier run stays."""
+        import argparse
+        from dice.cli.main import create_plots
+
+        older_plot = tmp_path / 'rerun_accuracy_histogram.png'
+        older_plot.write_bytes(b'the plot of an earlier run')
+        parameters = {'filename slug': 'rerun', 'image type': 'png', 'nominal diffusion coefficient': 0.01}
+
+        create_plots(weighted_fit_without_estimates_output(), parameters, tmp_path,
+                     argparse.Namespace(no_plots=False, quiet=True))
+
+        assert not older_plot.exists()
+        assert capsys.readouterr().err == "Warning: No plot was drawn: the weighted fit gave no estimate.\n"
+
+    def test_no_second_message_when_no_fit_gave_an_estimate(self, tmp_path, capsys):
+        import argparse
+        from dice.cli.main import create_plots
+
+        parameters = {'filename slug': 'none', 'image type': 'png', 'nominal diffusion coefficient': 0.01}
+        create_plots(all_failed_output(), parameters, tmp_path, argparse.Namespace(no_plots=False, quiet=True))
+
+        assert capsys.readouterr() == ("", "")  # report_completion says it

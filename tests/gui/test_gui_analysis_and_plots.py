@@ -375,8 +375,11 @@ class TestPlotThatCannotBeSaved:
     (1234.6, 250.0, "1235 ± 250"),
     (3.1e-10, 8.7e-10, "(3.1 ± 8.7)e-10"),
     # A value much larger than its uncertainty keeps both digits of the uncertainty.
-    (5.0e-10, 4.6e-12, "(500.0 ± 4.6)e-12"),
-    (3e-7, 2e-9, "(300.0 ± 2.0)e-9"),
+    # The power of ten is that of the larger number, as "5.0e-10" alone would be written.
+    (5.0e-10, 4.6e-12, "(5.000 ± 0.046)e-10"),
+    (3e-7, 2e-9, "(3.000 ± 0.020)e-7"),
+    # A value that rounds to zero has no minus sign.
+    (-0.00001, 0.47, "0.00 ± 0.47"),
     (0.5, float("nan"), "0.5"),
     (0.5, 0.0, "0.5"),
 ])

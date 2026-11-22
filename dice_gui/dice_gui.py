@@ -713,7 +713,7 @@ class DiceGUI(QMainWindow):
         """Load results from CSV and generate plot."""
         from pathlib import Path
 
-        if not self._confirm_discard_unwritten_results("A results file"):
+        if not self._confirm_discard_unwritten_results("Loading a results file"):
             return
 
         # Get default directory from filename slug output path
@@ -758,6 +758,8 @@ class DiceGUI(QMainWindow):
                 estimator=estimator
             )
             self.write_outputs_action.setEnabled(self.interface.last_output_error is not None)
+            # The status line may still speak of the simulation these results replace.
+            self.status_label.setText("Results loaded")
 
             # Update status bar
             self.loaded_data_file = csv_file
@@ -1042,7 +1044,7 @@ class DiceGUI(QMainWindow):
         # Check 1: Final CNR. The profile keeps its area while it spreads, so
         # its peak falls by the decay and by sigma_0 / sigma_t, with
         # sigma_t^2 = sigma_0^2 + 2 D t (dice.core.profiles).
-        if gui_params['noise_type'] == 'fixed' and t_stop is not None:
+        if gui_params['noise_type'] == 'fixed' and t_stop is not None and t_stop >= 0:
             amplitude = gui_params['amplitude_0']
             noise_sigma = gui_params['noise_value']
             diffusion_coefficient = convert_diffusion_coefficient(
@@ -1303,7 +1305,7 @@ class DiceGUI(QMainWindow):
         Ask before an action replaces the results of a simulation whose output files are not written.
 
         Args:
-            action: What replaces the results, as the start of a sentence, for example "A new simulation".
+            action: What discards the results, as the start of a sentence, for example "A new simulation".
 
         Returns:
             True when no results wait for their files, or the user agrees to lose them.
@@ -1312,9 +1314,9 @@ class DiceGUI(QMainWindow):
             return True
         reply = QMessageBox.question(
             self, "Output Files Not Written",
-            f"The output files of the last simulation are not written. {action} replaces its "
-            "results, and they are lost. Continue?\n\n"
-            "File > Write Output Files writes them.",
+            f"{action} discards the results of the last simulation, whose output files "
+            "have not been written. Discard them?\n\n"
+            "To keep them, choose No, then File > Write Output Files.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -1349,6 +1351,8 @@ class DiceGUI(QMainWindow):
 
     def write_output_files(self):
         """File > Write Output Files: write the files of a simulation whose files could not be written."""
+        if self.interface.last_output_error is None:
+            return  # no simulation waits for its files
         # Write first: the dialog is for a write that fails again.
         self.interface.retry_write_outputs()
         if self._offer_to_write_output_files():
@@ -1766,7 +1770,8 @@ class DiceGUI(QMainWindow):
         try:
             # Basic settings
             if 'number of runs' in params:
-                set_spin_value(self.num_runs_spin, params['number of runs'], "'number of runs'")
+                set_spin_value(self.num_runs_spin, params['number of runs'], "'number of runs'",
+                               minimum_is_a_rule=True)
             if 'filename slug' in params:
                 self.filename_slug_input.setText(params['filename slug'])
 
@@ -1818,7 +1823,8 @@ class DiceGUI(QMainWindow):
             if 'spatial width' in params:
                 self.spatial_width_input.setText(str(params['spatial width']))
             if 'pixel width' in params:
-                set_spin_value(self.pixel_width_input, params['pixel width'], "'pixel width'")
+                set_spin_value(self.pixel_width_input, params['pixel width'], "'pixel width'",
+                               minimum_is_a_rule=True)
 
             # Time axis (mutually exclusive)
             if 'time range' in params:
@@ -1826,7 +1832,8 @@ class DiceGUI(QMainWindow):
                 time_range = params['time range']
                 self.time_start_input.setText(str(time_range[0]))
                 self.time_stop_input.setText(str(time_range[1]))
-                set_spin_value(self.time_steps_input, time_range[2], "The number of steps in 'time range'")
+                set_spin_value(self.time_steps_input, time_range[2], "The number of steps in 'time range'",
+                               minimum_is_a_rule=True)
                 self.time_series_input.clear()
             elif 'time series' in params:
                 self.time_series_radio.setChecked(True)
@@ -2477,24 +2484,28 @@ licenses of the packages DICE uses.</p>
                 event.ignore()
                 return
 
-            # The thread is not terminated, because a terminated parallel run
-            # leaves its worker processes behind. The window stays, with its
-            # inputs disabled and a message, and closes when the thread
-            # reports its end.
-            self.simulation_thread.request_stop()
-            self._close_requested = True
-            self._set_inputs_enabled(False)
-            self.stop_button.setEnabled(False)
-            self.status_label.setText("Stopping. DICE exits when the current run or batch has ended...")
-            event.ignore()
-            return
+            # The question runs an event loop, so the run can have ended and
+            # its thread been released while the question was open. Then
+            # there is nothing to stop, and the checks below decide.
+            if self.simulation_thread is not None and self.simulation_thread.isRunning():
+                # The thread is not terminated, because a terminated parallel
+                # run leaves its worker processes behind. The window stays,
+                # with its inputs disabled and a message, and closes when
+                # the thread reports its end.
+                self.simulation_thread.request_stop()
+                self._close_requested = True
+                self._set_inputs_enabled(False)
+                self.stop_button.setEnabled(False)
+                self.status_label.setText("Stopping. DICE exits when the current run or batch has ended...")
+                event.ignore()
+                return
 
         if self.interface.last_output_error is not None and not self._close_requested:
             reply = QMessageBox.question(
                 self, "Output Files Not Written",
-                "The output files of the last simulation are not written, and its results "
-                "are lost when DICE exits. Exit anyway?\n\n"
-                "File > Write Output Files writes them.",
+                "The output files of the last simulation have not been written, and its "
+                "results are lost when DICE exits. Exit anyway?\n\n"
+                "To keep them, choose No, then File > Write Output Files.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
