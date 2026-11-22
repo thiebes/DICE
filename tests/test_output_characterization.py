@@ -7,7 +7,9 @@ only one estimator, a slope stderr of 0.0 (an empty CSV cell), a NaN stderr,
 two noise values (so the per-noise analysis is filled), and a simulation in
 which every fit failed. Each output must equal its golden file in
 tests/golden/estimators/, which pins key order, column order, labels, and
-every number.
+every number. The analysis dict is written with 12 significant digits: the
+interval of a fraction differs in its last digit between processors, and
+the golden files hold for all of them.
 
 The golden files were written by the code before the estimator registry was
 introduced. Regenerate them only deliberately, after a reviewed change to an
@@ -20,8 +22,9 @@ import dataclasses
 import json
 import sys
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
+import numpy as np
 import pytest
 
 import dice
@@ -82,8 +85,22 @@ def weighted_first_output() -> MonteCarloOutput:
     ], noise_values=[0.02])
 
 
+ANALYSIS_SIGNIFICANT_DIGITS = 12
+
+
+def _rounded_floats(value: Any) -> Any:
+    """`value` with each float, at any depth of dicts and lists, at 12 significant digits."""
+    if isinstance(value, dict):
+        return {key: _rounded_floats(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_rounded_floats(item) for item in value]
+    if isinstance(value, (float, np.floating)):
+        return float(f"{float(value):.{ANALYSIS_SIGNIFICANT_DIGITS}g}")
+    return value
+
+
 def _analysis_json(output: MonteCarloOutput, path: Path) -> None:
-    analysis = analyze_simulation_results(output)
+    analysis = _rounded_floats(analyze_simulation_results(output))
     path.write_text(json.dumps(analysis, indent=1, default=float), encoding='utf-8')
 
 
