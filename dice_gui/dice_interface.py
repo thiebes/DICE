@@ -5,6 +5,7 @@ This module handles parameter conversion and simulation execution.
 """
 
 from typing import Dict, Any, Optional, Callable
+import math
 import sys
 import os
 
@@ -21,6 +22,94 @@ CSV_D_UNIT_KEY = 'diffusion coefficient unit'
 CSV_D_SCALE_KEY = 'diffusion coefficient scale'
 
 
+# Keys of a parameter file whose value the form holds in a whole-number field.
+WHOLE_NUMBER_KEYS = ('number of runs', 'pixel width', 'image dpi', 'image numbins')
+
+
+def whole_number(value: Any, name: str) -> int:
+    """
+    A whole number given as an int or as a float without a fraction.
+
+    The command-line interface accepts 50.0 for 50, so the form does too.
+
+    Raises
+    ------
+    ValueError
+        If the value is not a number or has a fraction.
+    """
+    is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    if not is_number or not math.isfinite(value) or value != int(value):
+        raise ValueError(f"{name} must be a whole number, got {value!r}")
+    return int(value)
+
+
+def parameters_for_form(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Prepare the dictionary of a parameter file for the fields of the GUI.
+
+    The form holds some values in another shape than a file may give them:
+
+    - Whole numbers written as floats (50.0) become ints.
+    - 'time_range_unit' becomes the units of the start and stop fields, with
+      the precedence resolve_units gives it over 'time_start_unit' and
+      'time_stop_unit'.
+    - A 'time series' with a unit key is converted to the global time unit,
+      because the form has no unit selector for a series.
+    - The space spelling 'diffusion length unit' becomes 'diffusion_length_unit'.
+
+    Parameters
+    ----------
+    params : dict
+        The dictionary of a parameter file, with the keys the files document.
+
+    Returns
+    -------
+    dict
+        A copy that populate_gui_from_parameters can show without loss.
+
+    Raises
+    ------
+    ValueError
+        If a value cannot be shown in the form. Nothing has been changed then.
+    """
+    from dice.utils.units import convert_time, global_time_unit, validate_time_unit
+
+    prepared = dict(params)
+
+    for key in WHOLE_NUMBER_KEYS:
+        if key in prepared:
+            prepared[key] = whole_number(prepared[key], f"'{key}'")
+
+    if 'time range' in prepared:
+        time_range = prepared['time range']
+        if not isinstance(time_range, (list, tuple)) or len(time_range) != 3:
+            raise ValueError(f"'time range' must be [start, stop, steps], got {time_range!r}")
+        steps = whole_number(time_range[2], "The number of steps in 'time range'")
+        prepared['time range'] = [time_range[0], time_range[1], steps]
+
+    if 'time series' in prepared and not isinstance(prepared['time series'], (list, tuple)):
+        raise ValueError(f"'time series' must be a list of times, got {prepared['time series']!r}")
+
+    global_time = global_time_unit(prepared)
+    range_unit = prepared.pop('time_range_unit', None)
+    series_unit = prepared.pop('time_series_unit', None)
+    range_unit_applies = range_unit is not None and range_unit != global_time
+    if range_unit_applies:
+        validate_time_unit(range_unit, 'time_range_unit')
+        prepared['time_start_unit'] = prepared['time_stop_unit'] = range_unit
+        series_unit = range_unit
+    if series_unit is not None and series_unit != global_time and 'time series' in prepared:
+        validate_time_unit(series_unit, 'time_series_unit')
+        prepared['time series'] = [
+            convert_time(time, series_unit, global_time) for time in prepared['time series']
+        ]
+
+    if 'diffusion length unit' in prepared:
+        prepared.setdefault('diffusion_length_unit', prepared.pop('diffusion length unit'))
+
+    return prepared
+
+
 class DiceInterface:
     """Interface for running DICE simulations from GUI."""
 
@@ -28,6 +117,8 @@ class DiceInterface:
         """Initialize the interface."""
         self.last_result = None
         self.last_parameters = None
+        # Why the output files of the last run could not be written, if they could not.
+        self.last_output_error: Optional[str] = None
 
     def diffusion_coefficient_unit(self) -> tuple[float, Optional[str]]:
         """
@@ -155,32 +246,36 @@ class DiceInterface:
         return params
 
     def run_simulation(self, parameters: Dict[str, Any],
-                       progress_callback: Optional[Callable[[int, int], None]] = None) -> Optional[tuple]:
+                       progress_callback: Optional[Callable[[int, int], None]] = None) -> tuple:
         """
-        Run DICE simulation with given parameters.
+        Run DICE simulation with given parameters, then write its output files.
+
+        A finished simulation is returned even when its output files cannot be
+        written (a results file open in another program, for example).
+        last_output_error then holds the reason, and retry_write_outputs writes
+        the files again.
 
         Args:
             parameters: Dictionary of parameters
             progress_callback: Optional callback for progress updates (current, total)
 
         Returns:
-            Tuple of (MonteCarloOutput, processed_params dict), or None if error occurred.
+            Tuple of (MonteCarloOutput, processed_params dict).
+
+        Raises:
+            InterruptedError: If the progress callback asked the run to stop.
+            RuntimeError: If the parameters are invalid or the simulation fails.
         """
         try:
             # Import required modules from dice
             from dice.io.parameters import parameter_parser, validate_parameters
             from dice.analysis.simulation import run_monte_carlo_simulation
-            from dice.analysis.statistics import analyze_simulation_results
-            from dice.io.results import (
-                export_collated_results, output_unit_preferences, write_summary_file,
-            )
-            from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
             from dice.utils.legacy_compatibility import create_parameters_from_legacy
 
             # Resolve per-parameter unit overrides before parsing,
             # so that values are in the global unit system when the
             # parser converts between representations (e.g., FWHM -> sigma^2).
-            from dice.utils.units import resolve_units, global_length_unit, global_time_unit
+            from dice.utils.units import resolve_units
             parameters = resolve_units(parameters)
 
             # Parse and process parameters (same as open_parameters does)
@@ -212,71 +307,110 @@ class DiceInterface:
                 retain_profile_data=processed_params.get('retain profile data', 0) != 0,
                 progress_callback=progress_callback
             )
-
-            # Analyze results with standard proximity levels
-            analysis = analyze_simulation_results(result)
-
-            # Setup output directory
-            slug = processed_params.get('filename slug', 'dice_output')
-            output_dir = output_root() / slug
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Results are in the global units resolve_units() converted to;
-            # the exporters label and convert from these.
-            length_unit = global_length_unit(processed_params)
-            time_unit = global_time_unit(processed_params)
-            output_units = output_unit_preferences(processed_params)
-
-            # Export results to CSV
-            csv_file = output_dir / f"{slug}.csv"
-            export_collated_results(
-                result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
-                output_units=output_units,
-            )
-
-            # Write summary file
-            summary_file = output_dir / f"{slug}_summary.txt"
-            write_summary_file(
-                result, str(summary_file), processed_params, analysis,
-                length_unit=length_unit, time_unit=time_unit, output_units=output_units,
-            )
-
-            # Create accuracy histogram of the WLS estimates
-            d_estimates = result.d_estimates('wls')
-            d_nominal = processed_params['nominal diffusion coefficient']
-
-            if len(d_estimates) > 0:
-                d_ratios = d_estimates / d_nominal
-
-                # Create legacy-format result for plotting
-                legacy_result = {
-                    'collated results': {
-                        'd_est_over_d_nom': d_ratios.tolist()
-                    }
-                }
-
-                # Create plot
-                plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
-
-                figure = plot_accuracy_histogram(
-                    simulation_result=legacy_result,
-                    filename=str(plot_file),
-                    **histogram_options(processed_params)
-                )
-                # The GUI shows the saved file; close the figure so a long session does not keep one per plot.
-                if figure is not None:
-                    import matplotlib.pyplot as plt
-                    plt.close(figure)
-
-            return result, processed_params
-
         except InterruptedError:
             # A progress callback requested cancellation; not a failure.
             raise
         except ImportError as e:
-            raise ImportError(f"Failed to import dice module: {e}")
+            raise ImportError(f"Failed to import dice module: {e}") from e
         except Exception as e:
-            raise RuntimeError(f"Simulation failed: {e}")
+            raise RuntimeError(str(e)) from e
+
+        # The result exists now, so a failed write must not discard it.
+        self.last_output_error = None
+        try:
+            self.write_outputs(result, processed_params)
+        except Exception as e:
+            self.last_output_error = str(e)
+
+        return result, processed_params
+
+    def write_outputs(self, result: MonteCarloOutput, processed_params: Dict[str, Any]) -> None:
+        """
+        Write the results file, the summary and the accuracy histogram of a simulation.
+
+        Args:
+            result: The simulation results.
+            processed_params: The parsed parameters the simulation ran with.
+
+        Raises:
+            OSError: If a file cannot be written.
+        """
+        from dice.analysis.statistics import analyze_simulation_results
+        from dice.io.results import (
+            export_collated_results, output_unit_preferences, write_summary_file,
+        )
+        from dice.visualization.histograms import histogram_options, plot_accuracy_histogram
+        from dice.utils.units import global_length_unit, global_time_unit
+
+        # Analyze results with standard proximity levels
+        analysis = analyze_simulation_results(result)
+
+        # Setup output directory
+        slug = processed_params.get('filename slug', 'dice_output')
+        output_dir = output_root() / slug
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Results are in the global units resolve_units() converted to;
+        # the exporters label and convert from these.
+        length_unit = global_length_unit(processed_params)
+        time_unit = global_time_unit(processed_params)
+        output_units = output_unit_preferences(processed_params)
+
+        # Export results to CSV
+        csv_file = output_dir / f"{slug}.csv"
+        export_collated_results(
+            result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
+            output_units=output_units,
+        )
+
+        # Write summary file
+        summary_file = output_dir / f"{slug}_summary.txt"
+        write_summary_file(
+            result, str(summary_file), processed_params, analysis,
+            length_unit=length_unit, time_unit=time_unit, output_units=output_units,
+        )
+
+        # Create accuracy histogram of the WLS estimates
+        d_estimates = result.d_estimates('wls')
+        d_nominal = processed_params['nominal diffusion coefficient']
+
+        if len(d_estimates) > 0:
+            d_ratios = d_estimates / d_nominal
+
+            # Create legacy-format result for plotting
+            legacy_result = {
+                'collated results': {
+                    'd_est_over_d_nom': d_ratios.tolist()
+                }
+            }
+
+            # Create plot
+            plot_file = output_dir / f"{slug}_accuracy_histogram.{processed_params.get('image type', 'png')}"
+
+            figure = plot_accuracy_histogram(
+                simulation_result=legacy_result,
+                filename=str(plot_file),
+                **histogram_options(processed_params)
+            )
+            # The GUI shows the saved file; close the figure so a long session does not keep one per plot.
+            if figure is not None:
+                import matplotlib.pyplot as plt
+                plt.close(figure)
+
+    def retry_write_outputs(self) -> Optional[str]:
+        """
+        Write the output files of the last simulation again.
+
+        Returns:
+            None when the files are written, or the reason they could not be.
+        """
+        try:
+            self.write_outputs(self.last_result, self.last_parameters)
+        except Exception as e:
+            self.last_output_error = str(e)
+        else:
+            self.last_output_error = None
+        return self.last_output_error
 
     def validate_parameters(self, parameters: Dict[str, Any]) -> tuple[bool, str]:
         """

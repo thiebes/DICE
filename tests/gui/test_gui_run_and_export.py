@@ -39,7 +39,7 @@ class TestRunFromTheWindow:
         assert finished_window.progress_bar.isHidden()
         assert finished_window.progress_bar.maximum() == self.RUNS
         assert finished_window.simulation_thread is None
-        assert finished_window.status_bar.currentMessage() == f"Simulation results: quick_test ({self.RUNS} runs)"
+        assert finished_window.results_status_label.text() == f"Simulation results: quick_test ({self.RUNS} runs)"
 
     def test_files_named_in_the_output_preview_exist(self, finished_window):
         preview = finished_window.output_path_preview.text()

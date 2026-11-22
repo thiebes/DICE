@@ -22,6 +22,18 @@ TIME_UNITS_DISPLAY = [
 ]
 
 
+def format_computed_value(value: float) -> str:
+    """
+    Text of a value the GUI computes from other fields.
+
+    The run and the saved file read the value back from this text, so it
+    keeps 12 significant digits. Fewer digits would change the simulated
+    physics: a diffusion coefficient shown to 4 digits differs from the one
+    the command-line interface derives from the same file.
+    """
+    return f"{value:.12g}"
+
+
 def create_scrollable_tab() -> tuple[QWidget, QVBoxLayout]:
     """Create a tab page whose content scrolls when the window is too small for it.
 

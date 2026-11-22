@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (
 )
 
 from dice_gui.tabs.base import (
-    create_option_card, create_error_label, create_scrollable_tab, create_unit_combo
+    create_option_card, create_error_label, create_scrollable_tab, create_unit_combo,
+    format_computed_value,
 )
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import calculate_pixel_size
@@ -397,7 +398,7 @@ def update_noise_cnr_display(main_window: "DiceGUI", source: str = 'sigma') -> N
                 sigma = float(main_window.noise_value_input.text().strip())
                 if sigma > 0:
                     cnr = amplitude / sigma
-                    main_window.noise_cnr_input.setText(f"{cnr:.4g}")
+                    main_window.noise_cnr_input.setText(format_computed_value(cnr))
                 else:
                     main_window.noise_cnr_input.clear()
             except (ValueError, AttributeError):
@@ -407,7 +408,7 @@ def update_noise_cnr_display(main_window: "DiceGUI", source: str = 'sigma') -> N
                 cnr = float(main_window.noise_cnr_input.text().strip())
                 if cnr > 0:
                     sigma = amplitude / cnr
-                    main_window.noise_value_input.setText(f"{sigma:.4g}")
+                    main_window.noise_value_input.setText(format_computed_value(sigma))
                 else:
                     main_window.noise_value_input.clear()
             except (ValueError, AttributeError):

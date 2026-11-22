@@ -99,7 +99,7 @@ class TestPrecisionSummary:
         assert window_with_results.explore_proximity_group.isEnabled()
 
     def test_run_results_are_held_in_memory_not_as_a_loaded_file(self, window_with_results):
-        assert window_with_results.status_bar.currentMessage() == "Simulation results: quick_test (30 runs)"
+        assert window_with_results.results_status_label.text() == "Simulation results: quick_test (30 runs)"
         assert window_with_results.loaded_data_file is None
         assert window_with_results.interface.last_result.num_runs == 30
 
@@ -109,11 +109,11 @@ class TestPrecisionSummary:
         shutil.copy(completed_run.csv_path, loaded_csv)
         dialogs.open_paths.append(str(loaded_csv))
         window.load_results_button.click()
-        assert window.status_bar.currentMessage() == "Loaded: earlier_run.csv"
+        assert window.results_status_label.text() == "Loaded: earlier_run.csv"
 
         window.simulation_finished(completed_run.as_thread_result())
 
-        assert window.status_bar.currentMessage() == "Simulation results: quick_test (30 runs)"
+        assert window.results_status_label.text() == "Simulation results: quick_test (30 runs)"
 
 
 class TestAccuracyThresholdTool:
@@ -191,7 +191,7 @@ class TestLoadResults:
         window.load_results_button.click()
 
         assert dialogs.titles("information") == ["Data Loaded and Plot Generated"]
-        assert window.status_bar.currentMessage() == "Loaded: earlier_run.csv"
+        assert window.results_status_label.text() == "Loaded: earlier_run.csv"
         assert (work_dir / "earlier_run_accuracy_histogram.png").is_file()
         estimates, nominal = d_estimates_from_csv(loaded_csv, WLS_SLOPE_COLUMN)
         # The CSV does not name the simulation units, so the statistics take the
@@ -211,7 +211,7 @@ class TestLoadResults:
 
         assert dialogs.titles("critical") == ["Error"]
         assert dialogs.texts("critical")[0].startswith("CSV missing WLS slope column.")
-        assert window.status_bar.currentMessage() == "No data loaded"
+        assert window.results_status_label.text() == "No data loaded"
         assert window.interface.last_result is None
         assert sorted(p.name for p in work_dir.iterdir()) == ["profile.csv"]
 

@@ -28,7 +28,11 @@ results with 1.2.0.
   and offers output presets for publication, presentation, and draft figures.
   It has light and dark themes, Alt-key shortcuts for the input fields, and a
   list of the shortcuts under Help. Stop ends a serial run after the current
-  run and a parallel run after the current batch of runs. The GUI saves
+  run and a parallel run after the current batch of runs. Closing the window
+  during a run asks first, then waits in the same way. If the output files
+  cannot be written, for example because a results file is open in another
+  program, the GUI keeps the results and offers to write the files again. The
+  GUI saves
   results in `output/<slug>/` in the folder it was started from, or in
   `DICE/output/<slug>/` in the user's Documents folder when it cannot write
   there, as when the macOS Finder starts the standalone application.
@@ -44,7 +48,9 @@ results with 1.2.0.
   example `FWHM_0_unit` or `lifetime_unit`) gives the unit of one value, and
   DICE converts it to the global `length unit` and `time unit`. In the GUI,
   every input with a length or time dimension has its own unit selector, and
-  Settings > Global Units sets the defaults.
+  Settings > Global Units sets the defaults. A key that ends in `_unit` but
+  belongs to no parameter, such as a misspelled one, is rejected with the
+  closest key named.
 - Time range of the simulation in the summary file.
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), `high_precision.txt` (10000 runs), and
@@ -116,6 +122,17 @@ results with 1.2.0.
   pixels wide, fft-cnr overestimates the noise, so the CNR comes out too low.
   The measured profile `data/examples/example_profile.csv`, whose peak is
   4.6 pixels wide at half maximum, gives a CNR of 8.9, where 1.2.0 gave 176.
+- Behavior change: `filename slug` must be a plain file name. A slug with a
+  path separator, the slugs `.` and `..`, and a slug that ends with a dot or
+  a space are rejected before the simulation runs. Such a slug used to write
+  the output outside `output/`, or fail after the simulation had run.
+- Parameters files are read as UTF-8, with or without a byte-order mark. A
+  file that is not valid UTF-8 is read in the encoding of the locale, as
+  before.
+- Python interface: `export_collated_results()` requires `length_unit` and
+  `time_unit`, the units the results are in. `write_summary_file()` takes
+  them from its `parameters` argument when they are not given. Both used to
+  assume micrometers and nanoseconds.
 - The summary file lists the dispersion statistics of the estimates first,
   followed by the fractions within the standard proximity levels.
 - The accuracy histogram shows the probability of each bin on the y-axis,

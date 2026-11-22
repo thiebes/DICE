@@ -11,7 +11,8 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QComboBox, QFileDialog,
-    QProgressBar, QMessageBox, QStatusBar, QMenu
+    QProgressBar, QMessageBox, QStatusBar, QMenu,
+    QAbstractButton, QAbstractSpinBox, QDoubleSpinBox, QLineEdit, QPlainTextEdit, QSpinBox,
 )
 from PyQt6.QtCore import QLocale, Qt, QSettings
 from PyQt6.QtGui import QAction, QKeySequence
@@ -25,7 +26,7 @@ from dice_gui.validators import (
     convert_fwhm_to_sigma, convert_sigma_to_fwhm,
     calculate_diffusion_length, calculate_pixel_size
 )
-from dice_gui.dice_interface import DiceInterface
+from dice_gui.dice_interface import DiceInterface, parameters_for_form
 from dice_gui.output_location import output_root
 from dice_gui.styles import DiceTheme, apply_theme
 from dice_gui.accessibility import (
@@ -1066,6 +1067,9 @@ class DiceGUI(QMainWindow):
 
     def run_simulation(self):
         """Run the DICE simulation."""
+        if self.simulation_thread is not None:
+            return  # a simulation is running; it ends before another starts
+
         # Validate all active fields (this triggers visual updates)
         is_valid, error_message = self.validation_manager.validate_all()
         if not is_valid:
@@ -1131,17 +1135,6 @@ class DiceGUI(QMainWindow):
         # Start elapsed time tracking
         self.elapsed_timer.start()
         self.elapsed_display_timer.start(1000)
-
-        # Clean up previous thread if it exists
-        if self.simulation_thread is not None:
-            if self.simulation_thread.isRunning():
-                self.simulation_thread.request_stop()
-                self.simulation_thread.wait(5000)
-                if self.simulation_thread.isRunning():
-                    self.simulation_thread.terminate()
-                    self.simulation_thread.wait()
-            self.simulation_thread.deleteLater()
-            self.simulation_thread = None
 
         # Create and start simulation thread
         self.simulation_thread = SimulationThread(self.interface, dice_params)
@@ -1214,6 +1207,23 @@ class DiceGUI(QMainWindow):
         # Populate precision summary from results
         self._populate_precision_from_results()
 
+        output_error = self.interface.last_output_error
+        while output_error is not None:
+            answer = QMessageBox.warning(
+                self,
+                "Output Files Not Written",
+                "The simulation finished, but its output files could not be written:\n\n"
+                f"{output_error}\n\n"
+                "The results are kept, and the Analysis tab shows them. If another program "
+                "has an output file open, close it there, then choose Retry to write the files.",
+                QMessageBox.StandardButton.Retry | QMessageBox.StandardButton.Close,
+                QMessageBox.StandardButton.Retry,
+            )
+            if answer != QMessageBox.StandardButton.Retry:
+                self.status_label.setText("Simulation completed; output files not written")
+                return
+            output_error = self.interface.retry_write_outputs()
+
         QMessageBox.information(
             self,
             "Simulation Complete",
@@ -1283,7 +1293,8 @@ class DiceGUI(QMainWindow):
 
     def reset_ui_after_simulation(self):
         """Reset UI elements after simulation completes or stops."""
-        self.run_button.setEnabled(True)
+        # The form may have become invalid while the simulation ran.
+        self.run_button.setEnabled(self.validation_manager.is_valid())
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
         self.elapsed_label.setVisible(False)
@@ -1314,16 +1325,8 @@ class DiceGUI(QMainWindow):
 
     def load_parameters(self):
         """Load parameters from a file."""
-        # Check if there are unsaved changes
-        if self.parameters_modified:
-            reply = QMessageBox.question(
-                self, "Unsaved Changes",
-                "You have unsaved changes. Do you want to discard them?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.No:
-                return
+        if not self._confirm_discard_changes():
+            return
 
         # Open file dialog in the folder that holds the output root
         default_dir = str(output_root().parent)
@@ -1337,6 +1340,30 @@ class DiceGUI(QMainWindow):
         if not file_path:
             return
 
+        self._load_parameters_reporting_errors(file_path)
+
+    def open_recent_parameters(self, file_path: str):
+        """Load a file of the Recent Parameters menu, with the checks of File > Open."""
+        if not self._confirm_discard_changes():
+            return
+        self._load_parameters_reporting_errors(file_path)
+        # A file that has been moved or deleted leaves the menu.
+        self.update_recent_menu()
+
+    def _confirm_discard_changes(self) -> bool:
+        """Ask before unsaved changes are discarded; True when there are none or the user agrees."""
+        if not self.parameters_modified:
+            return True
+        reply = QMessageBox.question(
+            self, "Unsaved Changes",
+            "You have unsaved changes. Do you want to discard them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def _load_parameters_reporting_errors(self, file_path: str) -> None:
+        """Load a parameters file; a file that cannot be loaded gives a message and leaves the form as it was."""
         try:
             self.load_parameters_from_file(file_path)
         except Exception as e:
@@ -1386,12 +1413,11 @@ class DiceGUI(QMainWindow):
         file's folder, as the command-line interface resolves it.
         """
         import ast
-        from dice.io.parameters import resolve_noise_data_path
+        from dice.io.parameters import read_parameters_text, resolve_noise_data_path
 
-        with open(file_path, 'r') as f:
-            params = ast.literal_eval(f.read())
+        params = ast.literal_eval(read_parameters_text(file_path))
         if not isinstance(params, dict):
-            return params
+            raise ValueError("The file does not hold a parameters dictionary.")
         return resolve_noise_data_path(params, Path(file_path).parent)
 
     def load_example(self, example_name: str):
@@ -1471,8 +1497,9 @@ class DiceGUI(QMainWindow):
         # Convert to file format
         file_content = self.parameters_to_file_format(gui_params)
 
-        # Write to file
-        with open(file_path, 'w') as f:
+        # UTF-8 holds every character a path or a slug can have; the encoding
+        # of the locale does not, and a failed write would empty the file.
+        with open(file_path, 'w', encoding='utf-8') as f:
             f.write(file_content)
 
         # Update file tracking
@@ -1594,7 +1621,15 @@ class DiceGUI(QMainWindow):
         return "\n".join(lines)
 
     def populate_gui_from_parameters(self, params: dict):
-        """Populate GUI fields from a parameters dictionary."""
+        """Populate GUI fields from a parameters dictionary.
+
+        The form changes only when every value can be shown. A value it cannot
+        show raises ValueError, and the form is left as it was.
+        """
+        from dice.utils.units import global_length_unit, global_time_unit
+
+        params = parameters_for_form(params)
+        snapshot = self._snapshot_inputs()
         self._populating = True  # Prevent modification marking
 
         try:
@@ -1604,11 +1639,10 @@ class DiceGUI(QMainWindow):
             if 'filename slug' in params:
                 self.filename_slug_input.setText(params['filename slug'])
 
-            # Units
-            if 'length unit' in params:
-                self.length_unit_combo.setCurrentText(params['length unit'])
-            if 'time unit' in params:
-                self.time_unit_combo.setCurrentText(params['time unit'])
+            # Units. A file without these keys is in micrometers and
+            # nanoseconds, not in the units the form showed before.
+            self.length_unit_combo.setCurrentText(global_length_unit(params))
+            self.time_unit_combo.setCurrentText(global_time_unit(params))
 
             # Initial profile
             if 'amplitude_0' in params:
@@ -1683,18 +1717,20 @@ class DiceGUI(QMainWindow):
             # Image settings (with defaults if not present)
             if 'image type' in params:
                 self.image_type_combo.setCurrentText(params['image type'])
-            if 'image width' in params:
-                self.image_width_spin.setValue(params['image width'])
-            if 'image height' in params:
-                self.image_height_spin.setValue(params['image height'])
+            # A parameter file gives image sizes in centimeters and points, so
+            # each value sets its unit selector too.
+            for key, spin, unit_combo, unit in (
+                ('image width', self.image_width_spin, self.image_width_unit_combo, 'cm'),
+                ('image height', self.image_height_spin, self.image_height_unit_combo, 'cm'),
+                ('image font size', self.image_font_size_spin, self.image_font_unit_combo, 'pt'),
+                ('image tick length', self.image_tick_length_spin, self.image_tick_length_unit_combo, 'pt'),
+                ('image tick width', self.image_tick_width_spin, self.image_tick_width_unit_combo, 'pt'),
+            ):
+                if key in params:
+                    unit_combo.setCurrentText(unit)
+                    spin.setValue(float(params[key]))
             if 'image dpi' in params:
-                self.image_dpi_spin.setValue(int(params['image dpi']))
-            if 'image font size' in params:
-                self.image_font_size_spin.setValue(int(params['image font size']))
-            if 'image tick length' in params:
-                self.image_tick_length_spin.setValue(int(params['image tick length']))
-            if 'image tick width' in params:
-                self.image_tick_width_spin.setValue(int(params['image tick width']))
+                self.image_dpi_spin.setValue(params['image dpi'])
             if 'image numbins' in params:
                 self.image_numbins_spin.setValue(params['image numbins'])
             # When only the diffusion length is provided, use the engine's
@@ -1705,6 +1741,9 @@ class DiceGUI(QMainWindow):
                     and 'nominal lifetime (tau)' not in params):
                 self.lifetime_input.setText("1")
 
+        except Exception:
+            self._restore_inputs(snapshot)
+            raise
         finally:
             self._populating = False  # Re-enable modification marking
 
@@ -1725,6 +1764,33 @@ class DiceGUI(QMainWindow):
         self._noise_last_edited = 'sigma'
         if self.noise_value_input.text().strip():
             update_noise_cnr_display(self, 'sigma')
+
+    def _snapshot_inputs(self) -> list:
+        """The value of every input widget, as (setter, value) pairs for _restore_inputs."""
+        snapshot = []
+        for widget in self.findChildren(QWidget):
+            if isinstance(widget.parent(), (QAbstractSpinBox, QComboBox)):
+                continue  # the line edit inside a spin box or a combo box
+            if isinstance(widget, QLineEdit):
+                snapshot.append((widget.setText, widget.text()))
+            elif isinstance(widget, QPlainTextEdit):
+                snapshot.append((widget.setPlainText, widget.toPlainText()))
+            elif isinstance(widget, (QSpinBox, QDoubleSpinBox)):
+                snapshot.append((widget.setValue, widget.value()))
+            elif isinstance(widget, QComboBox):
+                snapshot.append((widget.setCurrentIndex, widget.currentIndex()))
+                snapshot.append((
+                    lambda value, combo=widget: combo.setProperty("_user_modified", value),
+                    widget.property("_user_modified"),
+                ))
+            elif isinstance(widget, QAbstractButton) and widget.isCheckable():
+                snapshot.append((widget.setChecked, widget.isChecked()))
+        return snapshot
+
+    def _restore_inputs(self, snapshot: list) -> None:
+        """Put back the input values that _snapshot_inputs recorded."""
+        for setter, value in snapshot:
+            setter(value)
 
     def _load_per_param_units(self, params: dict):
         """Set per-parameter unit combos from parameter dict _unit keys.
@@ -1785,6 +1851,8 @@ class DiceGUI(QMainWindow):
         recent = self.settings.value("recent_parameters", [])
         if not isinstance(recent, list):
             recent = []
+        # A file that has been moved or deleted is not offered.
+        recent = [file_path for file_path in recent if Path(file_path).exists()]
 
         if not recent:
             no_recent = QAction("No recent files", self)
@@ -1793,11 +1861,10 @@ class DiceGUI(QMainWindow):
             return
 
         for file_path in recent:
-            if Path(file_path).exists():
-                action = QAction(Path(file_path).name, self)
-                action.setStatusTip(file_path)
-                action.triggered.connect(lambda checked, f=file_path: self.load_parameters_from_file(f))
-                self.recent_menu.addAction(action)
+            action = QAction(Path(file_path).name, self)
+            action.setStatusTip(file_path)
+            action.triggered.connect(lambda checked, f=file_path: self.open_recent_parameters(f))
+            self.recent_menu.addAction(action)
 
     def update_window_title(self):
         """Update window title with current file and modified state."""
@@ -1825,7 +1892,10 @@ class DiceGUI(QMainWindow):
         version_label = QLabel(f"DICE v{__version__}")
         self.status_bar.addPermanentWidget(version_label)
 
-        # Left side shows loaded data file (if any)
+        # The left side names the results in use. A label, not a status
+        # message: the status tip of a menu entry replaces a message for good.
+        self.results_status_label = QLabel()
+        self.status_bar.addWidget(self.results_status_label)
         self.update_status_bar()
 
     def update_status_bar(self):
@@ -1836,13 +1906,13 @@ class DiceGUI(QMainWindow):
         """
         result = self.interface.last_result
         if self.loaded_data_file:
-            self.status_bar.showMessage(f"Loaded: {Path(self.loaded_data_file).name}")
+            self.results_status_label.setText(f"Loaded: {Path(self.loaded_data_file).name}")
         elif result is not None:
             slug = (self.interface.last_parameters or {}).get('filename slug', '')
             name = f" {slug}" if slug else ""
-            self.status_bar.showMessage(f"Simulation results:{name} ({result.num_runs} runs)")
+            self.results_status_label.setText(f"Simulation results:{name} ({result.num_runs} runs)")
         else:
-            self.status_bar.showMessage("No data loaded")
+            self.results_status_label.setText("No data loaded")
 
     def connect_modification_signals(self):
         """Connect all parameter widgets to modification tracking."""
@@ -2012,6 +2082,10 @@ class DiceGUI(QMainWindow):
 
     def _on_validity_changed(self, is_valid: bool) -> None:
         """Handle overall form validity change."""
+        if self.simulation_thread is not None:
+            # A simulation is running: Run stays disabled and the status line
+            # keeps the progress. reset_ui_after_simulation applies the validity.
+            return
         self.run_button.setEnabled(is_valid)
         if is_valid:
             self.status_label.setText("Ready to run")
@@ -2216,13 +2290,24 @@ Thiebes, J. J. (2023). <i>Diffusion Insight Computation Engine (DICE)</i> <br>
                 event.ignore()
                 return
 
-        # Stop any running simulation before closing
         if self.simulation_thread is not None and self.simulation_thread.isRunning():
+            reply = QMessageBox.question(
+                self, "Simulation Running",
+                "A simulation is running. Stop it and exit?\n\n"
+                "DICE exits when the current run has ended, or the current batch of a "
+                "parallel simulation.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+
+            # The thread is not terminated, because a terminated parallel run
+            # leaves its worker processes behind. Hide the window and wait.
             self.simulation_thread.request_stop()
-            self.simulation_thread.wait(5000)
-            if self.simulation_thread.isRunning():
-                self.simulation_thread.terminate()
-                self.simulation_thread.wait()
+            self.hide()
+            self.simulation_thread.wait()
 
         event.accept()
 

@@ -14,7 +14,7 @@ import pytest
 from PyQt6.QtWidgets import QMessageBox
 
 from dice.io.parameters import open_parameters, parameter_parser
-from dice.utils.units import resolve_units
+from dice.utils.units import global_length_unit, global_time_unit, resolve_units
 from dice_gui import dice_gui as dice_gui_window
 from dice_gui.dice_interface import DiceInterface
 from dice_gui.example_parameters import EXAMPLE_PARAMETERS
@@ -79,7 +79,7 @@ class TestLoadingExamples:
         length = expected["nominal diffusion length"]
         assert float(window.diffusion_length_input.text()) == length
         assert float(window.lifetime_input.text()) == 1.0
-        assert float(window.diffusion_coeff_input.text()) == pytest.approx(length ** 2, rel=1e-3)
+        assert float(window.diffusion_coeff_input.text()) == pytest.approx(length ** 2, rel=1e-11)
 
     @pytest.mark.parametrize("filename", EXAMPLE_PARAMETER_FILES)
     def test_gui_and_cli_simulate_the_same_physics_for_an_example(self, window, filename):
@@ -498,3 +498,241 @@ class TestLoadErrors:
         _open_via_menu(window, dialogs, work_dir / "absent.txt")
         assert dialogs.titles("critical") == ["Error Loading Parameters"]
         assert "absent.txt" in dialogs.texts("critical")[0]
+
+
+def _write_quick_test_variant(folder: Path, name: str, changes: dict, remove: tuple = ()) -> Path:
+    """A copy of the quick_test example with some keys changed or removed."""
+    parameters = {key: value for key, value in read_example("quick_test.txt").items() if key not in remove}
+    parameters.update(changes)
+    path = folder / f"{name}.txt"
+    path.write_text(repr(parameters), encoding="utf-8")
+    return path
+
+
+PHYSICS_KEYS = ("nominal diffusion coefficient", "nominal lifetime (tau)", "nominal diffusion length",
+                "sigma^2_0", "amplitude_0", "mu_0", "number of runs")
+
+
+def _assert_same_physics(candidate: dict, reference: dict) -> None:
+    """Two parsed parameter dictionaries describe the same simulation, in the same units."""
+    for key in PHYSICS_KEYS:
+        assert candidate[key] == pytest.approx(reference[key], rel=1e-9), key
+    for key in ("x array", "time series"):
+        np.testing.assert_allclose(candidate[key], reference[key], rtol=1e-9, atol=0, err_msg=key)
+    assert candidate["noise series"] == pytest.approx(reference["noise series"], rel=1e-9)
+    assert global_length_unit(candidate) == global_length_unit(reference)
+    assert global_time_unit(candidate) == global_time_unit(reference)
+
+
+# name -> (keys to change, keys to remove). Every file is one the command-line interface accepts.
+CLI_FILE_VARIANTS = {
+    "time_range_unit": ({"time range": [0, 2000, 5], "time_range_unit": "picosecond"}, ()),
+    "time_series_unit": ({"time series": [0, 250, 500, 1000, 2000], "time_series_unit": "picosecond"},
+                         ("time range",)),
+    "time_range_unit_on_a_series": ({"time series": [0, 500, 1500], "time_range_unit": "picosecond"},
+                                    ("time range",)),
+    "start_and_stop_units": ({"time range": [100, 1.5, 6], "time_start_unit": "picosecond",
+                              "time_stop_unit": "nanosecond"}, ()),
+    "no_global_unit_keys": ({}, ("length unit", "time unit")),
+    "nanometers_and_picoseconds": ({"length unit": "nanometer", "time unit": "picosecond", "FWHM_0": 1000,
+                                    "spatial width": 5000, "nominal diffusion length": 100,
+                                    "time range": [0, 1000, 5]}, ()),
+    "whole_numbers_as_floats": ({"number of runs": 20.0, "pixel width": 64.0, "time range": [0, 1, 7.0]}, ()),
+    "amplitude_mean_and_noise": ({"amplitude_0": 2.0, "mean_0": 0.3, "noise value": 0.04}, ()),
+    "diffusion_length_with_many_digits": ({"nominal diffusion length": 0.1234}, ()),
+    "diffusion_length_unit_with_a_space": ({"nominal diffusion length": 123.4,
+                                            "diffusion length unit": "nanometer"}, ()),
+    "width_and_spatial_units": ({"FWHM_0": 800, "FWHM_0_unit": "nanometer", "spatial width": 0.005,
+                                 "spatial_width_unit": "millimeter"}, ()),
+    "coefficient_and_lifetime_units": ({"nominal diffusion coefficient": 0.013, "lifetime_unit": "picosecond",
+                                        "nominal lifetime (tau)": 750,
+                                        "diffusion_coefficient_length_unit": "centimeter",
+                                        "diffusion_coefficient_time_unit": "second"},
+                                       ("nominal diffusion length",)),
+}
+
+
+class TestFilesTheCommandLineAccepts:
+    """A file gives the same simulation in the GUI as in the command-line interface, also after a save."""
+
+    @pytest.fixture
+    def window_in_other_units(self, window, monkeypatch):
+        """A window that shows nanometers and picoseconds, as after an earlier file in those units."""
+        choose_global_units(window, monkeypatch, "nanometer", "picosecond")
+        window.image_width_unit_combo.setCurrentText("in")
+        window.image_font_unit_combo.setCurrentText("px")
+        return window
+
+    @pytest.mark.parametrize("name", CLI_FILE_VARIANTS)
+    def test_gui_simulates_what_the_cli_simulates(self, window_in_other_units, dialogs, work_dir, name):
+        window = window_in_other_units
+        changes, remove = CLI_FILE_VARIANTS[name]
+        path = _write_quick_test_variant(work_dir, name, changes, remove)
+        from_cli = open_parameters(path)
+
+        _open_via_menu(window, dialogs, path)
+
+        assert dialogs.titles("critical") == []
+        _assert_same_physics(parameter_parser(resolve_units(_engine_parameters(window))), from_cli)
+
+    @pytest.mark.parametrize("name", CLI_FILE_VARIANTS)
+    def test_file_saved_by_the_gui_gives_the_cli_the_same_simulation(
+            self, window_in_other_units, dialogs, work_dir, name):
+        window = window_in_other_units
+        changes, remove = CLI_FILE_VARIANTS[name]
+        path = _write_quick_test_variant(work_dir, name, changes, remove)
+        _open_via_menu(window, dialogs, path)
+
+        saved = work_dir / "saved_by_the_gui.txt"
+        _save_as_via_menu(window, dialogs, saved)
+
+        _assert_same_physics(open_parameters(saved), open_parameters(path))
+
+    def test_image_sizes_of_a_file_are_read_in_centimeters_and_points(self, window_in_other_units, dialogs, work_dir):
+        window = window_in_other_units
+        path = _write_quick_test_variant(work_dir, "image_sizes", {
+            "image width": 10.16, "image height": 7.5, "image font size": 6.75,
+            "image tick length": 4.5, "image tick width": 1.5, "image dpi": 150.0,
+        })
+
+        _open_via_menu(window, dialogs, path)
+
+        engine = _engine_parameters(window)
+        assert (engine["image width"], engine["image height"]) == pytest.approx((10.16, 7.5))
+        assert (engine["image font size"], engine["image tick length"], engine["image tick width"]) \
+            == pytest.approx((6.75, 4.5, 1.5))
+        assert engine["image dpi"] == 150
+        assert (window.image_width_unit_combo.currentText(), window.image_font_unit_combo.currentText()) \
+            == ("cm", "pt")
+
+    def test_image_sizes_in_inches_and_pixels_survive_a_save_and_reopen(self, window, dialogs, work_dir):
+        window.image_width_unit_combo.setCurrentText("in")
+        window.image_width_spin.setValue(4.0)
+        window.image_font_unit_combo.setCurrentText("px")
+        window.image_font_size_spin.setValue(9)
+        before = _engine_parameters(window)
+        assert (before["image width"], before["image font size"]) == pytest.approx((10.16, 6.75))
+
+        path = work_dir / "sizes.txt"
+        _save_as_via_menu(window, dialogs, path)
+        _open_via_menu(window, dialogs, path)
+
+        assert _engine_parameters(window) == before
+
+
+class TestFileThatCannotBeLoaded:
+    """A file the form cannot show is reported, and the form, title and save target stay as they were."""
+
+    @pytest.fixture
+    def loaded_window(self, window, dialogs):
+        _open_via_menu(window, dialogs, EXAMPLES_DIR / "publication.txt")
+        dialogs.shown.clear()
+        return window
+
+    @pytest.mark.parametrize("changes, message", [
+        ({"pixel width": 50.5}, "'pixel width' must be a whole number, got 50.5"),
+        ({"time range": [0, 1, 2.5]}, "The number of steps in 'time range' must be a whole number"),
+        ({"time range": [0, 1]}, "'time range' must be"),
+        ({"time_range_unit": "fortnight"}, "fortnight"),
+        # This one fails after the first fields of the form are filled.
+        ({"number of runs": 7, "estimate noise from data": 5}, ""),
+    ])
+    def test_form_is_unchanged(self, loaded_window, dialogs, work_dir, changes, message):
+        window = loaded_window
+        remove = ("noise value",) if "estimate noise from data" in changes else ()
+        path = _write_quick_test_variant(work_dir, "cannot_load", changes, remove)
+        before = _engine_parameters(window)
+        inputs_before = [value for _, value in window._snapshot_inputs()]
+
+        _open_via_menu(window, dialogs, path)
+
+        assert dialogs.titles("critical") == ["Error Loading Parameters"]
+        assert message in dialogs.texts("critical")[0]
+        assert _engine_parameters(window) == before
+        assert [value for _, value in window._snapshot_inputs()] == inputs_before
+        assert window.windowTitle() == "DICE - [publication.txt]"
+        assert window.current_parameter_file == str(EXAMPLES_DIR / "publication.txt")
+        assert window.parameters_modified is False
+
+
+def _recent_action(window, path: Path):
+    return next(action for action in window.recent_menu.actions() if action.statusTip() == str(path))
+
+
+class TestRecentParameters:
+    """An entry of the Recent Parameters menu loads with the checks of File > Open."""
+
+    @pytest.fixture
+    def recent_file(self, window, dialogs, work_dir) -> Path:
+        path = _write_quick_test_variant(work_dir, "recent", {"number of runs": 77})
+        _open_via_menu(window, dialogs, path)
+        trigger_menu_action(window, "&File", "&New Parameters")
+        dialogs.shown.clear()
+        return path
+
+    def test_entry_loads_the_file(self, window, dialogs, recent_file):
+        _recent_action(window, recent_file).trigger()
+
+        assert dialogs.titles() == ["Parameters Loaded"]
+        assert window.num_runs_spin.value() == 77
+        assert window.windowTitle() == "DICE - [recent.txt]"
+
+    def test_unsaved_changes_are_kept_when_the_user_declines(self, qtbot, window, dialogs, recent_file):
+        enter_text(qtbot, window.filename_slug_input, "not_saved_yet")
+        assert window.parameters_modified is True
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        _recent_action(window, recent_file).trigger()
+
+        assert dialogs.titles() == ["Unsaved Changes"]
+        assert window.filename_slug_input.text() == "not_saved_yet"
+        assert window.num_runs_spin.value() != 77
+
+    def test_entry_that_no_longer_parses_is_reported(self, window, dialogs, recent_file):
+        recent_file.write_text("{'number of runs': ", encoding="utf-8")
+        runs_before = window.num_runs_spin.value()
+
+        _recent_action(window, recent_file).trigger()
+
+        assert dialogs.titles() == ["Error Loading Parameters"]
+        assert window.num_runs_spin.value() == runs_before
+
+    def test_deleted_file_is_reported_and_leaves_the_menu(self, window, dialogs, recent_file):
+        action = _recent_action(window, recent_file)
+        recent_file.unlink()
+
+        action.trigger()
+
+        assert dialogs.titles() == ["Error Loading Parameters"]
+        assert [a.statusTip() for a in window.recent_menu.actions()] == [""]
+        assert window.recent_menu.actions()[0].text() == "No recent files"
+
+
+class TestParameterFileEncoding:
+    """Parameter files are UTF-8 in the GUI and in the command-line interface."""
+
+    SLUG = "données_测试_Łódź"
+
+    def test_saved_file_is_utf8_and_reloads(self, qtbot, window, dialogs, work_dir):
+        window.filename_slug_input.setText(self.SLUG)
+        path = work_dir / "names.txt"
+
+        _save_as_via_menu(window, dialogs, path)
+
+        assert dialogs.titles("critical") == []
+        assert f"'filename slug': {self.SLUG!r}" in path.read_bytes().decode("utf-8")
+        trigger_menu_action(window, "&File", "&New Parameters")
+        _open_via_menu(window, dialogs, path)
+        assert window.filename_slug_input.text() == self.SLUG
+        assert open_parameters(path)["filename slug"] == self.SLUG
+
+    def test_file_with_a_byte_order_mark_loads(self, window, dialogs, work_dir):
+        parameters = read_example("quick_test.txt") | {"filename slug": self.SLUG}
+        path = work_dir / "with_bom.txt"
+        path.write_text(repr(parameters), encoding="utf-8-sig")
+
+        _open_via_menu(window, dialogs, path)
+
+        assert dialogs.titles("information") == ["Parameters Loaded"]
+        assert window.filename_slug_input.text() == self.SLUG
+        assert open_parameters(path)["filename slug"] == self.SLUG

@@ -13,12 +13,13 @@ import pandas as pd
 import pytest
 from joblib import effective_n_jobs
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QMessageBox
 
 from dice.analysis.simulation import split_into_batches
 from dice.models.results import MonteCarloOutput
 from dice_gui.dice_interface import DiceInterface
 from dice_gui.simulation_thread import SimulationThread
-from gui_support import OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN, quick_test_engine_parameters
+from gui_support import EXAMPLES_DIR, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN, quick_test_engine_parameters
 
 pytestmark = pytest.mark.gui
 
@@ -118,7 +119,7 @@ class TestFailedRun:
 
         _, log = _run_to_signal(qtbot, parameters, "error")
 
-        assert log.errors == ["Simulation failed: Error reading CSV for noise estimation."]
+        assert log.errors == ["Error reading CSV for noise estimation."]
         assert log.results == []
         assert log.messages == [f"Running 5 iterations ({os.cpu_count()} CPU cores)..."]
 
@@ -263,3 +264,166 @@ class TestThreadRelease:
 
         assert dialogs.titles("critical") == ["Simulation Error"]
         assert [finished for _, finished in released] == [True]
+
+
+def _start_long_serial_run(qtbot, window) -> SimulationThread:
+    window.num_runs_spin.setValue(300)
+    window.multiprocessing_check.setChecked(False)
+    qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.progress_bar.value() >= 1, timeout=SIGNAL_TIMEOUT_MS)
+    return window.simulation_thread
+
+
+def _stop_and_wait(qtbot, window) -> None:
+    qtbot.mouseClick(window.stop_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+
+class TestOneSimulationAtATime:
+    """While a simulation runs, nothing in the form can start another one."""
+
+    def test_run_stays_disabled_when_the_form_turns_valid_again(self, qtbot, window, dialogs):
+        thread = _start_long_serial_run(qtbot, window)
+
+        window.filename_slug_input.clear()
+        window.validation_manager.validate_all()
+        assert not window.validation_manager.is_valid()
+        window.filename_slug_input.setText("valid_again")
+        window.validation_manager.validate_all()
+        assert window.validation_manager.is_valid()
+
+        assert not window.run_button.isEnabled()
+        assert window.status_label.text() != "Ready to run"
+        # The Ctrl+R shortcut reaches run_simulation whatever the state of the button.
+        window.run_simulation()
+        assert window.simulation_thread is thread
+        assert thread.isRunning() and not thread.stop_requested()
+
+        _stop_and_wait(qtbot, window)
+        assert window.status_label.text() == "Simulation stopped by user"
+        assert window.run_button.isEnabled()
+        assert dialogs.titles("critical") == []
+
+    def test_run_stays_disabled_after_a_run_that_left_the_form_invalid(self, qtbot, window, dialogs):
+        _start_long_serial_run(qtbot, window)
+        window.filename_slug_input.clear()
+        window.validation_manager.validate_all()
+
+        _stop_and_wait(qtbot, window)
+
+        assert not window.run_button.isEnabled()
+        window.filename_slug_input.setText("valid_again")
+        window.validation_manager.validate_all()
+        assert window.run_button.isEnabled()
+        assert window.status_label.text() == "Ready to run"
+
+
+class TestClosingDuringARun:
+    """Closing the window asks first, then waits for the run; it never terminates the thread."""
+
+    @pytest.fixture
+    def thread_calls(self, monkeypatch) -> dict:
+        calls = {"terminate": 0, "wait": []}
+        wait = SimulationThread.wait
+
+        def record_wait(thread, *args):
+            calls["wait"].append(args)
+            return wait(thread, *args)
+
+        def record_terminate(thread):
+            calls["terminate"] += 1
+
+        monkeypatch.setattr(SimulationThread, "wait", record_wait)
+        monkeypatch.setattr(SimulationThread, "terminate", record_terminate)
+        return calls
+
+    def test_close_waits_for_the_run_without_a_time_limit(self, qtbot, window, dialogs, thread_calls):
+        thread = _start_long_serial_run(qtbot, window)
+        window.parameters_modified = False  # no unsaved-changes prompt before the one under test
+        dialogs.question_answers.append(QMessageBox.StandardButton.Yes)
+
+        assert window.close() is True
+
+        assert dialogs.titles("question") == ["Simulation Running"]
+        assert thread.isFinished()
+        assert thread_calls["terminate"] == 0
+        # A wait with a time limit is how a long parallel batch used to be cut off.
+        assert thread_calls["wait"] == [()]
+
+    def test_declining_keeps_the_window_and_the_run(self, qtbot, window, dialogs, thread_calls):
+        thread = _start_long_serial_run(qtbot, window)
+        window.parameters_modified = False  # no unsaved-changes prompt before the one under test
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        assert window.close() is False
+
+        assert dialogs.titles("question") == ["Simulation Running"]
+        assert thread.isRunning() and not thread.stop_requested()
+        assert thread_calls == {"terminate": 0, "wait": []}
+        _stop_and_wait(qtbot, window)
+
+
+class TestOutputFilesThatCannotBeWritten:
+    """A finished simulation is kept when its output files cannot be written."""
+
+    def _block_the_results_file(self, work_dir) -> None:
+        # A folder where the results file belongs makes the write fail, as a
+        # file that another program holds open does on Windows.
+        (work_dir / "output" / "quick_test" / "quick_test.csv").mkdir(parents=True)
+
+    def test_interface_returns_the_result_and_writes_the_files_on_a_retry(self, work_dir):
+        self._block_the_results_file(work_dir)
+        interface = DiceInterface()
+
+        result, processed = interface.run_simulation(quick_test_engine_parameters(number_of_runs=5))
+
+        assert result.num_runs == 5
+        assert interface.last_output_error
+        interface.last_result, interface.last_parameters = result, processed
+        assert interface.retry_write_outputs() == interface.last_output_error != None  # noqa: E711
+
+        (work_dir / "output" / "quick_test" / "quick_test.csv").rmdir()
+        assert interface.retry_write_outputs() is None
+        assert interface.last_output_error is None
+        assert sorted(path.name for path in (work_dir / "output" / "quick_test").iterdir()) == [
+            "quick_test.csv", "quick_test_accuracy_histogram.png", "quick_test_summary.txt",
+        ]
+
+    def _run_quick_test(self, qtbot, window, dialogs) -> None:
+        window.load_parameters_from_file(str(EXAMPLES_DIR / "quick_test.txt"))
+        window.num_runs_spin.setValue(5)
+        window.multiprocessing_check.setChecked(False)
+        dialogs.shown.clear()
+        qtbot.mouseClick(window.run_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: window.simulation_thread is None, timeout=SIGNAL_TIMEOUT_MS)
+
+    def test_window_keeps_the_results_and_says_why(self, qtbot, window, dialogs, work_dir):
+        self._block_the_results_file(work_dir)
+
+        self._run_quick_test(qtbot, window, dialogs)
+
+        assert dialogs.titles() == ["Output Files Not Written"]
+        assert "quick_test.csv" in dialogs.texts("warning")[0]
+        assert window.interface.last_result.num_runs == 5
+        assert window.results_status_label.text() == "Simulation results: quick_test (5 runs)"
+        assert window.status_label.text() == "Simulation completed; output files not written"
+        assert window.run_button.isEnabled()
+
+    def test_retry_writes_the_files_once_the_file_is_free(self, qtbot, window, dialogs, work_dir, monkeypatch):
+        self._block_the_results_file(work_dir)
+        blocked = work_dir / "output" / "quick_test" / "quick_test.csv"
+        warnings_shown = []
+
+        def free_the_file_and_retry(parent, title, text, *args, **kwargs):
+            warnings_shown.append(title)
+            blocked.rmdir()
+            return QMessageBox.StandardButton.Retry
+
+        monkeypatch.setattr(QMessageBox, "warning", staticmethod(free_the_file_and_retry))
+
+        self._run_quick_test(qtbot, window, dialogs)
+
+        assert warnings_shown == ["Output Files Not Written"]
+        assert dialogs.titles() == ["Simulation Complete"]
+        assert blocked.is_file()
+        assert window.status_label.text() == "Simulation completed successfully!"

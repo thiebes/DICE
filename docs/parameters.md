@@ -30,7 +30,7 @@ A prefix for the output files. DICE writes the output to the directory `output/<
 - `output/example/example_summary.txt`: parameters and summary statistics
 - `output/example/example_accuracy_histogram.png`: histogram of the estimates, or with a noise range, `output/example/example_accuracy_vs_cnr.png`: the estimates against the initial CNR
 
-Use only characters that are valid in file names. If the key is missing, the slug is `dice_simulation`.
+The slug must be a plain file name. DICE rejects a slug that contains `/`, `\`, `:`, `<`, `>`, `"`, `|`, `?` or `*`, the slugs `.` and `..`, and a slug that ends with a dot or a space. If the key is missing, the slug is `dice_simulation`.
 
 ### `number of runs`
 
@@ -68,6 +68,8 @@ A unit key gives the unit of one value. DICE converts that value to the global u
 | `time_series_unit` | `time series` | time |
 
 The unit key for `mean_0` is `mu_0_unit`.
+
+DICE rejects a key that ends in `_unit` but is not in this table or among the global and output unit keys, and names the closest key. A misspelled unit key therefore stops the simulation instead of leaving its value in the global unit.
 
 **Example:** the global units are micrometer and nanosecond, the initial FWHM is 800 nm, the diffusion coefficient is 0.01 cm²/s, and the lifetime is 500 ps:
 

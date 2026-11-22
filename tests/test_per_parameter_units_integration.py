@@ -254,11 +254,10 @@ class TestMixedUnitStress:
 class TestSimulationEquivalence:
     """Run actual Monte Carlo simulations and compare fit results.
 
-    Unit conversions introduce floating-point rounding (e.g., 500 nm -> 0.5
-    micrometer differs at the ~15th digit from a direct 0.5 input). Since noise-
-    dependent fitting amplifies these tiny differences across runs, we compare
-    the mean slope across runs with a tolerance appropriate for the statistical
-    variation, rather than requiring per-run exact equality.
+    The two simulations of a test use one seed, so they draw the same noise.
+    Their inputs differ only by the rounding of a unit conversion (500 nm
+    converted to micrometers differs from 0.5 in the last digits), so their
+    mean slopes agree far more closely than two independent simulations would.
     """
 
     @staticmethod
@@ -277,7 +276,6 @@ class TestSimulationEquivalence:
             diffusion_length=parsed.get('nominal diffusion length'),
         )
 
-        np.random.seed(seed)
         result = run_monte_carlo_simulation(
             parameters=sim_params,
             x_axis=parsed['x array'],
@@ -286,6 +284,7 @@ class TestSimulationEquivalence:
             num_runs=parsed['number of runs'],
             multiprocessing=False,
             retain_profile_data=False,
+            seed=seed,
         )
         return result
 
@@ -295,11 +294,10 @@ class TestSimulationEquivalence:
         slopes = [r.wls_slope for r in result.run_results if r.wls_slope is not None]
         return np.mean(slopes) if slopes else None
 
-    # Use more runs than the base params to get statistical convergence.
-    # With 50 runs, the standard error of each mean slope is ~0.05, so the
-    # difference of means has SE ~0.07, well within 20% of the nominal ~1.0.
+    # With one seed the mean slopes agree to about 1e-9. A conversion that is
+    # wrong by a part in a thousand moves a mean slope by far more than this.
     _NUM_RUNS = 50
-    _RTOL = 0.2
+    _RTOL = 1e-6
 
     def test_seeded_simulation_fwhm_nm(self):
         """Simulation with FWHM in nm matches simulation with FWHM in micrometers."""

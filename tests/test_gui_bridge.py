@@ -261,7 +261,7 @@ class TestRunValidation:
     def test_invalid_output_setting_fails_before_the_simulation(
             self, tmp_path, monkeypatch, overrides, message):
         monkeypatch.chdir(tmp_path)
-        with pytest.raises(RuntimeError, match=f"Simulation failed: {message}"):
+        with pytest.raises(RuntimeError, match=message):
             DiceInterface().run_simulation(_quick_test_parameters(**overrides))
         assert list(tmp_path.iterdir()) == []
 

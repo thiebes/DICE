@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 
 from dice_gui.tabs.base import (
     create_option_card, create_error_label, create_scrollable_tab, create_unit_combo, combo_value,
+    format_computed_value,
 )
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import (
@@ -361,7 +362,7 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
                 # An infinite L means no decay, which a lifetime of 0 denotes.
                 tau_si = 0.0 if math.isinf(l_si) else (l_si ** 2) / d_si
                 tau_display = convert_time(tau_si, 'second', tau_unit)
-                main_window.lifetime_input.setText(f"{tau_display:.4g}")
+                main_window.lifetime_input.setText(format_computed_value(tau_display))
 
             elif computed == 'D':
                 # Compute D from L and tau
@@ -388,7 +389,7 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
                 d_display = convert_diffusion_coefficient(
                     d_si, 'meter', 'second', d_l_unit, d_t_unit
                 )
-                main_window.diffusion_coeff_input.setText(f"{d_display:.4g}")
+                main_window.diffusion_coeff_input.setText(format_computed_value(d_display))
 
             else:  # computed == 'L'
                 # Compute L from D and tau
@@ -416,7 +417,7 @@ def update_diffusion_fields(main_window: "DiceGUI", source: str) -> None:
                 # A lifetime of 0 means no decay, so L is infinite and shows as "inf".
                 l_si = core_diffusion_length(d_si, tau_si)
                 l_display = convert_length(l_si, 'meter', l_unit)
-                main_window.diffusion_length_input.setText(f"{l_display:.4g}")
+                main_window.diffusion_length_input.setText(format_computed_value(l_display))
         except (ValueError, KeyError):
             # Invalid unit names or conversion failures — silently clear the
             # computed field rather than freezing the UI.

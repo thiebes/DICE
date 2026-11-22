@@ -72,7 +72,19 @@ class TestMainWindow:
     def test_status_bar_shows_version_and_no_loaded_data(self, window):
         permanent_texts = [label.text() for label in window.status_bar.findChildren(QLabel)]
         assert f"DICE v{__version__}" in permanent_texts
-        assert window.status_bar.currentMessage() == "No data loaded"
+        assert window.results_status_label.text() == "No data loaded"
+
+    def test_results_text_returns_after_a_menu_status_tip(self, window):
+        """A menu entry's status tip is a temporary message; the results text must outlive it."""
+        window.show()
+        window.status_bar.showMessage("Load parameters from file")
+        assert window.results_status_label.isHidden()
+
+        window.status_bar.clearMessage()
+
+        assert not window.results_status_label.isHidden()
+        assert window.results_status_label.text() == "No data loaded"
+        assert window.status_bar.currentMessage() == ""
 
     def test_menus_offer_the_file_and_plot_actions(self, window):
         assert _menu_action_texts(window, "&File") == [

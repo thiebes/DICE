@@ -8,6 +8,7 @@ Accepts both legacy (space-separated) and modern (snake_case) key names.
 """
 
 import ast
+import locale
 import os
 import warnings
 import numpy as np
@@ -56,6 +57,31 @@ NOISE_RANGE_KEYS = {
     'noise range, reciprocal log': True,
     'noise_range_reciprocal_log': True,
 }
+
+
+def read_parameters_text(filename: Union[str, Path]) -> str:
+    """
+    Read the text of a parameters file.
+
+    Parameter files are UTF-8, with or without a byte-order mark. A file that
+    is not valid UTF-8 is read in the encoding of the locale, which is how an
+    older text editor on Windows may have saved it.
+
+    Parameters
+    ----------
+    filename : str or Path
+        Path to the parameters file.
+
+    Returns
+    -------
+    str
+        The text of the file.
+    """
+    data = Path(filename).read_bytes()
+    try:
+        return data.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return data.decode(locale.getpreferredencoding(False))
 
 
 def resolve_noise_data_path(
@@ -115,17 +141,14 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
         If the file content is not a valid dictionary.
     """
     try:
-        with open(filename, 'r') as f:
-            parms_txt = f.read()
-            parms_dict = ast.literal_eval(parms_txt)
-            # Resolve per-parameter unit overrides before parsing,
-            # so that values are in the global unit system when the
-            # parser converts between representations (e.g., FWHM -> sigma^2).
-            from ..utils.units import resolve_units
-            parms_dict = resolve_units(parms_dict)
-            parms_dict = resolve_noise_data_path(parms_dict, Path(filename).parent)
-            result = parameter_parser(parms_dict, seed=seed)
-        return result
+        parms_dict = ast.literal_eval(read_parameters_text(filename))
+        # Resolve per-parameter unit overrides before parsing,
+        # so that values are in the global unit system when the
+        # parser converts between representations (e.g., FWHM -> sigma^2).
+        from ..utils.units import resolve_units
+        parms_dict = resolve_units(parms_dict)
+        parms_dict = resolve_noise_data_path(parms_dict, Path(filename).parent)
+        return parameter_parser(parms_dict, seed=seed)
     except FileNotFoundError:
         raise FileNotFoundError(f"The file {filename} was not found.")
     except SyntaxError as e:
