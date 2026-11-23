@@ -6,10 +6,10 @@ standalone build's process pool, observed only through the thread's signals.
 from __future__ import annotations
 
 import multiprocessing
-import os
 import time
 from typing import Callable, NamedTuple
 
+import joblib
 import pandas as pd
 import pytest
 from PyQt6.QtCore import Qt
@@ -155,11 +155,12 @@ class TestProcessPoolRun:
 
 class TestFailedRun:
 
-    def test_unreadable_noise_file_emits_error(self, qtbot, work_dir):
+    def test_unreadable_noise_file_emits_error(self, qtbot, work_dir, monkeypatch):
         parameters = quick_test_engine_parameters(number_of_runs=5)
         del parameters["noise value"]
         parameters["estimate noise from data"] = str(work_dir / "absent.csv")
         parameters["multiprocessing"] = True
+        monkeypatch.setattr(joblib, "effective_n_jobs", lambda n_jobs: 4)
 
         _, log = _run_to_signal(qtbot, parameters, "error")
 
@@ -167,18 +168,25 @@ class TestFailedRun:
         assert error.startswith("Error reading CSV for noise estimation: ")
         assert "absent.csv" in error and "could not be read" in error
         assert log.results == []
-        assert log.messages == [f"Running 5 runs ({os.cpu_count()} logical processors)..."]
+        assert log.messages == ["Running 5 runs (4 worker processes)..."]
 
-    def test_status_text_of_one_run_on_one_processor_is_singular(self, qtbot, work_dir, monkeypatch):
-        parameters = quick_test_engine_parameters(number_of_runs=1)
+    @pytest.mark.parametrize("number_of_runs, workers_of_joblib, status_text", [
+        (5, 8, "Running 5 runs (5 worker processes)..."),
+        (1, 8, "Running 1 run (1 worker process)..."),
+        (12000, 1, "Running 12,000 runs (1 worker process)..."),
+    ])
+    def test_status_text_counts_the_runs_and_the_worker_processes(
+            self, qtbot, work_dir, monkeypatch, number_of_runs, workers_of_joblib, status_text):
+        """No more workers than runs, and no more than joblib uses for all processors."""
+        parameters = quick_test_engine_parameters(number_of_runs=number_of_runs)
         del parameters["noise value"]
         parameters["estimate noise from data"] = str(work_dir / "absent.csv")
         parameters["multiprocessing"] = True
-        monkeypatch.setattr(os, "cpu_count", lambda: 1)
+        monkeypatch.setattr(joblib, "effective_n_jobs", lambda n_jobs: workers_of_joblib)
 
         _, log = _run_to_signal(qtbot, parameters, "error")
 
-        assert log.messages == ["Running 1 run (1 logical processor)..."]
+        assert log.messages == [status_text]
 
     def test_missing_required_parameter_is_named(self, qtbot):
         parameters = quick_test_engine_parameters(number_of_runs=5)

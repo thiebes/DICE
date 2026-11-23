@@ -33,11 +33,13 @@ class SimulationThread(QThread):
             is_parallel = self.parameters.get('multiprocessing', True)
 
             if is_parallel:
-                import os
-                cpu_count = os.cpu_count() or 1
+                from joblib import effective_n_jobs
+                # One worker for each processor that joblib may use, and no
+                # more workers than runs.
+                workers = max(1, min(effective_n_jobs(-1), num_runs))
                 noun = "run" if num_runs == 1 else "runs"
-                processors = "logical processor" if cpu_count == 1 else "logical processors"
-                self.progress.emit(f"Running {num_runs:,} {noun} ({cpu_count} {processors})...")
+                processes = "worker process" if workers == 1 else "worker processes"
+                self.progress.emit(f"Running {num_runs:,} {noun} ({workers} {processes})...")
             else:
                 self.progress.emit("Starting simulation...")
 

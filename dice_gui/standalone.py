@@ -72,7 +72,7 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     import time
 
     import numpy as np
-    from joblib import cpu_count
+    from joblib import effective_n_jobs
 
     from dice import __version__
     from dice.analysis.simulation import (
@@ -119,8 +119,9 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     # in a regular installation, are not the pool's.
     earlier_children = set(multiprocessing.active_children())
     parallel, progress, parallel_seconds = simulate(parallel=True)
-    print(f"Process pool on {cpu_count()} logical processors: {len(parallel)} runs in {parallel_seconds:.1f} s",
-          file=output)
+    workers = max(1, min(effective_n_jobs(-1), len(parallel)))
+    processes = "worker process" if workers == 1 else "worker processes"
+    print(f"Process pool of {workers} {processes}: {len(parallel)} runs in {parallel_seconds:.1f} s", file=output)
 
     total_runs = len(serial)
     agree = seeded_results_agree(parallel, serial)
