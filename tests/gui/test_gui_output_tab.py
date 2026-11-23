@@ -1,5 +1,5 @@
 """
-Output Settings tab: presets, reset, unit conversion of image settings, the
+Output tab: presets, reset, unit conversion of image settings, the
 output path preview, and the settings reaching the saved histogram.
 """
 

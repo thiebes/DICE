@@ -95,8 +95,8 @@ class DiceGUI(QMainWindow):
                 "amplitude", "mean", "width"],  # Tab 2: Physical Parameters
             2: ["noise_value", "noise_file", "spatial_width",
                 "time_start", "time_stop", "time_series"],  # Tab 3: Experimental Conditions
-            3: [],  # Tab 4: Analysis Settings (no validated fields)
-            4: [],  # Tab 5: Output Settings (no validated fields)
+            3: [],  # Tab 4: Analysis (no validated fields)
+            4: [],  # Tab 5: Output (no validated fields)
         }
 
         self.init_ui()
@@ -138,8 +138,8 @@ class DiceGUI(QMainWindow):
         self.tabs.addTab(self.tab1, "Simulation Setup")
         self.tabs.addTab(self.tab2, "Physical Parameters")
         self.tabs.addTab(self.tab3, "Experimental Conditions")
-        self.tabs.addTab(self.tab4, "Analysis Settings")
-        self.tabs.addTab(self.tab5, "Output Settings")
+        self.tabs.addTab(self.tab4, "Analysis")
+        self.tabs.addTab(self.tab5, "Output")
 
         content_layout.addWidget(self.tabs)
         main_layout.addWidget(content_area, stretch=1)
@@ -2115,7 +2115,7 @@ class DiceGUI(QMainWindow):
         self.time_steps_input.valueChanged.connect(self.mark_modified)
         self.time_series_input.textChanged.connect(self.mark_modified)
 
-        # Advanced parameters (Output Settings tab)
+        # Advanced parameters (Output tab)
         self.image_type_combo.currentTextChanged.connect(self.mark_modified)
         self.image_width_spin.valueChanged.connect(self.mark_modified)
         self.image_height_spin.valueChanged.connect(self.mark_modified)
@@ -2299,8 +2299,8 @@ class DiceGUI(QMainWindow):
             "Simulation Setup",
             "Physical Parameters",
             "Experimental Conditions",
-            "Analysis Settings",
-            "Output Settings"
+            "Analysis",
+            "Output"
         ]
 
         for tab_idx, field_ids in self._tab_fields.items():
@@ -2373,14 +2373,14 @@ Shortcuts are scoped to the active tab.</p>
 <tr><td><b>Alt+E</b></td><td>Steps</td></tr>
 </table>
 
-<h3>Tab 4: Analysis Settings</h3>
+<h3>Tab 4: Analysis</h3>
 <table>
 <tr><td><b>Alt+W</b></td><td>Weighted Least Squares</td></tr>
 <tr><td><b>Alt+O</b></td><td>Ordinary Least Squares</td></tr>
 <tr><td><b>Alt+T</b></td><td>Accuracy Threshold</td></tr>
 </table>
 
-<h3>Tab 5: Output Settings</h3>
+<h3>Tab 5: Output</h3>
 <table>
 <tr><td><b>Alt+Q</b></td><td>Quick Setup</td></tr>
 <tr><td><b>Alt+T</b></td><td>File Type</td></tr>

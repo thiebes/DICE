@@ -282,7 +282,7 @@ For each run, DICE fits a Gaussian function to each noisy profile. The fit is a 
 - the mean estimate, the bias (mean estimate minus nominal value), and the root-mean-square error (RMSE)
 - the fraction of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value
 
-The proximity level (the fraction of the nominal value within which an estimate counts as close) is not a simulation parameter. The summary file reports the four standard levels listed above. In the GUI, choose any level from 1% to 50% in the Analysis Settings tab after a run. From Python or a results file, you can compute the fraction for any level (see the [CLI Guide](cli-guide.md#analyze-the-results-in-python)). DICE ignores a `proximity level` key in a parameters file and warns about it.
+The proximity level (the fraction of the nominal value within which an estimate counts as close) is not a simulation parameter. The summary file reports the four standard levels listed above. In the GUI, choose any level from 1% to 50% in the Analysis tab after a run. From Python or a results file, you can compute the fraction for any level (see the [CLI Guide](cli-guide.md#analyze-the-results-in-python)). DICE ignores a `proximity level` key in a parameters file and warns about it.
 
 ## Plot parameters
 
@@ -312,7 +312,7 @@ The resolution in dots per inch.
 
 The font size of the plot text (points), the length and width of the axis ticks (points), and the number of histogram bins. The scatter plot of a noise range has no bins and ignores `image numbins`.
 
-The command-line interface and the GUI both apply these values. The GUI takes them from its Output Settings tab.
+The command-line interface and the GUI both apply these values. The GUI takes them from its Output tab.
 
 **Defaults:** a font size of 12 points, ticks 4 points long and 1 point wide, and 50 bins
 

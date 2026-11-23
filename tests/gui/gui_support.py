@@ -24,8 +24,8 @@ TAB_NAMES = [
     "Simulation Setup",
     "Physical Parameters",
     "Experimental Conditions",
-    "Analysis Settings",
-    "Output Settings",
+    "Analysis",
+    "Output",
 ]
 
 # Column names the GUI reads back from the CSV that DICE exports.
@@ -76,7 +76,7 @@ def enter_text(qtbot, line_edit: QLineEdit, text: str) -> None:
 
 def fit_method_radio(window, abbreviation: str) -> QRadioButton:
     """The Analysis tab's fit-method radio whose label holds '(WLS)' or '(OLS)'."""
-    analysis_tab = window.tabs.widget(TAB_NAMES.index("Analysis Settings"))
+    analysis_tab = window.tabs.widget(TAB_NAMES.index("Analysis"))
     return next(
         radio for radio in analysis_tab.findChildren(QRadioButton)
         if f"({abbreviation})" in radio.text()

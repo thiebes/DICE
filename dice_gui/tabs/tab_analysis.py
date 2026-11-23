@@ -1,5 +1,5 @@
 """
-Tab 4: Analysis Settings
+Tab 4: Analysis
 
 Fit method selection and post-hoc precision analysis.
 """
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
-    """Create Tab 4: Analysis Settings."""
+    """Create Tab 4: Analysis."""
     tab, layout = create_scrollable_tab()
 
     # Fit method group

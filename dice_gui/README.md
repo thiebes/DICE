@@ -48,7 +48,7 @@ The main window has five tabs, a control panel at the bottom, a status bar, and 
   - **Time Range**: start, stop, and number of evenly spaced time points.
   - **Time Series**: an explicit, comma-separated list of time points. The GUI sorts the list and rejects duplicate values.
 
-### Analysis Settings
+### Analysis
 
 The analysis acts on the results of the last simulation. It does not change the simulation.
 
@@ -56,7 +56,7 @@ The analysis acts on the results of the last simulation. It does not change the 
 - **Precision Summary**: after a run, shows the standard deviation of the diffusion coefficient estimates, their relative standard deviation (standard deviation divided by the nominal value), the bias (mean estimate minus nominal value), and the mean ratio of estimate to nominal value. The bias is shown with its standard error. The standard deviation and the bias are in the global units of the run, for example μm²/ns. For results loaded from a CSV file, they are in the unit of the file's diffusion coefficient columns, cm²/s by default. If the selected fit has no estimates, the summary says so.
 - **Explore Accuracy Threshold**: after a run, set **Threshold** to a value between 0.01 and 0.50 (1% to 50%). The GUI shows the fraction of estimates that fall within that fraction of the nominal diffusion coefficient, with its count and its 95% interval. A histogram of the estimates shows the threshold: dashed lines mark the limits, and the blue part of each bar, from the bottom, is the share of its estimates within them. You can change the threshold as often as you like without running the simulation again.
 
-### Output Settings
+### Output
 
 - **Quick Setup**: presets for publication, presentation, and draft figures.
 - **Image Format**, **Resolution & Histogram**, **Typography**: file type (PNG, JPG, SVG, TIF), size, resolution, number of histogram bins, font size, and tick size of the accuracy histogram.

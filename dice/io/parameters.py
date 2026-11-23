@@ -558,7 +558,7 @@ def check_retired_parameters(parameters_dictionary: Dict[str, Any]) -> List[str]
         "Proximity analysis is now post-hoc: the summary reports the fraction of "
         "estimates within 5%, 10%, 20%, and 50% of nominal, and other thresholds are "
         "available from dice.analysis.statistics.analyze_simulation_results"
-        "(result, proximity_levels=[...]) or from the GUI's Analysis Settings tab "
+        "(result, proximity_levels=[...]) or from the GUI's Analysis tab "
         "('Explore Accuracy Threshold')."
         for key in RETIRED_PROXIMITY_KEYS
         if key in parameters_dictionary

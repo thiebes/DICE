@@ -33,7 +33,7 @@ and Fixed give the details.
 
 - Graphical user interface (GUI), started with `dice-gui` or
   `python -m dice_gui`. It has five tabs (Simulation Setup, Physical
-  Parameters, Experimental Conditions, Analysis Settings, Output Settings) and
+  Parameters, Experimental Conditions, Analysis, Output) and
   runs the simulation in the background with a progress bar and an estimate
   of the remaining time. Inputs are checked as you type. Linked fields compute
   the diffusion length, diffusion coefficient, or lifetime from the other two,
@@ -69,7 +69,7 @@ and Fixed give the details.
   CNR at the last time point (the peak falls by the decay and by the
   spreading of the profile), an initial profile that is narrow compared with
   the pixel size, or very few time points.
-- Post-hoc accuracy analysis in the GUI Analysis Settings tab. After a run,
+- Post-hoc accuracy analysis in the GUI Analysis tab. After a run,
   the tab shows the standard deviation, relative standard deviation, and bias of
   the estimates, and the fraction of estimates within any proximity level
   from 1% to 50% of the nominal value, for the weighted least squares (WLS)
@@ -89,7 +89,7 @@ and Fixed give the details.
   fit, the number of runs with an estimate, the standard error of the mean
   and of the bias, and each fraction within a proximity level with its count
   and its 95% interval, for example `19.0% (19 of 100; 12.5% to 27.8%)`. The
-  GUI Analysis Settings tab shows the same for the bias and the fraction.
+  GUI Analysis tab shows the same for the bias and the fraction.
   The analysis dictionary and the JSON file carry them as `standard_error`
   and `precision_intervals`.
 - The summary file gives the ratio of the mean estimate to the nominal value
@@ -347,7 +347,7 @@ and Fixed give the details.
   in the summary, the results file, the JSON file, and the GUI. The diffusion
   length was reported as 0.
 - The summary file prints the unit after the standard deviation, mean, bias,
-  and root-mean-square error of the estimates, and the GUI Analysis Settings
+  and root-mean-square error of the estimates, and the GUI Analysis
   tab prints it after the standard deviation and bias. These values had no
   unit, although they are in the units of the diffusion coefficient.
 - The summary file shows values too small for its fixed decimals in

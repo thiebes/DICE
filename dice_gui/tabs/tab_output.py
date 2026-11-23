@@ -1,5 +1,5 @@
 """
-Tab 5: Output Settings
+Tab 5: Output
 
 Configuration for plot output format, resolution, and typography.
 """
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
-    """Create Tab 5: Output Settings."""
+    """Create Tab 5: Output."""
     from dice_gui.presets import PRESETS, OUTPUT_DEFAULTS, get_preset
 
     tab, layout = create_scrollable_tab()

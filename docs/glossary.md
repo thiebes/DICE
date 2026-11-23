@@ -170,7 +170,7 @@ In the summary file, the heading "Precision at standard thresholds" stands over 
 
 A fractional distance from the nominal value, used to count how many estimates are close to it. For example, a proximity level of 0.1 counts the estimates within ±10% of the nominal diffusion coefficient. The fraction of estimates within the proximity level describes the accuracy and precision of a measurement with the simulated parameters.
 
-The proximity level is not a simulation parameter. The summary file reports the fraction at ±5%, ±10%, ±20%, and ±50%. In the GUI, you choose any level from 1% to 50% in the Analysis Settings tab after a run.
+The proximity level is not a simulation parameter. The summary file reports the fraction at ±5%, ±10%, ±20%, and ±50%. In the GUI, you choose any level from 1% to 50% in the Analysis tab after a run.
 
 ## R
 
