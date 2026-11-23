@@ -146,6 +146,8 @@ def summary_label_texts(estimates: np.ndarray, nominal: float, d_unit: str, scal
     bias = (np.mean(estimates) - nominal) * scale
     # The standard error with two significant digits, and the bias to the same decimal place.
     decimals = max(1 - int(np.floor(np.log10(standard_error))), 0)
+    # A bias that rounds to zero is shown without a sign: + 0.0 turns -0.0 into 0.0.
+    bias = round(float(bias), decimals) + 0.0
     return [
         f"{np.std(estimates, ddof=1) * scale:.3g} {d_unit}",
         f"{np.std(estimates, ddof=1) / nominal:.3f}",
