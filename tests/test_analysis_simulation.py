@@ -752,16 +752,16 @@ class TestJoblibProgressAndStop:
     def test_only_the_early_exit_warnings_of_joblib_are_ignored_at_a_stop(self, run_parameters, monkeypatch):
         """joblib's two messages about runs it cancelled or did not use are expected; any other warning is shown."""
         from dice.analysis.simulation import PROGRESS_REPORT_SECONDS, run_in_joblib_workers
-        cancelled = ("7 tasks which were still being processed by the workers have been cancelled. You could "
-                     "benefit from adjusting the input task iterator to limit unnecessary computation time.")
-        not_used = ("2 tasks have been successfully executed  but not used. You could benefit from adjusting "
-                    "the input task iterator to limit unnecessary computation time.")
+        # The three messages of joblib's Parallel._warn_exit_early, word for word.
+        advice = " You could benefit from adjusting the input task iterator to limit unnecessary computation time."
+        cancelled = "7 tasks which were still being processed by the workers have been cancelled."
+        not_used = "2 tasks have been successfully executed  but not used."
         monkeypatch.setattr(self.InProcessParallel, 'warnings_at_close', [
-            (cancelled, "joblib.parallel"),
-            (not_used, "joblib.parallel"),
-            (not_used[:-1] + " Additionally, " + cancelled, "joblib.parallel"),
+            (cancelled + advice, "joblib.parallel"),
+            (not_used + advice, "joblib.parallel"),
+            (not_used + " Additionally, " + cancelled + advice, "joblib.parallel"),
             ("A worker stopped while some jobs were given to the executor.", "joblib.parallel"),
-            (cancelled, "another.package"),
+            (cancelled + advice, "another.package"),
         ])
 
         def stop_at_first_report(done, total):
@@ -773,7 +773,7 @@ class TestJoblibProgressAndStop:
                     run_parameters, 2, stop_at_first_report, clock=self.CountingClock(step=PROGRESS_REPORT_SECONDS))
 
         assert [str(warning.message) for warning in shown] == [
-            "A worker stopped while some jobs were given to the executor.", cancelled]
+            "A worker stopped while some jobs were given to the executor.", cancelled + advice]
 
     def test_stop_ends_real_workers_and_the_next_simulation_runs(self):
         """With joblib itself: a stop replaces the workers, raises no warning, and leaves the pool usable.
