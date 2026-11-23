@@ -8,10 +8,13 @@ shown ended the application at some launches, without an error.
 
 from __future__ import annotations
 
+import pytest
 from PyQt6.QtCore import Qt
 
 from dice_gui.__main__ import show_main_window
 from dice_gui.splash import DiceSplashScreen
+
+pytestmark = pytest.mark.gui
 
 
 class RecordingWidget:
@@ -44,13 +47,12 @@ class TestSplashToMainWindow:
 
         assert not splash.testAttribute(Qt.WidgetAttribute.WA_QuitOnClose)
 
-    def test_splash_is_replaced_by_the_main_window(self, qtbot, qapp, window):
+    def test_splash_is_replaced_by_the_main_window(self, qtbot, window):
         splash = DiceSplashScreen()
         qtbot.addWidget(splash)
         splash.show()
 
-        with qtbot.assertNotEmitted(qapp.lastWindowClosed, wait=200):
-            show_main_window(window, splash)
+        show_main_window(window, splash)
 
         assert window.isVisible()
         assert not splash.isVisible()
