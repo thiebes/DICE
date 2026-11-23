@@ -260,7 +260,7 @@ and Fixed give the details.
 - The diffusion coefficient columns of the results file are labeled
   `[cm²/s]` instead of `[cm^2/s]`. Scripts that select these columns by name
   need the new label.
-- DICE requires Python 3.11 or later.
+- DICE requires Python 3.11 or later, and joblib 1.3 or later.
 - Packaging uses `pyproject.toml`, and `uv.lock` records the tested
   dependency versions. Install with `uv sync`, or with `pip install .` from
   the repository directory.
@@ -273,7 +273,6 @@ and Fixed give the details.
 - A parallel simulation reports its progress while it runs: to the progress
   callback of `run_monte_carlo_simulation()`, with `--verbose` on the command
   line, and in the GUI. It reported nothing until it had finished.
-- joblib 1.3 or later is required.
 - Python API: `dice.dice_runner()` returns a `MonteCarloOutput`. `RunResult` holds the
   fit results as flat fields, and its `cnr_estimate` field is renamed
   `cnr_0_estimate`. The `GaussianParameters` fields `amplitude`, `sigma2`, and
@@ -308,9 +307,10 @@ and Fixed give the details.
   exceeds 1e-4 of the estimate when the spatial width is below about 0.05 in
   the chosen unit or `amplitude_0` is below about 0.01. Every release since
   1.0.0 fits the same way, so results from earlier releases with lengths in
-  centimeters or meters, or with a small amplitude, are affected. Results in
-  micrometers or nanometers with an amplitude near 1 change by less than
-  1e-5 of the estimate.
+  centimeters or meters, or with a small amplitude, are affected. For results
+  in micrometers or nanometers with an amplitude near 1 the error was small;
+  the first row of the table above says how much their single estimates
+  change.
 - Results in length or time units other than micrometer and nanosecond are
   converted and labeled correctly. In 1.2.0 the command-line interface wrote
   the results file and the summary as if the units were micrometer and
@@ -342,9 +342,10 @@ and Fixed give the details.
   the window and the amplitude starts at the largest absolute value of the
   profile, as Table II of the 2024 paper gives them. In 1.2.0 the search for
   the center started at the position of the largest absolute value of
-  the whole profile; when noise put that value outside the allowed range, the
-  fit failed and (`spatial width` / 4)² stood in for the variance of the
-  frame.
+  the whole profile, and the amplitude started at the signed value there.
+  When noise put that position outside the allowed range, or made that value
+  negative, the fit failed and (`spatial width` / 4)² stood in for the
+  variance of the frame.
 - A lifetime of 0, which means no decay, gives an infinite diffusion length
   in the summary, the results file, the JSON file, and the GUI. The diffusion
   length was reported as 0.
