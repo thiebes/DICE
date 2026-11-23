@@ -34,7 +34,7 @@ def create_tab_simulation_setup(main_window: "DiceGUI") -> QWidget:
     main_window.num_runs_spin.setMaximum(1000000)
     main_window.num_runs_spin.setValue(1000)
     main_window.num_runs_spin.setToolTip(
-        "Number of Monte Carlo simulation iterations to run.\n\n"
+        "Number of Monte Carlo simulation runs.\n\n"
         "Higher values provide better statistical precision but take longer to compute.\n"
         "Typical values: 100-1000 for testing, 1000-10000 for publication-quality results.\n\n"
         "Each run generates a noisy profile, fits it, and estimates the diffusion coefficient."

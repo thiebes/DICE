@@ -65,7 +65,7 @@ The analysis acts on the results of the last simulation. It does not change the 
 ### Control panel
 
 - **Load Example...**: fill all tabs with example parameters.
-- **Run Simulation (Ctrl+R)**: check the inputs and start the simulation. A message names the folder of the output files when the simulation has finished. Before the run starts, the GUI warns about settings that make the fits unreliable: a low CNR at the last time point, an initial profile that is narrow compared with the pixel size, or very few time points. You can continue or go back.
+- **Run Simulation (Ctrl+R)**: check the inputs and start the simulation. Before the run starts, the GUI warns about settings that make the fits unreliable: a low CNR at the last time point, an initial profile that is narrow compared with the pixel size, or very few time points. You can continue or go back. When the output files of a finished simulation are written, a message names their folder.
 - **Stop (Ctrl+.)**: stop a running simulation. A serial simulation stops after the current run; a parallel simulation stops within a few seconds. The status line reads "Stopping..." until then. Closing the window during a run asks first; the window then stays until the run has stopped, and closes.
 - A progress bar with elapsed and estimated remaining time. The bar of a parallel simulation fills as its runs finish.
 
