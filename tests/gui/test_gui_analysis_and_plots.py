@@ -106,6 +106,15 @@ class TestPrecisionSummary:
 
         assert window.results_status_label.text() == "Simulation results: quick_test (30 runs)"
 
+    @pytest.mark.parametrize("num_runs, count", [(1, "1 run"), (2, "2 runs"), (12000, "12,000 runs")])
+    def test_status_bar_counts_the_runs_of_a_simulation(self, window, num_runs, count):
+        window.interface.last_result = SimpleNamespace(num_runs=num_runs)
+        window.interface.last_parameters = {"filename slug": "quick_test"}
+
+        window.update_status_bar()
+
+        assert window.results_status_label.text() == f"Simulation results: quick_test ({count})"
+
 
 def _bar_pixel_counts(histogram) -> tuple[dict, dict]:
     """Count the pixels of the highlighted and of the other bar color in the painted histogram.
@@ -126,15 +135,6 @@ def _bar_pixel_counts(histogram) -> tuple[dict, dict]:
                     entry["pixels"] += 1
                     entry["columns"].add(int(x / scale))
     return found[0], found[1]
-
-    @pytest.mark.parametrize("num_runs, count", [(1, "1 run"), (2, "2 runs"), (12000, "12,000 runs")])
-    def test_status_bar_counts_the_runs_of_a_simulation(self, window, num_runs, count):
-        window.interface.last_result = SimpleNamespace(num_runs=num_runs)
-        window.interface.last_parameters = {"filename slug": "quick_test"}
-
-        window.update_status_bar()
-
-        assert window.results_status_label.text() == f"Simulation results: quick_test ({count})"
 
 
 class TestAccuracyThresholdTool:
