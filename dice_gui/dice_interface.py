@@ -315,9 +315,14 @@ class DiceInterface:
         return result, processed_params
 
     @staticmethod
+    def filename_slug(processed_params: Dict[str, Any]) -> str:
+        """Filename slug of a simulation: the name of its output folder and the stem of its output files."""
+        return processed_params.get('filename slug', 'dice_output')
+
+    @staticmethod
     def output_directory(processed_params: Dict[str, Any]) -> Path:
         """Folder of the output files of a simulation: the folder of its filename slug in the output root."""
-        return output_root() / processed_params.get('filename slug', 'dice_output')
+        return output_root() / DiceInterface.filename_slug(processed_params)
 
     def write_outputs(self, result: MonteCarloOutput, processed_params: Dict[str, Any]) -> None:
         """
@@ -345,7 +350,7 @@ class DiceInterface:
         analysis = analyze_simulation_results(result)
 
         # Setup output directory
-        slug = processed_params.get('filename slug', 'dice_output')
+        slug = self.filename_slug(processed_params)
         output_dir = self.output_directory(processed_params)
         output_dir.mkdir(parents=True, exist_ok=True)
 

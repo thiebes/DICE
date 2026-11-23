@@ -621,6 +621,7 @@ class TestOutputFilesThatCannotBeWritten:
 
         assert warnings_shown == ["Output Files Not Written"]
         assert dialogs.titles() == ["Simulation Complete"]
+        assert str(work_dir / "output" / "quick_test") in dialogs.texts("information")[0]
         assert blocked.is_file()
         assert window.status_label.text() == "Simulation completed successfully."
         assert not window.write_outputs_action.isEnabled()

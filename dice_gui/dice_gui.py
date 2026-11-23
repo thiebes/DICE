@@ -681,8 +681,8 @@ class DiceGUI(QMainWindow):
             estimator = selected_estimator_key(self)
 
             # Get output location (original directory)
-            slug = self.interface.last_parameters.get('filename slug', 'plot')
-            output_dir = output_root() / slug
+            slug = self.interface.filename_slug(self.interface.last_parameters)
+            output_dir = self.interface.output_directory(self.interface.last_parameters)
 
             # Get plot filename with overwrite handling
             filename = self.get_plot_filename(output_dir, slug, image_settings['image_type'])
@@ -1310,7 +1310,8 @@ class DiceGUI(QMainWindow):
             self,
             "Simulation Complete",
             f"{message}\n\n"
-            "Results have been saved to output files."
+            "The output files have been written to:\n\n"
+            f"{self.interface.output_directory(self.interface.last_parameters)}"
         )
 
     def _confirm_discard_unwritten_results(self, action: str) -> bool:
@@ -1370,8 +1371,8 @@ class DiceGUI(QMainWindow):
         self.interface.retry_write_outputs()
         if self._offer_to_write_output_files():
             self.status_label.setText("Output files written")
-            # The status line is easy to miss, and a run that writes its
-            # files at once confirms with a dialog too.
+            # The status line is easy to miss, so a dialog names the folder,
+            # as the dialog of a run that writes its files at once does.
             QMessageBox.information(
                 self,
                 "Output Files Written",
