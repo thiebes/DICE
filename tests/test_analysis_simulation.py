@@ -2,6 +2,8 @@
 Tests for dice.analysis.simulation module.
 """
 
+import warnings
+
 import pytest
 import numpy as np
 from seeded_results import assert_seeded_results_agree
@@ -667,8 +669,13 @@ class TestJoblibProgressAndStop:
             return self.now
 
     class InProcessParallel:
-        """Stands in for joblib.Parallel: runs each task when its result is asked for, and records a close."""
+        """Stands in for joblib.Parallel: runs each task when its result is asked for, and records a close.
+
+        At the close it issues the warnings of warnings_at_close, each a pair
+        of the message and the name of the module that issues it.
+        """
         closed: list = []
+        warnings_at_close: list = []
 
         def __init__(self, n_jobs=None, **kwargs):
             pass
@@ -680,6 +687,9 @@ class TestJoblibProgressAndStop:
                         yield function(*args, **kwargs)
                 finally:
                     type(self).closed.append(True)
+                    for message, module in type(self).warnings_at_close:
+                        warnings.warn_explicit(
+                            message, UserWarning, filename="parallel.py", lineno=1, module=module, registry={})
             return results()
 
     @pytest.fixture
@@ -687,6 +697,7 @@ class TestJoblibProgressAndStop:
         """Arguments of 40 runs that only return their index, and joblib replaced by an in-process stand-in."""
         import dice.analysis.simulation as simulation
         monkeypatch.setattr(self.InProcessParallel, 'closed', [])
+        monkeypatch.setattr(self.InProcessParallel, 'warnings_at_close', [])
         monkeypatch.setattr(simulation, 'Parallel', self.InProcessParallel)
         monkeypatch.setattr(simulation, 'run_single_simulation', lambda index: index)
         return [(index,) for index in range(40)]
@@ -738,6 +749,32 @@ class TestJoblibProgressAndStop:
         # The generator of results was closed, which is how joblib learns to stop its workers.
         assert self.InProcessParallel.closed == [True]
 
+    def test_only_the_early_exit_warnings_of_joblib_are_ignored_at_a_stop(self, run_parameters, monkeypatch):
+        """joblib's two messages about runs it cancelled or did not use are expected; any other warning is shown."""
+        from dice.analysis.simulation import PROGRESS_REPORT_SECONDS, run_in_joblib_workers
+        cancelled = ("7 tasks which were still being processed by the workers have been cancelled. You could "
+                     "benefit from adjusting the input task iterator to limit unnecessary computation time.")
+        not_used = ("2 tasks have been successfully executed  but not used. You could benefit from adjusting "
+                    "the input task iterator to limit unnecessary computation time.")
+        monkeypatch.setattr(self.InProcessParallel, 'warnings_at_close', [
+            (cancelled, "joblib.parallel"),
+            (not_used, "joblib.parallel"),
+            (not_used[:-1] + " Additionally, " + cancelled, "joblib.parallel"),
+            ("A worker stopped while some jobs were given to the executor.", "joblib.parallel"),
+            (cancelled, "another.package"),
+        ])
+
+        def stop_at_first_report(done, total):
+            raise InterruptedError("Simulation cancelled by user")
+
+        with pytest.warns(UserWarning) as shown:
+            with pytest.raises(InterruptedError):
+                run_in_joblib_workers(
+                    run_parameters, 2, stop_at_first_report, clock=self.CountingClock(step=PROGRESS_REPORT_SECONDS))
+
+        assert [str(warning.message) for warning in shown] == [
+            "A worker stopped while some jobs were given to the executor.", cancelled]
+
     def test_stop_ends_real_workers_and_the_next_simulation_runs(self):
         """With joblib itself: a stop replaces the workers, raises no warning, and leaves the pool usable.
 
@@ -745,7 +782,6 @@ class TestJoblibProgressAndStop:
         """
         import os
         import time
-        import warnings
         from joblib import Parallel, delayed
         from dice.analysis.simulation import run_in_joblib_workers
 
