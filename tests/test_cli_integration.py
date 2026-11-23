@@ -1177,3 +1177,28 @@ class TestNoPlotOfAnEarlierRunStaysBesideNewResults:
         run_cli(tmp_path, write_quick_test_variant(tmp_path, 'rerun', self.RUNS), 'rerun', '--output-dir',
                 str(other.output_dir))
         assert 'other_accuracy_histogram.png' in self._plots(other)
+
+
+class TestProgressMessages:
+    """With --verbose, a message each time a multiple of the progress interval is passed, and at the end."""
+
+    def _messages(self, capsys, counts: list[int], total: int, interval: int) -> list[str]:
+        from dice.cli.main import create_progress_callback
+        callback = create_progress_callback(verbose=True, quiet=False, interval=interval)
+        for count in counts:
+            callback(count, total)
+        return [line.split(" runs completed")[0] for line in capsys.readouterr().out.splitlines()]
+
+    def test_serial_run_reports_at_each_multiple_of_the_interval(self, capsys):
+        messages = self._messages(capsys, list(range(1, 251)), total=250, interval=100)
+        assert messages == ["Progress: 100/250", "Progress: 200/250", "Progress: 250/250"]
+
+    def test_parallel_run_reports_when_a_multiple_is_passed(self, capsys):
+        """A parallel simulation reports at counts that follow the clock, which seldom are multiples."""
+        messages = self._messages(capsys, [37, 95, 130, 180, 260, 297, 300], total=300, interval=100)
+        assert messages == ["Progress: 130/300", "Progress: 260/300", "Progress: 300/300"]
+
+    def test_no_callback_without_verbose_or_with_quiet(self):
+        from dice.cli.main import create_progress_callback
+        assert create_progress_callback(verbose=False, quiet=False) is None
+        assert create_progress_callback(verbose=True, quiet=True) is None

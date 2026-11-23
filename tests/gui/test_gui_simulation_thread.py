@@ -12,11 +12,9 @@ from typing import Callable, NamedTuple
 
 import pandas as pd
 import pytest
-from joblib import effective_n_jobs
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMessageBox
 
-from dice.analysis.simulation import split_into_batches
 from dice.models.results import MonteCarloOutput
 from dice_gui.dice_interface import DiceInterface
 from dice_gui.simulation_thread import SimulationThread
@@ -118,6 +116,25 @@ def process_pool(monkeypatch) -> _ProcessPool:
     return _ProcessPool(new_children=lambda: set(multiprocessing.active_children()) - earlier)
 
 
+class TestProgressBar:
+    """The bar of a parallel run shows activity until the first report, and fills from then on."""
+
+    def test_first_report_of_a_parallel_run_gives_the_bar_its_range(self, window):
+        window.progress_bar.setRange(0, 0)  # as start_simulation leaves it for a parallel run
+        window.elapsed_timer.start()
+
+        window._update_iteration_progress(64, 20_000)
+
+        assert (window.progress_bar.minimum(), window.progress_bar.maximum()) == (0, 20_000)
+        assert window.progress_bar.value() == 64
+        assert window.status_label.text() == "Running 64/20,000"
+
+        window._update_iteration_progress(576, 20_000)
+
+        assert window.progress_bar.maximum() == 20_000
+        assert window.progress_bar.value() == 576
+
+
 class TestProcessPoolRun:
     """A parallel run in the standalone build's process pool, through the GUI thread."""
 
@@ -129,7 +146,10 @@ class TestProcessPoolRun:
         assert log.errors == []
         [(result, _)] = log.results
         assert [run.run_id for run in result.run_results] == list(range(20))
-        assert log.iterations == [(batch.stop, 20) for batch in split_into_batches(20, effective_n_jobs(-1))]
+        # One report after each batch; the sizes of the batches follow the clock.
+        assert log.iterations[-1] == (20, 20)
+        assert [done for done, _ in log.iterations] == sorted({done for done, _ in log.iterations})
+        assert {total for _, total in log.iterations} == {20}
         assert process_pool.new_children() == set()
 
 
@@ -188,7 +208,9 @@ class TestCancellation:
 
         assert log.errors == []
         assert log.results == []
-        assert 1 <= len(log.iterations) < len(split_into_batches(300, effective_n_jobs(-1)))
+        # The stop takes effect at the report after the one that asked for it.
+        assert log.iterations != []
+        assert log.iterations[-1][0] < 300
         assert process_pool.new_children() == set()
 
     def test_stop_button_reports_a_stop_without_an_error_dialog(self, qtbot, window, dialogs, slow_serial_runs):

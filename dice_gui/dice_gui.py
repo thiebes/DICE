@@ -1202,7 +1202,9 @@ class DiceGUI(QMainWindow):
         self.progress_bar.setVisible(True)
         self.elapsed_label.setVisible(True)
 
-        # Set progress bar mode based on multiprocessing
+        # A parallel run reports once its first runs have finished. Until then the bar
+        # shows activity without a value; _update_iteration_progress gives it
+        # its range with the first report.
         if dice_params.get('multiprocessing', True):
             self.progress_bar.setRange(0, 0)  # Indeterminate
         else:
@@ -1229,8 +1231,10 @@ class DiceGUI(QMainWindow):
         """Ask the running simulation to stop; simulation_cancelled() resets the window when it has.
 
         A serial simulation stops after its current run and a parallel one
-        after its current batch. The thread is not terminated, because a
-        terminated parallel run leaves its worker processes behind.
+        within a few seconds: joblib stops its workers, and the process pool
+        of a standalone build ends its current batch. The thread is not
+        terminated, because a terminated parallel run leaves its worker
+        processes behind.
         """
         if self.simulation_thread and self.simulation_thread.isRunning():
             self.simulation_thread.request_stop()
@@ -1252,10 +1256,12 @@ class DiceGUI(QMainWindow):
         # An update queued before a stop request must not replace "Stopping...".
         if self.simulation_thread is not None and self.simulation_thread.stop_requested():
             return
+        if self.progress_bar.maximum() != total:
+            self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
         self.status_label.setText(f"Running {current:,}/{total:,}")
 
-        # Calculate estimated time remaining after first batch (10%)
+        # Estimate the remaining time once a tenth of the runs is done
         if current > 0:
             elapsed_ms = self.elapsed_timer.elapsed()
             fraction_complete = current / total
@@ -2493,8 +2499,8 @@ licenses of the packages DICE uses.</p>
             reply = QMessageBox.question(
                 self, "Simulation Running",
                 "A simulation is running. Stop it and exit?\n\n"
-                "DICE stays open until the current run has ended, or the current batch of a "
-                "parallel simulation, and then exits.",
+                "DICE stays open until the simulation has stopped, which can take a few "
+                "seconds, and then exits.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -2514,7 +2520,7 @@ licenses of the packages DICE uses.</p>
                 self._close_requested = True
                 self._set_inputs_enabled(False)
                 self.stop_button.setEnabled(False)
-                self.status_label.setText("Stopping. DICE exits when the current run or batch has ended...")
+                self.status_label.setText("Stopping. DICE exits when the simulation has stopped...")
                 event.ignore()
                 return
 

@@ -44,7 +44,7 @@ and Fixed give the details.
   and offers output presets for publication, presentation, and draft figures.
   It has light and dark themes, Alt-key shortcuts for the input fields, and a
   list of the shortcuts under Help. Stop ends a serial run after the current
-  run and a parallel run after the current batch of runs. Closing the window
+  run and a parallel run within a few seconds. Closing the window
   during a run asks first; the window then stays, with a message, until the
   run has stopped in the same way, and closes. If the output files cannot be
   written, for example because a results file is open in another program,
@@ -270,8 +270,10 @@ and Fixed give the details.
   function that needs them is first used.
 - Library functions report problems through Python warnings and logging
   instead of printing to the console.
-- Parallel simulations with few runs start faster, because each batch holds
-  at least one task per worker process.
+- A parallel simulation reports its progress while it runs: to the progress
+  callback of `run_monte_carlo_simulation()`, with `--verbose` on the command
+  line, and in the GUI. It reported nothing until it had finished.
+- joblib 1.3 or later is required.
 - Python API: `dice.dice_runner()` returns a `MonteCarloOutput`. `RunResult` holds the
   fit results as flat fields, and its `cnr_estimate` field is renamed
   `cnr_0_estimate`. The `GaussianParameters` fields `amplitude`, `sigma2`, and

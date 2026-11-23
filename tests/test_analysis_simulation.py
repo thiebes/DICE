@@ -484,7 +484,7 @@ class TestProcessPoolBackend:
 
     def test_same_results_as_serial_with_progress_after_each_batch(self, new_children):
         # Starts a pool of two worker processes, which costs a few seconds.
-        from dice.analysis.simulation import PROCESS_POOL_BACKEND, split_into_batches
+        from dice.analysis.simulation import PROCESS_POOL_BACKEND
 
         serial = self._simulate(multiprocessing=False)
         progress = []
@@ -495,8 +495,11 @@ class TestProcessPoolBackend:
 
         assert_seeded_results_agree(self._estimates(pooled), self._estimates(serial))
         assert [r.run_id for r in pooled.run_results] == list(range(7))
-        assert progress == [(batch.stop, 7) for batch in split_into_batches(7, 2)]
-        assert len(progress) > 1
+        # The first batch has one run per worker; the sizes of the later ones follow the clock.
+        assert progress[0] == (2, 7)
+        assert progress[-1] == (7, 7)
+        assert [done for done, _ in progress] == sorted({done for done, _ in progress})
+        assert {total for _, total in progress} == {7}
         assert new_children() == set()
 
     def test_stop_request_ends_the_simulation_and_its_workers(self, new_children):
@@ -605,17 +608,19 @@ class TestProcessPoolBackend:
 
 
 class TestWorkerCountReachesJoblib:
-    """The n_jobs argument is the worker count joblib receives for every batch."""
+    """The n_jobs argument is the worker count joblib receives for the one call of a simulation."""
 
     class RecordingParallel:
-        """Stands in for joblib.Parallel: records n_jobs and runs the tasks in-process."""
+        """Stands in for joblib.Parallel: records its options and runs the tasks in-process, one as each is asked for."""
         n_jobs_seen: list = []
+        options_seen: list = []
 
         def __init__(self, n_jobs=None, **kwargs):
             type(self).n_jobs_seen.append(n_jobs)
+            type(self).options_seen.append(kwargs)
 
         def __call__(self, tasks):
-            return [function(*args, **kwargs) for function, args, kwargs in tasks]
+            return (function(*args, **kwargs) for function, args, kwargs in tasks)
 
     def _simulate(self, **options):
         return run_monte_carlo_simulation(
@@ -634,39 +639,202 @@ class TestWorkerCountReachesJoblib:
 
         serial = self._simulate(multiprocessing=False)
         monkeypatch.setattr(self.RecordingParallel, 'n_jobs_seen', [])
+        monkeypatch.setattr(self.RecordingParallel, 'options_seen', [])
         monkeypatch.setattr(simulation, 'Parallel', self.RecordingParallel)
 
         parallel = self._simulate(multiprocessing=True, n_jobs=n_jobs)
 
-        assert self.RecordingParallel.n_jobs_seen
-        assert set(self.RecordingParallel.n_jobs_seen) == {n_jobs}
+        # One call for the whole simulation, whose results come back as they finish.
+        assert self.RecordingParallel.n_jobs_seen == [n_jobs]
+        assert self.RecordingParallel.options_seen == [{'return_as': 'generator'}]
         assert_seeded_results_agree(
             [(r.ols_slope, r.wls_slope) for r in parallel.run_results],
             [(r.ols_slope, r.wls_slope) for r in serial.run_results])
 
 
-class TestSplitIntoBatches:
-    """Parallel batches cover every run once and keep every worker busy."""
+class TestJoblibProgressAndStop:
+    """A simulation in joblib's workers reports by the clock and ends when the progress callback raises."""
 
+    class CountingClock:
+        """A clock that advances by a fixed step each time it is read."""
+
+        def __init__(self, step: float):
+            self.now = 0.0
+            self.step = step
+
+        def __call__(self) -> float:
+            self.now += self.step
+            return self.now
+
+    class InProcessParallel:
+        """Stands in for joblib.Parallel: runs each task when its result is asked for, and records a close."""
+        closed: list = []
+
+        def __init__(self, n_jobs=None, **kwargs):
+            pass
+
+        def __call__(self, tasks):
+            def results():
+                try:
+                    for function, args, kwargs in tasks:
+                        yield function(*args, **kwargs)
+                finally:
+                    type(self).closed.append(True)
+            return results()
+
+    @pytest.fixture
+    def run_parameters(self, monkeypatch):
+        """Arguments of 40 runs that only return their index, and joblib replaced by an in-process stand-in."""
+        import dice.analysis.simulation as simulation
+        monkeypatch.setattr(self.InProcessParallel, 'closed', [])
+        monkeypatch.setattr(simulation, 'Parallel', self.InProcessParallel)
+        monkeypatch.setattr(simulation, 'run_single_simulation', lambda index: index)
+        return [(index,) for index in range(40)]
+
+    def test_reports_follow_the_clock_and_end_with_the_last_run(self, run_parameters):
+        from dice.analysis.simulation import PROGRESS_REPORT_SECONDS, run_in_joblib_workers
+        reports = []
+        # The clock is read once at the start and once or twice for each
+        # result, so the report interval passes every few results.
+        clock = self.CountingClock(step=PROGRESS_REPORT_SECONDS / 4)
+
+        results = run_in_joblib_workers(
+            run_parameters, 2, lambda done, total: reports.append((done, total)), clock=clock)
+
+        assert results == list(range(40))
+        assert reports[-1] == (40, 40)
+        assert 5 < len(reports) < 40
+        assert [done for done, _ in reports] == sorted({done for done, _ in reports})
+        assert {total for _, total in reports} == {40}
+
+    def test_fast_runs_report_only_at_the_end(self, run_parameters):
+        from dice.analysis.simulation import run_in_joblib_workers
+        reports = []
+
+        run_in_joblib_workers(
+            run_parameters, 2, lambda done, total: reports.append((done, total)), clock=lambda: 0.0)
+
+        assert reports == [(40, 40)]
+
+    def test_no_callback_no_reports(self, run_parameters):
+        from dice.analysis.simulation import run_in_joblib_workers
+        assert run_in_joblib_workers(run_parameters, 2) == list(range(40))
+        assert self.InProcessParallel.closed == [True]
+
+    def test_exception_of_the_callback_ends_the_runs_that_have_not_finished(self, run_parameters):
+        from dice.analysis.simulation import PROGRESS_REPORT_SECONDS, run_in_joblib_workers
+        reports = []
+
+        def stop_at_first_report(done, total):
+            reports.append((done, total))
+            raise InterruptedError("Simulation cancelled by user")
+
+        with pytest.raises(InterruptedError):
+            run_in_joblib_workers(
+                run_parameters, 2, stop_at_first_report, clock=self.CountingClock(step=PROGRESS_REPORT_SECONDS))
+
+        assert len(reports) == 1
+        assert reports[0][0] < 40
+        # The generator of results was closed, which is how joblib learns to stop its workers.
+        assert self.InProcessParallel.closed == [True]
+
+    def test_stop_ends_real_workers_and_the_next_simulation_runs(self):
+        """With joblib itself: a stop raises no warning and leaves the pool usable. Costs a few seconds."""
+        import time
+        import warnings
+        from dice.analysis.simulation import run_in_joblib_workers
+
+        parameters = get_legacy_simulation_params()
+        x_axis, time_axis = np.linspace(-10, 10, 51), np.array([0.0, 1.0, 2.0])
+        arguments = [(run_id, x_axis, time_axis, parameters, 0.02, False, None) for run_id in range(3000)]
+        reports = []
+
+        def stop_at_first_report(done, total):
+            reports.append((done, total))
+            raise InterruptedError("Simulation cancelled by user")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(InterruptedError):
+                run_in_joblib_workers(arguments, 2, stop_at_first_report, clock=time.perf_counter)
+            results = run_in_joblib_workers(arguments[:4], 2)
+
+        assert len(reports) == 1 and reports[0][0] < 3000
+        assert [result.run_id for result in results] == [0, 1, 2, 3]
+
+
+class TestTimedBatches:
+    """Parallel batches cover every run once, keep every worker busy, and take about a second each."""
+
+    class Clock:
+        """A clock that the test advances by the duration of each batch."""
+
+        def __init__(self):
+            self.now = 0.0
+
+        def __call__(self) -> float:
+            return self.now
+
+    def _batches(self, run_count: int, worker_count: int, seconds_per_run: float) -> list:
+        """The batches of a simulation whose workers each take seconds_per_run for a run."""
+        from dice.analysis.simulation import timed_batches
+        clock = self.Clock()
+        batches = []
+        for batch in timed_batches(run_count, worker_count, clock=clock):
+            batches.append(batch)
+            clock.now += len(batch) * seconds_per_run / worker_count
+        return batches
+
+    @pytest.mark.parametrize('seconds_per_run', [0.0, 0.001, 0.05, 3.0])
     @pytest.mark.parametrize('worker_count', [1, 2, 8])
-    @pytest.mark.parametrize('run_count', [1, 7, 8, 9, 70, 71, 100])
-    def test_batches_cover_each_run_once(self, run_count, worker_count):
-        from dice.analysis.simulation import MAX_PROGRESS_BATCHES, split_into_batches
-        batches = split_into_batches(run_count, worker_count)
+    @pytest.mark.parametrize('run_count', [1, 7, 8, 9, 70, 71, 100, 5000])
+    def test_batches_cover_each_run_once(self, run_count, worker_count, seconds_per_run):
+        batches = self._batches(run_count, worker_count, seconds_per_run)
         assert [i for batch in batches for i in batch] == list(range(run_count))
-        assert 1 <= len(batches) <= MAX_PROGRESS_BATCHES
-        sizes = [len(batch) for batch in batches]
-        assert max(sizes) - min(sizes) <= 1
-        assert min(sizes) >= min(run_count, worker_count)
+        assert min(len(batch) for batch in batches) >= min(run_count, worker_count)
+
+    def test_first_batch_has_one_run_per_worker(self):
+        assert self._batches(1000, 8, 0.01)[0] == range(0, 8)
 
     def test_fewer_runs_than_workers_is_one_batch(self):
-        from dice.analysis.simulation import split_into_batches
-        assert split_into_batches(8, 8) == [range(0, 8)]
-        assert split_into_batches(3, 8) == [range(0, 3)]
+        assert self._batches(8, 8, 0.01) == [range(0, 8)]
+        assert self._batches(3, 8, 0.01) == [range(0, 3)]
 
     def test_no_runs_no_batches(self):
-        from dice.analysis.simulation import split_into_batches
-        assert split_into_batches(0, 8) == []
+        assert self._batches(0, 8, 0.01) == []
+
+    def test_batches_grow_to_the_target_duration(self):
+        """Eight workers at 10 ms a run finish 800 runs in the target second."""
+        from dice.analysis.simulation import MAX_BATCH_GROWTH, TARGET_BATCH_SECONDS
+        assert (MAX_BATCH_GROWTH, TARGET_BATCH_SECONDS) == (8, 1.0)
+
+        sizes = [len(batch) for batch in self._batches(100_000, 8, 0.01)]
+
+        assert sizes[:3] == [8, 64, 512]
+        # The clock is a sum of floating-point durations, so a size can be one run off.
+        assert all(abs(size - 800) <= 1 for size in sizes[3:-1])
+
+    def test_long_simulation_reports_often(self):
+        """A simulation of 200,000 runs reports about once a second, not ten times in all."""
+        seconds_per_run, worker_count = 0.015, 8
+        batches = self._batches(200_000, worker_count, seconds_per_run)
+        durations = [len(batch) * seconds_per_run / worker_count for batch in batches]
+
+        assert len(batches) > 300
+        assert max(durations) <= 2 * 1.0
+
+    def test_slow_runs_keep_one_run_per_worker(self):
+        """A run longer than the target cannot be split: each batch has one run per worker."""
+        assert {len(batch) for batch in self._batches(64, 8, 30.0)} == {8}
+
+    def test_runs_too_few_for_a_last_batch_join_the_batch_before(self):
+        batches = self._batches(20, 8, 30.0)
+        assert batches == [range(0, 8), range(8, 20)]
+
+    def test_batch_that_took_no_time_grows_by_the_largest_factor(self):
+        from dice.analysis.simulation import MAX_BATCH_GROWTH, next_batch_size
+        assert next_batch_size(8, 0.0, 8) == 8 * MAX_BATCH_GROWTH
+        assert next_batch_size(8, 1e-9, 8) == 8 * MAX_BATCH_GROWTH
 
 
 class TestNoiseLevelForEachRun:

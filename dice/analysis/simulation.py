@@ -7,9 +7,11 @@ simulations of diffusion measurements with noise.
 
 import multiprocessing as mp
 import sys
+import time
+import warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import List, Tuple, Optional, Any, Sequence, Union
+from typing import Callable, Iterator, List, Tuple, Optional, Any, Sequence, Union
 from joblib import Parallel, delayed, effective_n_jobs
 import pandas as pd
 
@@ -23,8 +25,19 @@ from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import joblib_workers_supported
 from ..utils.legacy_compatibility import LegacySimulationParameters
 
-# Most batches a parallel simulation is split into; the progress callback reports after each.
-MAX_PROGRESS_BATCHES = 10
+# The shortest time between two progress reports of a parallel simulation in
+# joblib's workers. Its results come back as they finish; a report for each
+# one would be more than a reader or a progress bar can use.
+PROGRESS_REPORT_SECONDS = 0.25
+# A parallel simulation in the process pool runs in batches. The progress
+# callback reports after each batch, and a stop that it asks for takes effect
+# there, so the duration of a batch is how soon a long simulation shows
+# progress and how long a stop can take. Each batch is sized from the
+# duration of the batch before it.
+TARGET_BATCH_SECONDS = 1.0
+# The most a batch grows from one to the next. The first batches are small,
+# and their duration holds the start of the worker pool.
+MAX_BATCH_GROWTH = 8
 
 # Worker pools for a parallel simulation: joblib's default (loky) backend, or
 # the standard library's ProcessPoolExecutor, which a standalone build uses.
@@ -232,19 +245,7 @@ def run_monte_carlo_simulation(
     if multiprocessing and parallel_backend == PROCESS_POOL_BACKEND:
         results = run_in_process_pool(run_parameters, effective_n_jobs(n_jobs), progress_callback)
     elif multiprocessing:
-        # Run in batches so the progress callback can report between them;
-        # joblib reuses its worker pool from one batch to the next.
-        results = []
-
-        for batch in split_into_batches(total_runs, effective_n_jobs(n_jobs)):
-            batch_results = Parallel(n_jobs=n_jobs)(
-                delayed(run_single_simulation)(*run_parameters[run_index])
-                for run_index in batch
-            )
-            results.extend(batch_results)
-
-            if progress_callback:
-                progress_callback(batch.stop, total_runs)
+        results = run_in_joblib_workers(run_parameters, n_jobs, progress_callback)
     else:
         # Sequential execution with optional progress updates
         results = []
@@ -365,24 +366,115 @@ def seeded_results_agree(actual: Any, desired: Any, rtol: float = SEEDED_RESULTS
     return bool(np.all(equal | (difference <= rtol * scale)))
 
 
-def split_into_batches(run_count: int, worker_count: int) -> List[range]:
-    """Consecutive run-index ranges for progress reporting, each with at least one run per worker.
+def run_in_joblib_workers(
+    run_parameters: List[tuple],
+    n_jobs: int,
+    progress_callback: Optional[callable] = None,
+    clock: Callable[[], float] = time.perf_counter,
+) -> List[RunResult]:
+    """Run each set of run_single_simulation arguments in joblib's worker pool, in one call.
 
-    At most MAX_PROGRESS_BATCHES batches, with sizes that differ by at most one.
-    A batch smaller than the worker pool would leave workers idle and make
-    them start one batch at a time instead of together.
+    The results come back in the order of the arguments, each as soon as it
+    and the ones before it have finished, and the progress callback reports
+    at most once in PROGRESS_REPORT_SECONDS and after the last run. The runs
+    are one call to joblib and not a series of batches, because joblib
+    adapts the number of runs it sends to a worker in one message during a
+    call, and starts that again with every call.
+
+    An exception that the callback raises (the GUI's Stop raises
+    InterruptedError) ends the runs that have not finished: joblib stops its
+    workers, and starts new ones for the next simulation.
+
+    Parameters
+    ----------
+    run_parameters : list of tuple
+        The arguments of run_single_simulation for each run.
+    n_jobs : int
+        Number of workers, as joblib reads it (-1 for one per processor).
+    progress_callback : callable, optional
+        Called with the number of finished runs and the number of runs.
+    clock : callable
+        Returns the time in seconds. Tests replace it.
+
+    Returns
+    -------
+    List[RunResult]
+        One result per set of arguments, in the same order.
     """
-    if run_count <= 0:
-        return []
-    batch_count = max(1, min(MAX_PROGRESS_BATCHES, run_count // max(1, worker_count)))
-    base_size, larger_batches = divmod(run_count, batch_count)
-    batches = []
+    total_runs = len(run_parameters)
+    finished_runs = Parallel(n_jobs=n_jobs, return_as="generator")(
+        delayed(run_single_simulation)(*arguments) for arguments in run_parameters
+    )
+    results = []
+    last_report = clock()
+    try:
+        for result in finished_runs:
+            results.append(result)
+            if progress_callback is None:
+                continue
+            if len(results) == total_runs or clock() - last_report >= PROGRESS_REPORT_SECONDS:
+                last_report = clock()
+                progress_callback(len(results), total_runs)
+    finally:
+        # After the last result this does nothing. After an exception it ends
+        # the runs that have not finished; joblib then warns that it
+        # cancelled them, which is what the exception asked for.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            finished_runs.close()
+    return results
+
+
+def timed_batches(
+    run_count: int,
+    worker_count: int,
+    clock: Callable[[], float] = time.perf_counter,
+) -> Iterator[range]:
+    """Consecutive run-index ranges, each sized so that its runs take about TARGET_BATCH_SECONDS.
+
+    The caller runs a batch before it asks for the next one, and the time
+    between the two requests is taken as the duration of the batch. The first
+    batch has one run per worker. Every batch has at least one run per
+    worker, because a smaller batch would leave workers idle; runs too few to
+    fill a last batch join the batch before them.
+
+    Parameters
+    ----------
+    run_count : int
+        Number of runs of the simulation.
+    worker_count : int
+        Number of worker processes.
+    clock : callable
+        Returns the time in seconds. Tests replace it.
+
+    Yields
+    ------
+    range
+        The run indices of the next batch.
+    """
+    worker_count = max(1, worker_count)
+    size = worker_count
     start = 0
-    for batch_index in range(batch_count):
-        stop = start + base_size + (1 if batch_index < larger_batches else 0)
-        batches.append(range(start, stop))
+    while start < run_count:
+        stop = start + size
+        if run_count - stop < worker_count:
+            stop = run_count
+        began = clock()
+        yield range(start, stop)
+        size = next_batch_size(stop - start, clock() - began, worker_count)
         start = stop
-    return batches
+
+
+def next_batch_size(batch_size: int, batch_seconds: float, worker_count: int) -> int:
+    """Number of runs that take about TARGET_BATCH_SECONDS, from the duration of the batch before.
+
+    At least one run per worker, and at most MAX_BATCH_GROWTH times the batch before.
+    """
+    largest = batch_size * MAX_BATCH_GROWTH
+    if batch_seconds <= 0:
+        return largest
+    size = int(batch_size * TARGET_BATCH_SECONDS / batch_seconds)
+    return max(worker_count, min(size, largest))
 
 
 def default_parallel_backend() -> str:
@@ -405,9 +497,10 @@ def run_in_process_pool(
     forked copy of the GUI process would inherit its threads. A standalone
     build calls multiprocessing.freeze_support() first thing in its entry
     script, so that each worker it spawns runs simulations instead of the
-    application. As in the joblib path, the progress callback reports after
-    each batch; an exception it raises (the GUI's Stop raises
-    InterruptedError) propagates once the workers have exited.
+    application. The runs are sent in batches of about TARGET_BATCH_SECONDS
+    (timed_batches), and the progress callback reports after each batch; an
+    exception it raises (the GUI's Stop raises InterruptedError) propagates
+    once the workers have exited.
 
     Returns
     -------
@@ -421,7 +514,7 @@ def run_in_process_pool(
 
     results = []
     with ProcessPoolExecutor(max_workers=worker_count, mp_context=mp.get_context('spawn')) as executor:
-        for batch in split_into_batches(total_runs, worker_count):
+        for batch in timed_batches(total_runs, worker_count):
             # Several runs per message to a worker, and still several
             # messages per worker, so that workers that finish early take more.
             chunk_size = max(1, len(batch) // (4 * worker_count))

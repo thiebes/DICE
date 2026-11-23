@@ -82,8 +82,14 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     if quiet or not verbose:
         return None
     
+    last_reported = 0
+
     def progress_callback(current: int, total: int):
-        if current % interval == 0 or current == total:
+        # A parallel simulation reports at counts that follow the clock, so
+        # the test is whether a multiple of the interval has been passed.
+        nonlocal last_reported
+        if current // interval > last_reported // interval or current == total:
+            last_reported = current
             percent = (current / total) * 100
             print(f"Progress: {current}/{total} runs completed ({percent:.1f}%)")
     
