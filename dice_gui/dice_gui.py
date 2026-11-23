@@ -2072,7 +2072,8 @@ class DiceGUI(QMainWindow):
         elif result is not None:
             slug = (self.interface.last_parameters or {}).get('filename slug', '')
             name = f" {slug}" if slug else ""
-            self.results_status_label.setText(f"Simulation results:{name} ({result.num_runs} runs)")
+            noun = "run" if result.num_runs == 1 else "runs"
+            self.results_status_label.setText(f"Simulation results:{name} ({result.num_runs:,} {noun})")
         else:
             self.results_status_label.setText("No data loaded")
 
