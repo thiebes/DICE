@@ -171,6 +171,10 @@ class TestDefaultValues:
                 window.precision_bias_label.text(), window.precision_mean_ratio_label.text()] == ["—"] * 4
         assert not window.precision_placeholder.isHidden()
         assert window.precision_placeholder.text() == "Run a simulation to see results."
+        # No line is kept for the sentence about the threshold: with it the tab
+        # was taller than its view in a window of the default size.
+        assert window.proximity_fraction_label.text() == ""
+        assert window.proximity_fraction_label.isHidden()
         assert not window.explore_proximity_group.isEnabled()
         assert window.proximity_spin.value() == pytest.approx(0.10)
         assert window.proximity_pct_label.text() == "(±10%)"

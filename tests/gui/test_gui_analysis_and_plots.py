@@ -85,6 +85,7 @@ class TestPrecisionSummary:
 
     def test_results_enable_the_threshold_tool(self, window_with_results):
         assert window_with_results.precision_placeholder.isHidden()
+        assert not window_with_results.proximity_fraction_label.isHidden()
         assert window_with_results.explore_proximity_group.isEnabled()
 
     def test_run_results_are_held_in_memory_not_as_a_loaded_file(self, window_with_results):
@@ -336,6 +337,7 @@ class TestFitWithoutEstimates:
 
         assert _summary_labels(window) == ["—"] * 4
         assert window.proximity_fraction_label.text() == ""
+        assert window.proximity_fraction_label.isHidden()
         assert window.proximity_histogram.ratios().size == 0
         assert not window.precision_placeholder.isHidden()
         assert window.precision_placeholder.text() == "The selected fit has no estimates in these results."

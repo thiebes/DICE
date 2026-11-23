@@ -130,6 +130,8 @@ def create_tab_analysis_settings(main_window: "DiceGUI") -> QWidget:
     main_window.proximity_fraction_label = QLabel("")
     main_window.proximity_fraction_label.setStyleSheet("font-weight: bold;")
     main_window.proximity_fraction_label.setWordWrap(True)
+    # Hidden while it has no text (set_fraction_text).
+    main_window.proximity_fraction_label.setVisible(False)
     explore_layout.addWidget(main_window.proximity_fraction_label)
 
     # Histogram of the estimates, with the part within the threshold highlighted
@@ -156,6 +158,17 @@ def selected_estimator_key(main_window: "DiceGUI") -> str:
     return 'wls' if main_window.plot_method_wls_radio.isChecked() else 'ols'
 
 
+def set_fraction_text(main_window: "DiceGUI", text: str) -> None:
+    """Show the sentence about the estimates within the threshold, and hide its label when there is none.
+
+    An empty label keeps a line of the tab. Without results the Precision
+    Summary shows its placeholder row instead, and with both lines the tab is
+    taller than its view in a window of the default size.
+    """
+    main_window.proximity_fraction_label.setText(text)
+    main_window.proximity_fraction_label.setVisible(bool(text))
+
+
 def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
     """Handle proximity spin box value change: update the label, the histogram, and the fraction."""
     pct = int(round(value * 100))
@@ -169,12 +182,13 @@ def _on_proximity_changed(main_window: "DiceGUI", value: float) -> None:
         main_window.proximity_histogram.set_ratios(main_window.interface.estimate_ratios(estimator))
         detail = main_window.interface.proximity_detail(value, estimator=estimator)
         if detail is None:
-            main_window.proximity_fraction_label.setText("")
+            set_fraction_text(main_window, "")
         else:
             # The fraction comes from a finite number of runs, so it is shown
             # with its count and its 95% interval, as in the summary file.
             from dice.io.results import fraction_text
-            main_window.proximity_fraction_label.setText(
+            set_fraction_text(
+                main_window,
                 f"Within ±{pct}% of nominal: "
                 f"{fraction_text(detail['fraction'], detail, interval_label='95% interval ')}"
             )
@@ -246,6 +260,6 @@ def reset_precision_summary(main_window: "DiceGUI", placeholder: str = NO_RESULT
     main_window.precision_bias_label.setText("—")
     main_window.precision_mean_ratio_label.setText("—")
     main_window.precision_placeholder.setVisible(True)
-    main_window.proximity_fraction_label.setText("")
+    set_fraction_text(main_window, "")
     main_window.proximity_histogram.set_ratios(None)
     main_window.explore_proximity_group.setEnabled(False)
