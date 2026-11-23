@@ -308,9 +308,8 @@ and Fixed give the details.
   the chosen unit or `amplitude_0` is below about 0.01. Every release since
   1.0.0 fits the same way, so results from earlier releases with lengths in
   centimeters or meters, or with a small amplitude, are affected. For results
-  in micrometers or nanometers with an amplitude near 1 the error was small.
-  The table above says what changes in them: the first row for micrometers
-  and nanoseconds, and the row on other units for nanometers.
+  in micrometers or nanometers with an amplitude near 1 this error was
+  small. The table above lists the other changes in results from 1.2.0.
 - Results in length or time units other than micrometer and nanosecond are
   converted and labeled correctly. In 1.2.0 the command-line interface wrote
   the results file and the summary as if the units were micrometer and
