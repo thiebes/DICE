@@ -72,7 +72,8 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     quiet : bool
         Whether to suppress output.
     interval : int
-        Update interval for progress messages.
+        A message is printed each time the number of finished runs passes a
+        multiple of this number, and after the last run.
     
     Returns
     -------

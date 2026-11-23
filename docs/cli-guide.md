@@ -67,7 +67,7 @@ dice [options] parameters_file
 | `--multiprocessing N` | `0` runs the simulations one after another. A positive `N` runs them in parallel in `N` worker processes, and `-1` uses all CPU cores. Overrides the `multiprocessing` parameter. |
 | `--seed N` | Use the random seed `N` (a non-negative integer) for the noise. See [Reproducible results](#reproducible-results). |
 | `--export-format {csv,json,both}` | `csv` (default) writes the results file `<slug>.csv`. `json` writes `<slug>.json` with the parameters and the summary statistics, but no per-run results. Its values are in the units of the simulation, which `summary.units` names. With a noise range, it also has the noise standard deviation of each run and the statistics of each CNR bin. `both` writes both files. |
-| `--progress-interval N` | With `--verbose`, the number of runs between progress messages (default 100). |
+| `--progress-interval N` | With `--verbose`, a progress message each time the number of finished runs passes a multiple of N, and at the end (default 100). A serial simulation reports at every multiple; a parallel simulation reports at the first count past each one. |
 | `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
 | `--dry-run`, `--check` | Load and validate the parameters file as a real run would, then stop without a simulation and without writing files. |
 | `--version` | Print the version and stop. |

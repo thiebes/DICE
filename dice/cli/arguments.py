@@ -124,7 +124,7 @@ For more information, visit: https://github.com/thiebes/DICE
         type=int,
         default=100,
         metavar='N',
-        help='Progress update interval for verbose mode (default: 100)'
+        help='With --verbose, print progress each time the number of finished runs passes a multiple of N (default: 100)'
     )
     
     return parser
