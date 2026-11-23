@@ -29,6 +29,8 @@ from ..utils.legacy_compatibility import LegacySimulationParameters
 # joblib's workers. Its results come back as they finish; a report for each
 # one would be more than a reader or a progress bar can use.
 PROGRESS_REPORT_SECONDS = 0.25
+# What joblib warns of when the generator of its results is closed early.
+JOBLIB_EARLY_EXIT_MESSAGE = r".*(executed\s+but not used|have been cancelled)"
 # A parallel simulation in the process pool runs in batches. The progress
 # callback reports after each batch, and a stop that it asks for takes effect
 # there, so the duration of a batch is how soon a long simulation shows
@@ -412,15 +414,18 @@ def run_in_joblib_workers(
             results.append(result)
             if progress_callback is None:
                 continue
-            if len(results) == total_runs or clock() - last_report >= PROGRESS_REPORT_SECONDS:
-                last_report = clock()
+            now = clock()
+            if len(results) == total_runs or now - last_report >= PROGRESS_REPORT_SECONDS:
+                last_report = now
                 progress_callback(len(results), total_runs)
     finally:
         # After the last result this does nothing. After an exception it ends
         # the runs that have not finished; joblib then warns that it
-        # cancelled them, which is what the exception asked for.
+        # cancelled them or did not use their results, which is what the
+        # exception asked for. Only these two messages are ignored.
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
+            warnings.filterwarnings(
+                "ignore", message=JOBLIB_EARLY_EXIT_MESSAGE, category=UserWarning, module="joblib")
             finished_runs.close()
     return results
 

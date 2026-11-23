@@ -634,7 +634,7 @@ class TestWorkerCountReachesJoblib:
         )
 
     @pytest.mark.parametrize('n_jobs', [1, 3, -1])
-    def test_n_jobs_is_passed_to_every_parallel_call(self, monkeypatch, n_jobs):
+    def test_n_jobs_reaches_the_one_parallel_call(self, monkeypatch, n_jobs):
         import dice.analysis.simulation as simulation
 
         serial = self._simulate(multiprocessing=False)
@@ -694,8 +694,8 @@ class TestJoblibProgressAndStop:
     def test_reports_follow_the_clock_and_end_with_the_last_run(self, run_parameters):
         from dice.analysis.simulation import PROGRESS_REPORT_SECONDS, run_in_joblib_workers
         reports = []
-        # The clock is read once at the start and once or twice for each
-        # result, so the report interval passes every few results.
+        # The clock is read once at the start and once for each result, so
+        # the report interval passes every fourth result.
         clock = self.CountingClock(step=PROGRESS_REPORT_SECONDS / 4)
 
         results = run_in_joblib_workers(
@@ -716,7 +716,7 @@ class TestJoblibProgressAndStop:
 
         assert reports == [(40, 40)]
 
-    def test_no_callback_no_reports(self, run_parameters):
+    def test_no_callback_returns_all_results_and_closes(self, run_parameters):
         from dice.analysis.simulation import run_in_joblib_workers
         assert run_in_joblib_workers(run_parameters, 2) == list(range(40))
         assert self.InProcessParallel.closed == [True]
@@ -739,10 +739,19 @@ class TestJoblibProgressAndStop:
         assert self.InProcessParallel.closed == [True]
 
     def test_stop_ends_real_workers_and_the_next_simulation_runs(self):
-        """With joblib itself: a stop raises no warning and leaves the pool usable. Costs a few seconds."""
+        """With joblib itself: a stop replaces the workers, raises no warning, and leaves the pool usable.
+
+        Costs a few seconds.
+        """
+        import os
         import time
         import warnings
+        from joblib import Parallel, delayed
         from dice.analysis.simulation import run_in_joblib_workers
+
+        def worker_processes() -> set:
+            """Process identifiers of the workers that joblib uses for two jobs."""
+            return set(Parallel(n_jobs=2)(delayed(os.getpid)() for _ in range(8)))
 
         parameters = get_legacy_simulation_params()
         x_axis, time_axis = np.linspace(-10, 10, 51), np.array([0.0, 1.0, 2.0])
@@ -755,11 +764,18 @@ class TestJoblibProgressAndStop:
 
         with warnings.catch_warnings():
             warnings.simplefilter("error")
+            workers_before = worker_processes()
             with pytest.raises(InterruptedError):
                 run_in_joblib_workers(arguments, 2, stop_at_first_report, clock=time.perf_counter)
+            workers_after = worker_processes()
             results = run_in_joblib_workers(arguments[:4], 2)
 
         assert len(reports) == 1 and reports[0][0] < 3000
+        # joblib ended the workers that held the runs not yet finished, and
+        # started others. Workers that were left to finish those runs would
+        # answer here under the same identifiers.
+        assert workers_before and workers_after
+        assert workers_before.isdisjoint(workers_after)
         assert [result.run_id for result in results] == [0, 1, 2, 3]
 
 
@@ -815,7 +831,7 @@ class TestTimedBatches:
         assert all(abs(size - 800) <= 1 for size in sizes[3:-1])
 
     def test_long_simulation_reports_often(self):
-        """A simulation of 200,000 runs reports about once a second, not ten times in all."""
+        """A simulation of 200,000 runs reports about once a second."""
         seconds_per_run, worker_count = 0.015, 8
         batches = self._batches(200_000, worker_count, seconds_per_run)
         durations = [len(batch) * seconds_per_run / worker_count for batch in batches]
