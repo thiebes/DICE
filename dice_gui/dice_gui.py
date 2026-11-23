@@ -357,9 +357,6 @@ class DiceGUI(QMainWindow):
             self.length_unit_combo.setCurrentText(dialog.selected_length_unit())
             self.time_unit_combo.setCurrentText(dialog.selected_time_unit())
 
-    # NOTE: create_tab1_simulation_setup through create_tab5_output_settings methods
-    # have been moved to dice_gui/tabs/ modules
-
     def create_control_panel(self) -> QWidget:
         """Create the sticky bottom control panel."""
         from PyQt6.QtCore import QElapsedTimer

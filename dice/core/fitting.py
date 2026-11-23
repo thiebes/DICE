@@ -133,8 +133,9 @@ def gauss_fitting(x_axis: np.ndarray, noisy_profiles: Union[np.ndarray, List]) -
         # on an axis centered on 0.
         mu0 = 0.0
         sigma2_0 = (xwid / 4) ** 2  # Sigma^2 guess: 1/16 of squared scan width
-        # Amplitude: the largest absolute value of the profile. The absolute
-        # value keeps the guess inside the bounds, which start at 0.
+        # Amplitude: the largest absolute value of the profile, which is 1
+        # after the scaling above (0 for a zero profile). The absolute value
+        # keeps the guess inside the bounds, which start at 0.
         largest_value = np.max(np.abs(this_profile))
         a0 = largest_value
         

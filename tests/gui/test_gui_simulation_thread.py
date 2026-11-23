@@ -167,7 +167,7 @@ class TestFailedRun:
         assert error.startswith("Error reading CSV for noise estimation: ")
         assert "absent.csv" in error and "could not be read" in error
         assert log.results == []
-        assert log.messages == [f"Running 5 iterations ({os.cpu_count()} CPU cores)..."]
+        assert log.messages == [f"Running 5 runs ({os.cpu_count()} CPU cores)..."]
 
     def test_missing_required_parameter_is_named(self, qtbot):
         parameters = quick_test_engine_parameters(number_of_runs=5)
@@ -407,14 +407,14 @@ class TestClosingDuringARun:
         # A second close while DICE waits asks nothing and changes nothing.
         assert window.close() is False
         assert dialogs.titles("question") == ["Simulation Running"]
-        window.update_progress("Running 5 iterations...")
+        window.update_progress("Running 5 runs...")
         assert window.status_label.text().startswith("Stopping. DICE exits when")
 
         qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
 
         assert window.simulation_thread is None  # released after its run returned
         assert thread_calls["terminate"] == 0
-        # A wait with a time limit is how a long parallel batch used to be cut off.
+        # A wait with a time limit would cut off a run that has not stopped yet.
         assert thread_calls["wait"] and all(arguments == () for arguments in thread_calls["wait"])
         # The questions were answered before the wait and are not asked again.
         assert dialogs.titles("question") == ["Simulation Running"]

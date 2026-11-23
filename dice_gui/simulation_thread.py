@@ -35,7 +35,7 @@ class SimulationThread(QThread):
             if is_parallel:
                 import os
                 cpu_count = os.cpu_count() or 1
-                self.progress.emit(f"Running {num_runs:,} iterations ({cpu_count} CPU cores)...")
+                self.progress.emit(f"Running {num_runs:,} runs ({cpu_count} CPU cores)...")
             else:
                 self.progress.emit("Starting simulation...")
 
