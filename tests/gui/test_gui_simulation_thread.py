@@ -167,7 +167,18 @@ class TestFailedRun:
         assert error.startswith("Error reading CSV for noise estimation: ")
         assert "absent.csv" in error and "could not be read" in error
         assert log.results == []
-        assert log.messages == [f"Running 5 runs ({os.cpu_count()} CPU cores)..."]
+        assert log.messages == [f"Running 5 runs ({os.cpu_count()} logical processors)..."]
+
+    def test_status_text_of_one_run_on_one_processor_is_singular(self, qtbot, work_dir, monkeypatch):
+        parameters = quick_test_engine_parameters(number_of_runs=1)
+        del parameters["noise value"]
+        parameters["estimate noise from data"] = str(work_dir / "absent.csv")
+        parameters["multiprocessing"] = True
+        monkeypatch.setattr(os, "cpu_count", lambda: 1)
+
+        _, log = _run_to_signal(qtbot, parameters, "error")
+
+        assert log.messages == ["Running 1 run (1 logical processor)..."]
 
     def test_missing_required_parameter_is_named(self, qtbot):
         parameters = quick_test_engine_parameters(number_of_runs=5)

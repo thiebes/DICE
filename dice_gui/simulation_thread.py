@@ -36,7 +36,8 @@ class SimulationThread(QThread):
                 import os
                 cpu_count = os.cpu_count() or 1
                 noun = "run" if num_runs == 1 else "runs"
-                self.progress.emit(f"Running {num_runs:,} {noun} ({cpu_count} CPU cores)...")
+                processors = "logical processor" if cpu_count == 1 else "logical processors"
+                self.progress.emit(f"Running {num_runs:,} {noun} ({cpu_count} {processors})...")
             else:
                 self.progress.emit("Starting simulation...")
 

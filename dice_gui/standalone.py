@@ -119,7 +119,7 @@ def run_self_test(output: Optional[TextIO]) -> bool:
     # in a regular installation, are not the pool's.
     earlier_children = set(multiprocessing.active_children())
     parallel, progress, parallel_seconds = simulate(parallel=True)
-    print(f"Process pool on {cpu_count()} CPU cores: {len(parallel)} runs in {parallel_seconds:.1f} s",
+    print(f"Process pool on {cpu_count()} logical processors: {len(parallel)} runs in {parallel_seconds:.1f} s",
           file=output)
 
     total_runs = len(serial)
