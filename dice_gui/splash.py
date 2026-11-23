@@ -21,6 +21,9 @@ class DiceSplashScreen(QWidget):
             Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.FramelessWindowHint
         )
+        # The splash screen is not a window of the application: closing it
+        # must not end the application while the main window is not yet shown.
+        self.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
 
         self._progress = 0
         self._message = "Starting..."

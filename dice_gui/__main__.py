@@ -7,6 +7,17 @@ Usage: python -m dice_gui
 import sys
 
 
+def show_main_window(window, splash) -> None:
+    """Show the main window, then close the splash screen.
+
+    The order matters. Qt ends the application when its last visible window
+    closes, so a splash screen that closes while the main window is not yet
+    shown can end the application at startup.
+    """
+    window.show()
+    splash.close()
+
+
 def main():
     """Main entry point with splash screen."""
     # Import Qt first (lightweight)
@@ -96,9 +107,8 @@ def main():
 
     splash.set_progress(100, "Ready to simulate!")
 
-    # Small delay to show 100% before closing
-    QTimer.singleShot(200, splash.close)
-    QTimer.singleShot(200, window.show)
+    # Small delay to show 100% before the main window replaces the splash
+    QTimer.singleShot(200, lambda: show_main_window(window, splash))
 
     sys.exit(app.exec())
 
