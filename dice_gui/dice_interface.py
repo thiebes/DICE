@@ -4,6 +4,7 @@ Interface between GUI and DICE simulation engine.
 This module handles parameter conversion and simulation execution.
 """
 
+from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 import sys
 import os
@@ -313,6 +314,11 @@ class DiceInterface:
             self.last_output_error = file_error_text(e)
         return result, processed_params
 
+    @staticmethod
+    def output_directory(processed_params: Dict[str, Any]) -> Path:
+        """Folder of the output files of a simulation: the folder of its filename slug in the output root."""
+        return output_root() / processed_params.get('filename slug', 'dice_output')
+
     def write_outputs(self, result: MonteCarloOutput, processed_params: Dict[str, Any]) -> None:
         """
         Write the results file, the summary and the accuracy histogram of a simulation.
@@ -340,7 +346,7 @@ class DiceInterface:
 
         # Setup output directory
         slug = processed_params.get('filename slug', 'dice_output')
-        output_dir = output_root() / slug
+        output_dir = self.output_directory(processed_params)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Results are in the global units resolve_units() converted to;

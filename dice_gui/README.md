@@ -71,7 +71,7 @@ The analysis acts on the results of the last simulation. It does not change the 
 
 ### Menus
 
-- **File**: new, open, and save parameters files (the same text format that the command-line interface reads), recently used parameters files, and **Load Results...** (Ctrl+L) for a results CSV file. **Write Output Files** is available when the output files of a finished simulation could not be written, for example because the results file was open in another program; the GUI keeps the results until then, and asks before a new simulation, a loaded results file, or the exit discards them.
+- **File**: new, open, and save parameters files (the same text format that the command-line interface reads), recently used parameters files, and **Load Results...** (Ctrl+L) for a results CSV file. **Write Output Files** is available when the output files of a finished simulation could not be written, for example because the results file was open in another program; the GUI keeps the results until then, and asks before a new simulation, a loaded results file, or the exit discards them. A message names the folder when the files are written.
 - **Plots**: **Accuracy Histogram** (Ctrl+H) redraws the histogram from the loaded results. The other entries in the menu are disabled.
 - **Settings**: **Global Units...** sets the default length unit and time unit.
 - **Help**: a link to the documentation, the list of keyboard shortcuts, and version information.

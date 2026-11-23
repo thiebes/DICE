@@ -501,7 +501,10 @@ class TestOutputFilesThatCannotBeWritten:
         dialogs.shown.clear()
         window.write_outputs_action.trigger()
 
-        assert dialogs.titles() == []  # written at once, so there is nothing to ask
+        # Written at once, so there is nothing to ask: one message says where the files are.
+        assert dialogs.titles() == ["Output Files Written"]
+        assert dialogs.titles("information") == ["Output Files Written"]
+        assert str(work_dir / "output" / "quick_test") in dialogs.texts("information")[0]
         assert sorted(path.name for path in (work_dir / "output" / "quick_test").iterdir()) == [
             "quick_test.csv", "quick_test_accuracy_histogram.png", "quick_test_summary.txt",
         ]

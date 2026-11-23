@@ -1367,6 +1367,14 @@ class DiceGUI(QMainWindow):
         self.interface.retry_write_outputs()
         if self._offer_to_write_output_files():
             self.status_label.setText("Output files written")
+            # The status line is easy to miss, and a run that writes its
+            # files at once confirms with a dialog too.
+            QMessageBox.information(
+                self,
+                "Output Files Written",
+                "The output files of the last simulation have been written to:\n\n"
+                f"{self.interface.output_directory(self.interface.last_parameters)}"
+            )
 
     def _populate_precision_from_results(self):
         """Extract precision metrics from last results and populate the analysis tab."""
