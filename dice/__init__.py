@@ -5,7 +5,7 @@ A Python package for quantifying noise effects in optical measures of
 excited state transport in optoelectronic semiconducting materials.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.0.0.dev0"
 __author__ = "Joseph J. Thiebes"
 __license__ = "MIT"
 
