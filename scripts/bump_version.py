@@ -10,6 +10,10 @@ Usage:
 
 Example:
     python scripts/bump_version.py 1.3.0 --date 2025-09-15
+
+Between releases, the main branch carries a development version of the next
+release, for example 1.3.0.dev0, so that its outputs do not name a release
+that does not exist yet.
 """
 
 import argparse
@@ -31,10 +35,18 @@ def write_file(file_path: Path, content: str) -> None:
         f.write(content)
 
 
+DEVELOPMENT_SUFFIX = r'\.dev\d+'
+
+
 def validate_version(version: str) -> bool:
-    """Validate that version follows semantic versioning."""
-    pattern = r'^\d+\.\d+\.\d+$'
+    """Validate that the version is X.Y.Z, or X.Y.Z.devN for a development version."""
+    pattern = rf'^\d+\.\d+\.\d+({DEVELOPMENT_SUFFIX})?$'
     return bool(re.match(pattern, version))
+
+
+def is_development_version(version: str) -> bool:
+    """Whether the version is one between releases, such as 2.0.0.dev0."""
+    return bool(re.search(rf'{DEVELOPMENT_SUFFIX}$', version))
 
 
 def validate_date(date_str: str) -> bool:
@@ -169,7 +181,7 @@ def main():
     # Validate inputs
     if not validate_version(args.version):
         print(f"ERROR: Invalid version format: {args.version}")
-        print("Version must follow semantic versioning (e.g., 1.2.0)")
+        print("Version must be X.Y.Z (e.g., 1.2.0), or X.Y.Z.devN for a development version (e.g., 1.3.0.dev0)")
         sys.exit(1)
 
     if not validate_date(args.date):
@@ -216,9 +228,12 @@ def main():
         print("  2. Review changes: git diff")
         print("  3. Run tests to ensure everything works")
         print(f"  4. Commit changes: git add -A && git commit -m \"Bump version to {args.version}\"")
-        print(f"  5. Tag release: git tag -a v{args.version} -m \"Release v{args.version}\"")
-        print("  6. Push: git push && git push --tags")
-        print(f"  7. Publish a GitHub release for v{args.version} to build and attach the executables")
+        if is_development_version(args.version):
+            print("  5. Push: git push. A development version gets no tag and no release.")
+        else:
+            print(f"  5. Tag release: git tag -a v{args.version} -m \"Release v{args.version}\"")
+            print("  6. Push: git push && git push --tags")
+            print(f"  7. Publish a GitHub release for v{args.version} to build and attach the executables")
     else:
         print("\nERROR: Some files could not be updated")
         sys.exit(1)
