@@ -29,7 +29,7 @@ from ..core.noise import (
 )
 from ..models.parameters import NoiseRange
 from ..models.parameter_keys import (
-    normalize_parameters, normalize_parameter_key, add_legacy_keys
+    normalize_parameters, normalize_parameter_key, add_legacy_keys, check_one_spelling_per_key
 )
 
 # Keys of the proximity-level parameter, retired from the simulation schema;
@@ -597,6 +597,9 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     # Make a working copy - don't normalize yet to preserve original key format
     # The check_for_unique_key function handles both formats
     parameters_dictionary = dict(parameters_dictionary)
+    # The parser reads either spelling of a key, so a dictionary with both
+    # would use one value and ignore the other.
+    check_one_spelling_per_key(parameters_dictionary)
 
     for message in check_retired_parameters(parameters_dictionary):
         warnings.warn(message, stacklevel=2)

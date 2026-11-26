@@ -1567,10 +1567,14 @@ class DiceGUI(QMainWindow):
         """
         import ast
         from dice.io.parameters import read_parameters_text, resolve_noise_data_path
+        from dice.models.parameter_keys import check_one_spelling_per_key
 
         params = ast.literal_eval(read_parameters_text(file_path))
         if not isinstance(params, dict):
             raise ValueError("The file does not hold a parameters dictionary.")
+        # The command-line interface rejects such a file too, and the form
+        # would show one of the two values without saying so.
+        check_one_spelling_per_key(params)
         return resolve_noise_data_path(params, Path(file_path).parent)
 
     def load_example(self, example_name: str):

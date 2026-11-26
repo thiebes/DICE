@@ -819,6 +819,58 @@ def quick_test_raw() -> dict:
     return ast.literal_eval(QUICK_TEST_FILE.read_text(encoding='utf-8'))
 
 
+class TestOneSpellingPerKey:
+    """A parameter given under two spellings is rejected: the parser would use one value and ignore the other."""
+
+    @staticmethod
+    def alias_pairs() -> list:
+        from dice.models.parameter_keys import PARAMETER_ALIASES
+        return [(alias, canonical) for alias, canonical in PARAMETER_ALIASES.items() if alias != canonical]
+
+    def test_every_alias_of_the_table_counts_as_a_second_spelling(self):
+        from dice.models.parameter_keys import duplicate_spellings
+        pairs = self.alias_pairs()
+        assert ('time series', 'time_series') in pairs and ('mean_0', 'mu_0') in pairs
+
+        for alias, canonical in pairs:
+            assert duplicate_spellings({alias: 1, 'number of runs': 5, canonical: 1}) == [[alias, canonical]]
+
+    def test_one_spelling_of_each_key_passes(self):
+        from dice.models.parameter_keys import check_one_spelling_per_key
+        check_one_spelling_per_key(quick_test_raw())
+        check_one_spelling_per_key({'time_series': [0, 1], 'mu_0': 0.0, 'image type': 'png'})
+
+    @pytest.mark.parametrize('first, second, first_value, second_value', [
+        ('time range', 'time_range', [0, 1, 5], [0, 1, 5]),   # equal values are rejected too
+        ('mean_0', 'mu_0', 0.0, 0.5),
+        ('FWHM_0', 'fwhm_0', 1, 2),
+        ('image numbins', 'image_numbins', 35, 20),
+    ])
+    def test_parser_rejects_two_spellings_and_names_both(self, first, second, first_value, second_value):
+        raw = quick_test_raw() | {first: first_value, second: second_value}
+
+        with pytest.raises(ValueError, match=re.escape(f"{first!r} and {second!r} are spellings of one parameter")):
+            parameter_parser(raw)
+
+    def test_every_group_is_named(self):
+        raw = quick_test_raw() | {'time_range': [0, 1, 5], 'number_of_runs': 100}
+
+        with pytest.raises(ValueError) as raised:
+            parameter_parser(raw)
+
+        message = str(raised.value)
+        assert "'number of runs' and 'number_of_runs' are spellings of one parameter." in message
+        assert "'time range' and 'time_range' are spellings of one parameter." in message
+        assert message.endswith("Give each parameter once, in one spelling.")
+
+    def test_file_with_two_spellings_is_rejected_when_it_is_read(self, tmp_path):
+        params_file = tmp_path / 'two_spellings.txt'
+        params_file.write_text(str(quick_test_raw() | {'time_range': [0, 1, 5]}), encoding='utf-8')
+
+        with pytest.raises(ValueError, match="'time range' and 'time_range' are spellings of one parameter"):
+            open_parameters(params_file)
+
+
 class TestOptionalKeysInEitherSpelling:
     """A value given under the underscore spelling of an optional key is not replaced by the default."""
 

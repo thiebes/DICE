@@ -6,7 +6,7 @@ enabling both legacy (space-separated) and modern (snake_case) formats
 to coexist during the migration period.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 
 class ParameterKey:
@@ -206,6 +206,51 @@ def normalize_parameter_key(key: str) -> str:
     'number_of_runs'
     """
     return PARAMETER_ALIASES.get(key, key)
+
+
+def duplicate_spellings(params: Dict[str, Any]) -> List[List[str]]:
+    """
+    The groups of keys of a dictionary that are spellings of one parameter.
+
+    Two keys are spellings of one parameter when normalize_parameter_key
+    gives both the same name, as for 'time series' and 'time_series', or
+    'mean_0' and 'mu_0'.
+
+    Parameters
+    ----------
+    params : dict
+        Parameters dictionary with keys in any spelling.
+
+    Returns
+    -------
+    list of list of str
+        Each group of two or more spellings, in the order of the dictionary.
+    """
+    spellings: Dict[str, List[str]] = {}
+    for key in params:
+        spellings.setdefault(normalize_parameter_key(key), []).append(key)
+    return [keys for keys in spellings.values() if len(keys) > 1]
+
+
+def check_one_spelling_per_key(params: Dict[str, Any]) -> None:
+    """
+    Reject a dictionary that gives one parameter under two spellings.
+
+    Only one of the values would be used and the other ignored, even when
+    they are equal, so neither is chosen.
+
+    Raises
+    ------
+    ValueError
+        Naming every group of spellings, if there is one.
+    """
+    groups = duplicate_spellings(params)
+    if groups:
+        sentences = [
+            f"{', '.join(repr(key) for key in keys[:-1])} and {keys[-1]!r} are spellings of one parameter."
+            for keys in groups
+        ]
+        raise ValueError(" ".join(sentences) + " Give each parameter once, in one spelling.")
 
 
 def normalize_parameters(params: Dict[str, Any]) -> Dict[str, Any]:
