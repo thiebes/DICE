@@ -20,7 +20,6 @@ from dice.utils.converters import (
     sigma_to_fwhm as _sigma_to_fwhm,
     calculate_pixel_size as _calculate_pixel_size,
 )
-from dice.core.diffusion import calculate_diffusion_length as _calculate_diffusion_length
 
 
 class ValidationResult:
@@ -189,23 +188,6 @@ def convert_sigma_to_fwhm(sigma_str: str) -> ValidationResult:
     try:
         fwhm = _sigma_to_fwhm(result.value)
         return ValidationResult(True, value=fwhm)
-    except ValueError as e:
-        return ValidationResult(False, str(e))
-
-
-def calculate_diffusion_length(d_str: str, tau_str: str) -> ValidationResult:
-    """Calculate diffusion length from D and tau strings, returning ValidationResult."""
-    d_result = validate_positive_float(d_str, "D", allow_zero=True)
-    if not d_result:
-        return d_result
-
-    tau_result = validate_positive_float(tau_str, "tau", allow_zero=True)
-    if not tau_result:
-        return tau_result
-
-    try:
-        length = _calculate_diffusion_length(d_result.value, tau_result.value)
-        return ValidationResult(True, value=length)
     except ValueError as e:
         return ValidationResult(False, str(e))
 

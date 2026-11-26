@@ -29,24 +29,6 @@ def add_accessible_name_and_description(
         widget.setAccessibleDescription(description)
 
 
-def add_tooltip_with_accessible_description(
-    widget: QWidget,
-    tooltip: str,
-    accessible_desc: Optional[str] = None
-) -> None:
-    """
-    Add tooltip and accessible description to a widget.
-
-    Args:
-        widget: Widget to add tooltip to
-        tooltip: Tooltip text (visible on hover)
-        accessible_desc: Accessible description for screen readers
-                        (defaults to tooltip if not provided)
-    """
-    widget.setToolTip(tooltip)
-    widget.setAccessibleDescription(accessible_desc or tooltip)
-
-
 def set_tab_order(widgets: List[QWidget]) -> None:
     """
     Set explicit tab order for a list of widgets.

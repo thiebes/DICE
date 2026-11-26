@@ -105,12 +105,6 @@ class DiceTheme:
                 color: {to_css(colors['error'])};
             }}
 
-            /* Proximity display */
-            QLabel#proximity-display {{
-                font-weight: bold;
-                font-size: 11pt;
-            }}
-
             /* Enhanced focus indicators - WCAG 2.4.7 */
             QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
                 border: 2px solid {to_css(colors['link'])};

@@ -4,6 +4,7 @@ Tests for the simulation engine's parameter classes in dice.models.parameters.
 
 import re
 import warnings
+from dataclasses import fields
 from pathlib import Path
 
 import numpy as np
@@ -47,12 +48,12 @@ class TestParameterClasses:
 
         assert params.profile.amplitude_0 == 3.0
 
-    def test_field_names_of_an_earlier_class_are_refused(self):
-        """1.2.0 had a dataclass named SimulationParameters with other fields."""
-        with pytest.raises(TypeError):
-            SimulationParameters(num_runs=100)
-        with pytest.raises(TypeError):
-            ProfileParameters(amplitude=1.0, sigma2=1.0, mu=0.0)
+    def test_fields_are_those_the_engine_reads(self):
+        """The engine reads these names. 1.2.0 had a dataclass named SimulationParameters with other fields."""
+        assert [field.name for field in fields(SimulationParameters)] == ['profile', 'physics']
+        assert [field.name for field in fields(ProfileParameters)] == ['sigma2_0', 'amplitude_0', 'mu_0']
+        assert [field.name for field in fields(PhysicsParameters)] == [
+            'diffusion_coefficient', 'lifetime', 'diffusion_length']
 
 
 class TestSimulationParametersFromDict:
