@@ -45,6 +45,13 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-qt>=4.0.0",
     "flask>=2.0.0",
+    "ruff>=0.6.0",
+]
+
+[dependency-groups]
+# Installed alone in CI (uv sync --only-group lint); the dev extra has ruff too.
+lint = [
+    "ruff>=0.6.0",
 ]
 
 [project.scripts]
@@ -57,3 +64,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dice", "dice_gui"]
+
+[tool.ruff.lint]
+# The Pyflakes rules: unused imports and variables, and undefined names.
+select = ["F"]
