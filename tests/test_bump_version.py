@@ -1,5 +1,6 @@
 """Tests for scripts/bump_version.py, run against copies of the repository's own files."""
 
+import importlib.util
 import re
 import shutil
 import subprocess
@@ -111,6 +112,21 @@ def test_development_version_without_a_date_keeps_the_release_date(repo_copy: Pa
     assert result.returncode == 0, result.stdout + result.stderr
     assert current_version(repo_copy) == "9.8.7.dev12"
     assert release_dates(repo_copy) == ["2031-02-03"] * 2
+
+
+@pytest.mark.parametrize("version", [
+    "9.8.7\n",            # a final newline, which $ would accept
+    "9.8.1\u0667",        # ARABIC-INDIC DIGIT SEVEN, which \d would accept
+    "9.8.7.dev1\u0661",   # ARABIC-INDIC DIGIT ONE
+])
+def test_version_check_refuses_a_final_newline_and_digits_of_other_scripts(version: str) -> None:
+    """Checked in the process: such a version cannot be printed reliably by a child process on Windows."""
+    spec = importlib.util.spec_from_file_location("bump_version", REPO_ROOT / "scripts" / "bump_version.py")
+    bump_version = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bump_version)
+
+    assert bump_version.validate_version(version) is False
+    assert bump_version.validate_version(version.strip().encode("ascii", "ignore").decode()) is True
 
 
 @pytest.mark.parametrize(

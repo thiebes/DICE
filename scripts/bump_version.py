@@ -38,14 +38,16 @@ def write_file(file_path: Path, content: str) -> None:
 # No number of a version has a leading zero, so that the version is in the
 # form that packaging tools write (PEP 440 reads 1.03.0 as 1.3.0, and
 # 1.3.0.dev01 as 1.3.0.dev1).
-NUMBER = r'(0|[1-9]\d*)'
+# [0-9], not \d, which also matches the digits of other scripts.
+NUMBER = r'(0|[1-9][0-9]*)'
 DEVELOPMENT_SUFFIX = rf'\.dev{NUMBER}'
 
 
 def validate_version(version: str) -> bool:
     """Validate that the version is X.Y.Z, or X.Y.Z.devN for a development version."""
-    pattern = rf'^{NUMBER}\.{NUMBER}\.{NUMBER}({DEVELOPMENT_SUFFIX})?$'
-    return bool(re.match(pattern, version))
+    pattern = rf'{NUMBER}\.{NUMBER}\.{NUMBER}({DEVELOPMENT_SUFFIX})?'
+    # fullmatch, because $ also matches before a final newline.
+    return re.fullmatch(pattern, version) is not None
 
 
 def is_development_version(version: str) -> bool:
