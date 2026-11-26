@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import joblib
 import pytest
 
 import dice.analysis.simulation as simulation
@@ -80,6 +81,21 @@ class TestSelfTestRun:
         report = capsys.readouterr().out
         assert 'Results agree to within rounding (relative 1e-12): yes' in report
         assert 'Progress reached 10 of 10 runs: yes' in report
+
+    @pytest.mark.parametrize("workers_of_joblib, line", [
+        (4, "Process pool of 4 worker processes: 10 runs in "),
+        (64, "Process pool of 10 worker processes: 10 runs in "),
+        (1, "Process pool of 1 worker process: 10 runs in "),
+    ])
+    def test_report_counts_the_worker_processes_of_the_pool(
+            self, monkeypatch, capsys, ten_runs, workers_of_joblib, line):
+        """No more workers than runs, and no more than joblib uses for all processors."""
+        monkeypatch.setattr(simulation, 'run_in_process_pool', serial_pool)
+        monkeypatch.setattr(joblib, 'effective_n_jobs', lambda n_jobs: workers_of_joblib)
+
+        assert standalone.run_self_test(sys.stdout) is True
+
+        assert line in capsys.readouterr().out
 
     def test_standalone_build_that_would_use_joblib_fails(self, monkeypatch, capsys, ten_runs):
         # The GUI would then start loky workers, which a frozen build cannot.
