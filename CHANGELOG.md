@@ -306,10 +306,10 @@ and Fixed give the details.
   large, and with `amplitude_0` = 1e-5 every estimate was 0. The error
   exceeds 1e-4 of the estimate when the spatial width is below about 0.05 in
   the chosen unit or `amplitude_0` is below about 0.01. Every release since
-  1.0.0 fits the same way, so results from earlier releases with lengths in
-  centimeters or meters, or with a small amplitude, are affected. For results
-  in micrometers or nanometers with an amplitude near 1 this error was
-  small.
+  1.0.0 fits the same way, so results from earlier releases are affected
+  under either condition; a window given in centimeters or meters usually
+  meets the first. For results in micrometers or nanometers with an amplitude
+  near 1 this error was small.
 - Results in length or time units other than micrometer and nanosecond are
   converted and labeled correctly. In 1.2.0 the command-line interface wrote
   the results file and the summary as if the units were micrometer and
