@@ -12,6 +12,7 @@ from dice.utils.validators import (
     validate_integer,
     validate_string_choice,
     validate_file_path,
+    validate_filename_slug,
 )
 
 
@@ -218,6 +219,76 @@ class TestValidateFilePath:
         """Test with invalid path type."""
         with pytest.raises(TypeError, match="must be a string"):
             validate_file_path(123)
+
+
+class TestValidateFilenameSlug:
+    """Test filename slug validation."""
+
+    def test_valid_slugs(self):
+        """Test with valid filename slugs."""
+        assert validate_filename_slug("my-file") == "my-file"
+        assert validate_filename_slug("test_123") == "test_123"
+        assert validate_filename_slug("data.v2") == "data.v2"
+        assert validate_filename_slug("DICE_results") == "DICE_results"
+
+    @pytest.mark.parametrize("char", ['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+    def test_forbidden_characters(self, char):
+        """Test that each forbidden character is rejected."""
+        with pytest.raises(ValueError, match="cannot contain"):
+            validate_filename_slug(f"file{char}name")
+
+    def test_empty_string(self):
+        """Test that empty string is rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_filename_slug("")
+
+    def test_whitespace_only(self):
+        """Test that whitespace-only string is rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_filename_slug("   ")
+
+    def test_non_string_input(self):
+        """Test that non-string input raises TypeError."""
+        with pytest.raises(TypeError, match="must be a string"):
+            validate_filename_slug(123)
+
+    @pytest.mark.parametrize('slug', ["file\x00name", "file\tname", "file\nname"])
+    def test_control_characters_are_rejected(self, slug):
+        with pytest.raises(ValueError, match="cannot contain control characters"):
+            validate_filename_slug(slug)
+
+    def test_slug_longer_than_the_limit_is_rejected(self):
+        """A long slug would fail when the outputs are written, after the simulation."""
+        from dice.utils.validators import MAX_FILENAME_SLUG_LENGTH
+
+        assert validate_filename_slug('r' * MAX_FILENAME_SLUG_LENGTH) == 'r' * MAX_FILENAME_SLUG_LENGTH
+        assert MAX_FILENAME_SLUG_LENGTH == 64
+        with pytest.raises(ValueError, match="cannot be longer than 64 characters; it has 65"):
+            validate_filename_slug('r' * (MAX_FILENAME_SLUG_LENGTH + 1))
+
+    @pytest.mark.parametrize('slug', ['NUL', 'nul', 'Con', 'COM1', 'lpt9', 'aux.v2', 'NUL.tar.gz',
+                                      'CONIN$', 'conout$', 'COM\u00b9', 'LPT\u00b3'])
+    def test_windows_device_names_are_rejected(self, slug):
+        """No folder of these names can be created on Windows, with or without an extension."""
+        with pytest.raises(ValueError, match="Windows reserves that name"):
+            validate_filename_slug(slug)
+
+    @pytest.mark.parametrize('slug', ['null', 'console', 'COM10', 'run_nul', 'com', 'lpt0'])
+    def test_names_that_only_resemble_device_names_are_accepted(self, slug):
+        assert validate_filename_slug(slug) == slug
+
+    def test_unicode(self):
+        """Test that Unicode characters are accepted."""
+        assert validate_filename_slug("données") == "données"
+        assert validate_filename_slug("测试") == "测试"
+
+    def test_numpy_float32_in_validate_integer(self):
+        """Test that np.float32 with integer value is accepted."""
+        assert validate_integer(np.float32(5.0)) == 5
+        assert validate_integer(np.float64(10.0)) == 10
+
+        with pytest.raises(TypeError, match="must be an integer"):
+            validate_integer(np.float32(5.5))
 
 
 if __name__ == "__main__":

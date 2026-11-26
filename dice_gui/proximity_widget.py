@@ -1,0 +1,264 @@
+"""
+Histogram of the estimates with the part near the nominal value highlighted.
+"""
+
+from typing import List, Optional, Sequence, Tuple
+
+import numpy as np
+from PyQt6.QtCore import QRect, Qt
+from PyQt6.QtGui import QColor, QPainter, QPalette, QPen
+from PyQt6.QtWidgets import QSizePolicy, QWidget
+
+from dice_gui.styles import DiceTheme
+
+
+class ProximityHistogramWidget(QWidget):
+    """
+    Histogram of D estimate / nominal D that highlights the accuracy threshold.
+
+    The bars show how the estimates of a simulation are distributed around
+    the nominal value, at ratio 1. Each bar is highlighted from its foot up
+    to the share of its estimates that lie within the threshold of the
+    nominal value (from 1 - proximity to 1 + proximity): a bar inside the
+    limits in full, a bar that a limit crosses in part. The height of a bar
+    is the count of its bin, so the highlighted share of the bar area is the
+    fraction of the drawn estimates within the threshold. Dashed lines mark
+    the limits.
+
+    The axis is centered on the nominal value and spans the estimates, so
+    it does not move when the threshold changes. The rare estimates beyond
+    the 99.5th percentile of the distance from 1 are counted in a note
+    instead of stretching the axis.
+    """
+
+    MIN_WIDTH, MIN_HEIGHT = 320, 210
+    LEFT_MARGIN, RIGHT_MARGIN = 14, 14
+    TOP_MARGIN, BOTTOM_MARGIN = 22, 40
+    MIN_BINS, MAX_BINS = 10, 60
+    PLACEHOLDER = "Run a simulation or load results to see the distribution of the estimates."
+
+    def __init__(self, proximity: float = 0.10, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._proximity = proximity
+        self._ratios = np.array([], dtype=float)
+        # The axis range, the histogram and the counts within the threshold,
+        # computed once for the data and the threshold, not at every paint.
+        self._cache = {}
+        self.setMinimumSize(self.MIN_WIDTH, self.MIN_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setAccessibleName("Histogram of the estimates around the nominal value")
+        self._describe()
+
+    # ---- data ------------------------------------------------------------------
+
+    def set_proximity(self, proximity: float) -> None:
+        """Set the accuracy threshold (0.1 for within 10% of nominal) and redraw."""
+        self._proximity = proximity
+        self._cache.pop('within', None)
+        self._describe()
+        self.update()
+
+    def set_ratios(self, ratios: Optional[Sequence[float]]) -> None:
+        """Set the estimates as D estimate / nominal D; None or an empty sequence clears the histogram."""
+        values = np.asarray([] if ratios is None else ratios, dtype=float)
+        self._ratios = values[np.isfinite(values)]
+        self._cache.clear()
+        self._describe()
+        self.update()
+
+    def ratios(self) -> np.ndarray:
+        """The finite ratios the histogram shows or counts."""
+        return self._ratios
+
+    def _cached(self, key: str, compute):
+        if key not in self._cache:
+            self._cache[key] = compute()
+        return self._cache[key]
+
+    def axis_range(self) -> Optional[Tuple[float, float]]:
+        """The ratio at the left and right end of the axis; None without estimates."""
+        return self._cached('axis', self._axis_range)
+
+    def histogram(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Counts and bin edges of the ratios inside the axis range."""
+        return self._cached('histogram', self._histogram)
+
+    def counts_within_threshold(self) -> np.ndarray:
+        """For each bin of histogram(), the number of its estimates within the threshold."""
+        return self._cached('within', self._counts_within_threshold)
+
+    def _axis_range(self) -> Optional[Tuple[float, float]]:
+        if self._ratios.size == 0:
+            return None
+        distance = np.abs(self._ratios - 1.0)
+        half_span = max(float(np.percentile(distance, 99.5)), 1e-9) * 1.08
+        return 1.0 - half_span, 1.0 + half_span
+
+    def _histogram(self) -> Tuple[np.ndarray, np.ndarray]:
+        low, high = self.axis_range()
+        inside = self._ratios[(self._ratios >= low) & (self._ratios <= high)]
+        automatic = len(np.histogram_bin_edges(inside, bins='auto', range=(low, high))) - 1
+        bin_count = int(min(max(automatic, self.MIN_BINS), self.MAX_BINS))
+        return np.histogram(inside, bins=bin_count, range=(low, high))
+
+    def _counts_within_threshold(self) -> np.ndarray:
+        low, high = self.axis_range()
+        _, edges = self.histogram()
+        inside = self._ratios[(self._ratios >= low) & (self._ratios <= high)]
+        # The limits as dice.analysis.statistics.calculate_precision applies them.
+        within = inside[(inside >= 1 - self._proximity) & (inside <= 1 + self._proximity)]
+        return np.histogram(within, bins=edges)[0]
+
+    def count_outside_axis(self) -> int:
+        """Number of estimates beyond the ends of the axis."""
+        if self._ratios.size == 0:
+            return 0
+        low, high = self.axis_range()
+        return int(np.count_nonzero((self._ratios < low) | (self._ratios > high)))
+
+    # ---- geometry --------------------------------------------------------------
+
+    def plot_rect(self) -> QRect:
+        """The area the bars are drawn in, in widget pixels."""
+        return QRect(
+            self.LEFT_MARGIN, self.TOP_MARGIN,
+            max(self.width() - self.LEFT_MARGIN - self.RIGHT_MARGIN, 1),
+            max(self.height() - self.TOP_MARGIN - self.BOTTOM_MARGIN, 1),
+        )
+
+    def x_position(self, ratio: float) -> int:
+        """Pixel column of a ratio on the axis."""
+        low, high = self.axis_range()
+        plot = self.plot_rect()
+        return plot.left() + round((ratio - low) / (high - low) * plot.width())
+
+    def _bars(self) -> List[Tuple[int, QRect]]:
+        """The index of each bin that holds estimates, and its bar with its foot on the axis."""
+        counts, edges = self.histogram()
+        plot = self.plot_rect()
+        peak = counts.max() if counts.size else 0
+        if peak == 0:
+            return []
+        columns = [self.x_position(edge) for edge in edges]
+        bottom = plot.top() + plot.height()
+        bars = []
+        for index, (count, left, right) in enumerate(zip(counts, columns[:-1], columns[1:])):
+            if count == 0:
+                continue
+            # One pixel between bars, when the bars are wide enough to spare it.
+            width = right - left - (1 if right - left > 3 else 0)
+            height = max(round(count / peak * plot.height()), 1)
+            bars.append((index, QRect(left, bottom - height, max(width, 1), height)))
+        return bars
+
+    def bar_rects(self) -> List[QRect]:
+        """One rectangle for each bin that holds estimates, with its foot on the axis."""
+        return [bar for _, bar in self._bars()]
+
+    def highlight_rects(self) -> List[QRect]:
+        """The lower part of each bar that stands for its estimates within the threshold."""
+        bars = self._bars()
+        if not bars:
+            return []
+        counts, _ = self.histogram()
+        within = self.counts_within_threshold()
+        highlights = []
+        for index, bar in bars:
+            if within[index] == 0:
+                continue
+            height = max(round(bar.height() * within[index] / counts[index]), 1)
+            highlights.append(QRect(bar.left(), bar.top() + bar.height() - height, bar.width(), height))
+        return highlights
+
+    # ---- drawing ---------------------------------------------------------------
+
+    def bar_colors(self) -> Tuple[QColor, QColor]:
+        """The color of the bars within the threshold, and of the rest of the bars.
+
+        Both are opaque and stand out from the window background by at
+        least 3:1 in either theme.
+        """
+        theme = DiceTheme()
+        highlight = theme.get_semantic_colors()['calculated_value']
+        return highlight, (QColor(120, 120, 120) if theme.is_dark_mode else QColor(140, 140, 140))
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        group = QPalette.ColorGroup.Active if self.isEnabled() else QPalette.ColorGroup.Disabled
+        text_color = self.palette().color(group, QPalette.ColorRole.Text)
+        font = self.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        painter.setPen(text_color)
+
+        if self._ratios.size == 0 or not self.isEnabled():
+            painter.drawText(self.rect().adjusted(12, 12, -12, -12),
+                             Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.PLACEHOLDER)
+            return
+
+        highlight, muted = self.bar_colors()
+        plot = self.plot_rect()
+        bottom = plot.top() + plot.height()
+        low, high = self.axis_range()
+
+        # Every bar in the muted color, then the part of each bar that stands
+        # for its estimates within the threshold in the highlight color.
+        # Without antialiasing, the bar edges are exact.
+        painter.setPen(Qt.PenStyle.NoPen)
+        for bar in self.bar_rects():
+            painter.fillRect(bar, muted)
+        for part in self.highlight_rects():
+            painter.fillRect(part, highlight)
+
+        # Limits of the threshold, where they fall on the axis.
+        # A line in the window color under each dashed line keeps the limit
+        # visible where it crosses a bar, in either theme.
+        background = self.palette().color(group, QPalette.ColorRole.Window)
+        for limit in (1.0 - self._proximity, 1.0 + self._proximity):
+            if low <= limit <= high:
+                column = self.x_position(limit)
+                painter.setPen(QPen(background, 3))
+                painter.drawLine(column, plot.top() - 4, column, bottom)
+                painter.setPen(QPen(text_color, 1, Qt.PenStyle.DashLine))
+                painter.drawLine(column, plot.top() - 4, column, bottom)
+
+        # Label of the band, above the plot and centered on the nominal value.
+        painter.setPen(text_color)
+        center = self.x_position(1.0)
+        percent = int(round(self._proximity * 100))
+        painter.drawText(QRect(center - 60, 2, 120, self.TOP_MARGIN - 6),
+                         Qt.AlignmentFlag.AlignCenter, f"within ±{percent}%")
+
+        outside = self.count_outside_axis()
+        if outside:
+            painter.drawText(QRect(plot.left(), 2, plot.width(), self.TOP_MARGIN - 6),
+                             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                             f"{outside} beyond this range")
+
+        # Axis, ticks at the ends and at the nominal value, and the axis title.
+        painter.setPen(QPen(text_color, 1))
+        painter.drawLine(plot.left(), bottom, plot.left() + plot.width(), bottom)
+        ticks = (
+            (plot.left(), f"{low:.3g}", Qt.AlignmentFlag.AlignLeft),
+            (center, "1", Qt.AlignmentFlag.AlignHCenter),
+            (plot.left() + plot.width(), f"{high:.3g}", Qt.AlignmentFlag.AlignRight),
+        )
+        for column, label, alignment in ticks:
+            painter.drawLine(column, bottom, column, bottom + 4)
+            left = {Qt.AlignmentFlag.AlignLeft: column, Qt.AlignmentFlag.AlignHCenter: column - 40,
+                    Qt.AlignmentFlag.AlignRight: column - 80}[alignment]
+            painter.drawText(QRect(left, bottom + 5, 80, 14), alignment | Qt.AlignmentFlag.AlignTop, label)
+        painter.drawText(QRect(plot.left(), bottom + 20, plot.width(), 16),
+                         Qt.AlignmentFlag.AlignCenter, "D estimate / nominal D")
+
+    def _describe(self) -> None:
+        """Keep the accessible description in step with what the histogram shows."""
+        percent = int(round(self._proximity * 100))
+        if self._ratios.size == 0:
+            self.setAccessibleDescription("No estimates to show.")
+            return
+        within = np.count_nonzero(np.abs(self._ratios - 1.0) <= self._proximity)
+        self.setAccessibleDescription(
+            f"Histogram of {self._ratios.size} estimates of the diffusion coefficient, as ratios to the "
+            f"nominal value. {within} of them are within ±{percent}% of the nominal value and are highlighted."
+        )

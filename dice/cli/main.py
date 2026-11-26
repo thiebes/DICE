@@ -5,20 +5,31 @@ This module provides the main entry point for the DICE command-line interface,
 orchestrating argument parsing, parameter loading, simulation execution, and output.
 """
 
+import dataclasses
 import sys
 import os
 import time
+import warnings
 from pathlib import Path
 from typing import Optional, Dict, Any
 import numpy as np
 
+from .. import __version__
 from .arguments import parse_arguments, show_parameter_summary, handle_special_arguments
-from ..io.parameters import open_parameters, validate_parameters
+from ..io.parameters import noise_range_from_parameters, open_parameters, validate_parameters
 from ..analysis.simulation import run_monte_carlo_simulation
+from ..core.noise import Seed, nominal_cnr
 from ..analysis.statistics import analyze_simulation_results
-from ..io.results import export_collated_results, write_summary_file
-from ..visualization.histograms import plot_accuracy_histogram
+from ..io.results import (
+    completion_message, export_collated_results, file_error_text, output_unit_preferences, write_summary_file,
+)
+from ..models.results import MonteCarloOutput
+from ..visualization.histograms import (
+    accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
+    remove_plots_of_earlier_runs, use_file_backend,
+)
 from ..utils.axes import make_x_axis, make_time_axis
+from ..utils.units import diffusion_coefficient_label, global_length_unit, global_time_unit
 
 
 def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]) -> Path:
@@ -50,20 +61,6 @@ def setup_output_directory(output_dir: Optional[str], parameters: Dict[str, Any]
     return output_path
 
 
-def setup_random_seed(seed: Optional[int]) -> None:
-    """
-    Set up random seed for reproducibility.
-    
-    Parameters
-    ----------
-    seed : int, optional
-        Random seed value.
-    """
-    if seed is not None:
-        np.random.seed(seed)
-        print(f"Random seed set to: {seed}")
-
-
 def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     """
     Create a progress callback function for simulation updates.
@@ -75,7 +72,8 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     quiet : bool
         Whether to suppress output.
     interval : int
-        Update interval for progress messages.
+        A message is printed each time the number of finished runs passes a
+        multiple of this number, and after the last run.
     
     Returns
     -------
@@ -85,25 +83,33 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     if quiet or not verbose:
         return None
     
+    last_reported = 0
+
     def progress_callback(current: int, total: int):
-        if current % interval == 0 or current == total:
+        # A parallel simulation reports at counts that follow the clock, so
+        # the test is whether a multiple of the interval has been passed.
+        nonlocal last_reported
+        if current // interval > last_reported // interval or current == total:
+            last_reported = current
             percent = (current / total) * 100
             print(f"Progress: {current}/{total} runs completed ({percent:.1f}%)")
     
     return progress_callback
 
 
-def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
+def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[str, Any]:
     """
     Execute the Monte Carlo simulation.
-    
+
     Parameters
     ----------
     parameters : dict
         Simulation parameters.
     args : Namespace
         Command-line arguments.
-    
+    seed : int or SeedSequence, optional
+        Root seed for the runs' noise; None draws fresh entropy.
+
     Returns
     -------
     dict
@@ -116,13 +122,10 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
     x_axis = parameters['x array']
     time_axis = parameters['time series']
     
-    # Setup multiprocessing
+    # --multiprocessing N: 0 runs serially, -1 uses all cores, N > 0 uses N workers.
     if args.multiprocessing is not None:
         use_parallel = args.multiprocessing != 0
-        if args.multiprocessing == -1:
-            n_jobs = -1  # Use all cores
-        else:
-            n_jobs = args.multiprocessing
+        n_jobs = args.multiprocessing if use_parallel else -1
     else:
         use_parallel = parameters.get('multiprocessing', 1) != 0
         n_jobs = -1
@@ -144,6 +147,9 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
         diffusion_length=parameters['nominal diffusion length']
     )
     
+    # With a noise range, 'noise series' holds one noise value for each run.
+    noise_range = noise_range_from_parameters(parameters)
+
     # Run simulation
     start_time = time.time()
     
@@ -152,7 +158,10 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
         if args.verbose:
             print(f"  Spatial points: {len(x_axis)}")
             print(f"  Time points: {len(time_axis)}")
-            print(f"  Noise levels: {len(parameters['noise series'])}")
+            if noise_range is None:
+                print(f"  Noise levels: {len(parameters['noise series'])}")
+            else:
+                print(f"  Noise levels: one for each run, from {noise_range.low} to {noise_range.high}")
             print(f"  Multiprocessing: {use_parallel}")
     
     # Execute Monte Carlo simulation
@@ -163,8 +172,15 @@ def run_simulation(parameters: Dict[str, Any], args) -> Dict[str, Any]:
         noise_values=parameters['noise series'],
         num_runs=parameters['number of runs'],
         multiprocessing=use_parallel,
-        retain_profile_data=args.retain_profiles if hasattr(args, 'retain_profiles') else False,
-        progress_callback=progress_callback
+        # The --retain-profiles flag or the parameter-file key turns retention on.
+        retain_profile_data=(
+            getattr(args, 'retain_profiles', False)
+            or parameters.get('retain profile data', 0) != 0
+        ),
+        progress_callback=progress_callback,
+        seed=seed,
+        n_jobs=n_jobs,
+        noise_range=noise_range,
     )
     
     end_time = time.time()
@@ -191,17 +207,15 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     args : Namespace
         Command-line arguments.
     """
+    length_unit = global_length_unit(parameters)
+    time_unit = global_time_unit(parameters)
+    output_units = output_unit_preferences(parameters)
+
     if not args.quiet:
         print("Saving results...")
-    
-    # Analyze results (use either configured proximity level OR standard levels)
-    if 'proximity level' in parameters:
-        # Use only the configured proximity level
-        proximity_levels = [parameters['proximity level']]
-    else:
-        # Use standard levels when no proximity level is configured
-        proximity_levels = [0.05, 0.1, 0.2]
-    analysis = analyze_simulation_results(result, proximity_levels)
+
+    # Analyze results with standard proximity levels
+    analysis = analyze_simulation_results(result)
     
     # Prepare collated results for export
     collated_data = {
@@ -217,7 +231,10 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     if export_format in ['csv', 'both']:
         csv_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}.csv"
         # The export function returns a DataFrame and writes CSV automatically
-        df = export_collated_results(result, str(csv_file))
+        df = export_collated_results(
+            result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
+            output_units=output_units,
+        )
         if not args.quiet:
             print(f"Results saved to: {csv_file}")
     
@@ -231,10 +248,22 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
             'analysis': analysis,
             'parameters': {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in parameters.items()},
             'summary': {
+                'dice_version': __version__,
+                'seed': result.seed,
                 'total_runs': len(result.run_results),
-                'noise_values': result.noise_values
+                'noise_values': result.noise_values,
+                # The parameters and the statistics of the analysis are in
+                # the units of the simulation, which the file would not name.
+                'units': {
+                    'length': length_unit,
+                    'time': time_unit,
+                    'diffusion_coefficient': diffusion_coefficient_label(length_unit, time_unit),
+                },
             }
         }
+        # With a noise range, noise_values holds each run's noise, in run order.
+        if result.noise_range is not None:
+            json_data['summary']['noise_range'] = dataclasses.asdict(result.noise_range)
         
         with open(json_file, 'w') as f:
             json.dump(json_data, f, indent=2, default=str)
@@ -244,7 +273,10 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     
     # Write summary  
     summary_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}_summary.txt"
-    write_summary_file(result, str(summary_file), parameters, analysis)
+    write_summary_file(
+        result, str(summary_file), parameters, analysis,
+        length_unit=length_unit, time_unit=time_unit, output_units=output_units,
+    )
     if not args.quiet:
         print(f"Summary saved to: {summary_file}")
 
@@ -265,64 +297,177 @@ def create_plots(result: Dict[str, Any], parameters: Dict[str, Any],
     args : Namespace
         Command-line arguments.
     """
+    # The results file and the summary are new; no plot of an earlier run
+    # with this slug stays beside them, also when this run draws none.
+    try:
+        remove_plots_of_earlier_runs(output_dir, parameters.get('filename slug', 'dice'))
+    except OSError as e:
+        raise PlotError(
+            "The results were saved, but a plot of an earlier run could not be removed: "
+            f"{file_error_text(e)}") from e
+
     if args.no_plots:
         return
     
     if not args.quiet:
         print("Creating plots...")
+    use_file_backend()
     
+    # Across a noise range the accuracy depends on the CNR, so it is plotted against it.
+    if result.noise_range is not None:
+        create_accuracy_scatter_plot(result, parameters, output_dir, args)
+        return
+
+    fig = None
     try:
         # Prepare simulation result in legacy format for plotting
-        # Extract diffusion coefficients (WLS estimates)
-        d_estimates = []
+        # Extract diffusion coefficients (WLS estimates, slope / 2)
+        d_estimates = result.d_estimates('wls')
         d_nominal = parameters['nominal diffusion coefficient']
-        
-        for run_result in result.run_results:
-            if hasattr(run_result, 'wls_slope') and run_result.wls_slope is not None:
-                d_est = run_result.wls_slope / 2  # Convert slope to diffusion coefficient
-                d_estimates.append(d_est)
-        
-        if d_estimates:
-            d_ratios = np.array(d_estimates) / d_nominal
-            
+
+        plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
+
+        if len(d_estimates) > 0:
+            d_ratios = d_estimates / d_nominal
+
             # Create legacy-format result for plotting
             legacy_result = {
                 'collated results': {
-                    'd_wls_over_d_nom': d_ratios.tolist()
+                    'd_est_over_d_nom': d_ratios.tolist()
                 }
             }
-            
+
             # Create accuracy histogram
-            plot_file = output_dir / f"{parameters.get('filename slug', 'dice')}_accuracy_histogram.{parameters.get('image type', 'png')}"
-            
             fig = plot_accuracy_histogram(
                 simulation_result=legacy_result,
-                proximity=parameters.get('proximity level', 0.1),
                 filename=str(plot_file),
-                image_type=parameters.get('image type', 'png'),
-                width=parameters.get('image width', 10),
-                height=parameters.get('image height', 6),
-                dpi=parameters.get('image dpi', 100),
-                font_size=12
+                **histogram_options(parameters)
             )
-            
-            # Close figure to free memory
-            import matplotlib.pyplot as plt
-            plt.close(fig)
-            
+
             if not args.quiet:
                 print(f"Accuracy histogram saved to: {plot_file}")
         else:
-            if not args.quiet:
-                print("Warning: No valid diffusion estimates found for plotting")
-    
+            report_missing_plot(result)
+
+    except OSError as e:
+        raise PlotError(
+            f"The results were saved, but the plot could not be saved: {file_error_text(e)}") from e
     except Exception as e:
-        print(f"Warning: Error creating plots: {e}")
+        raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
+    finally:
+        if fig is not None:
+            import matplotlib.pyplot as plt
+            plt.close(fig)
+
+
+class PlotError(RuntimeError):
+    """The plot of a finished simulation could not be created; its other output files are written."""
+
+
+def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str, Any],
+                                 output_dir: Path, args) -> None:
+    """
+    Save the scatter plot of the WLS D_est/D_nom against initial CNR of a simulation with a noise range.
+
+    The CNR axis is logarithmic for 'noise range, reciprocal log'.
+
+    Parameters
+    ----------
+    result : MonteCarloOutput
+        Simulation results with a noise range.
+    parameters : dict
+        Simulation parameters.
+    output_dir : Path
+        Output directory.
+    args : Namespace
+        Command-line arguments.
+    """
+    fig = None
+    try:
+        amplitude_0 = result.parameters.profile.amplitude_0
+        fitted_runs = [run for run in result.run_results if run.slope_fit('wls') is not None]
+        slug, image_type = parameters.get('filename slug', 'dice'), parameters.get('image type', 'png')
+        plot_file = output_dir / f"{slug}_accuracy_vs_cnr.{image_type}"
+        if fitted_runs:
+            fig = plot_accuracy_vs_cnr(
+                [nominal_cnr(amplitude_0, run.noise_sigma) for run in fitted_runs],
+                [run.accuracy('wls') for run in fitted_runs],
+                str(plot_file),
+                log_cnr=result.noise_range.logarithmic,
+                **accuracy_scatter_options(parameters),
+            )
+
+            if not args.quiet:
+                print(f"Accuracy scatter plot saved to: {plot_file}")
+        else:
+            report_missing_plot(result)
+
+    except OSError as e:
+        raise PlotError(
+            f"The results were saved, but the plot could not be saved: {file_error_text(e)}") from e
+    except Exception as e:
+        raise PlotError(f"The results were saved, but the plot could not be created: {e}") from e
+    finally:
+        if fig is not None:
+            import matplotlib.pyplot as plt
+            plt.close(fig)
+
+
+def report_completion(result: MonteCarloOutput, quiet: bool) -> None:
+    """
+    Print how the simulation ended.
+
+    A simulation without estimates is reported as a warning on the error
+    stream, also with --quiet. It is printed directly: Python shows a
+    warning from one place only once in a process, and a program can call
+    main() several times.
+    """
+    if not result.has_estimates():
+        print(f"Warning: {completion_message(result)}", file=sys.stderr)
+    elif not quiet:
+        print(completion_message(result))
+
+
+def report_missing_plot(result: MonteCarloOutput) -> None:
+    """Say that no plot was drawn because the weighted fit, which the plots show, gave no estimate."""
+    if result.has_estimates():
+        # Without any estimate, report_completion says so.
+        print("Warning: No plot was drawn: the weighted fit gave no estimate.", file=sys.stderr)
+
+
+def console_warning(message, category, filename, lineno, line=None) -> str:
+    """A warning as one line of the console, in the form of the other messages of the command line."""
+    return f"Warning: {message}\n"
 
 
 def main(argv: Optional[list] = None) -> int:
     """
     Main entry point for the DICE CLI.
+
+    Warnings are printed as "Warning: <message>", without the source file
+    and line that Python adds by default.
+
+    Parameters
+    ----------
+    argv : list, optional
+        Command-line arguments. If None, uses sys.argv.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for error).
+    """
+    previous_format = warnings.formatwarning
+    warnings.formatwarning = console_warning
+    try:
+        return run_command(argv)
+    finally:
+        warnings.formatwarning = previous_format
+
+
+def run_command(argv: Optional[list] = None) -> int:
+    """
+    Load the parameters, run the simulation, and write its outputs.
     
     Parameters
     ----------
@@ -337,28 +482,32 @@ def main(argv: Optional[list] = None) -> int:
     try:
         # Parse arguments
         args = parse_arguments(argv)
-        
-        # Handle special arguments
-        if handle_special_arguments(args):
-            return 0
-        
+
         # Show parameter summary if verbose
         if args.verbose and not args.quiet:
             show_parameter_summary(args)
         
-        # Setup random seed
-        setup_random_seed(args.seed)
-        
+        # One root seed, split into independent streams for the noise draws of
+        # the 'noise range' options, one for each run, and for the simulation runs.
+        noise_draw_seed, simulation_seed = (
+            np.random.SeedSequence(args.seed).spawn(2) if args.seed is not None else (None, None)
+        )
+
         # Load parameters
         if not args.quiet:
             print(f"Loading parameters from: {args.parameters_file}")
-        
-        parameters = open_parameters(args.parameters_file)
+
+        parameters = open_parameters(args.parameters_file, seed=noise_draw_seed)
         validate_parameters(parameters)
         
         if args.verbose and not args.quiet:
             print("Parameters loaded and validated")
-        
+
+        # A dry run ends here, after the same loading and validation as a real
+        # run and before any output directory, simulation, or file.
+        if handle_special_arguments(args):
+            return 0
+
         # Setup output directory
         output_dir = setup_output_directory(args.output_dir, parameters)
         
@@ -366,7 +515,10 @@ def main(argv: Optional[list] = None) -> int:
             print(f"Output directory: {output_dir}")
         
         # Run simulation
-        result = run_simulation(parameters, args)
+        result = run_simulation(parameters, args, seed=simulation_seed)
+        # --seed N reproduces the simulation from the command line; the
+        # stream the runs drew from is a child of N.
+        result.seed = args.seed
         
         # Save results
         save_results(result, parameters, output_dir, args)
@@ -374,8 +526,7 @@ def main(argv: Optional[list] = None) -> int:
         # Create plots
         create_plots(result, parameters, output_dir, args)
         
-        if not args.quiet:
-            print("DICE simulation completed successfully!")
+        report_completion(result, args.quiet)
         
         return 0
     

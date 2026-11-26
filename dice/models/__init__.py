@@ -9,20 +9,28 @@ from .parameters import (
     SimulationParameters,
     GaussianParameters,
     NoiseParameters,
+    NoiseRange,
     SpatialParameters,
     TemporalParameters,
     OutputParameters,
 )
 from .results import (
-    SimulationResults,
+    MonteCarloOutput,
     RunResult,
-    DiffusionFitResult,
-    StatisticalAnalysis,
 )
 from .profiles import (
     ProfileData,
     TimeSeriesProfile,
     GaussianProfile,
+)
+from .estimators import (
+    DEFAULT_ESTIMATOR_KEYS,
+    DISPLAY_ORDER,
+    ESTIMATORS,
+    EstimatorSpec,
+    FrameFits,
+    SlopeFit,
+    get_estimator,
 )
 
 __all__ = [
@@ -30,16 +38,23 @@ __all__ = [
     "SimulationParameters",
     "GaussianParameters",
     "NoiseParameters",
+    "NoiseRange",
     "SpatialParameters",
     "TemporalParameters",
     "OutputParameters",
     # Results
-    "SimulationResults",
+    "MonteCarloOutput",
     "RunResult",
-    "DiffusionFitResult",
-    "StatisticalAnalysis",
     # Profiles
     "ProfileData",
     "TimeSeriesProfile",
     "GaussianProfile",
+    # Estimators
+    "DEFAULT_ESTIMATOR_KEYS",
+    "DISPLAY_ORDER",
+    "ESTIMATORS",
+    "EstimatorSpec",
+    "FrameFits",
+    "SlopeFit",
+    "get_estimator",
 ]

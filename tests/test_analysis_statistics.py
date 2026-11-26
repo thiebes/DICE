@@ -4,30 +4,19 @@ Tests for dice.analysis.statistics module.
 
 import pytest
 import numpy as np
-import pandas as pd
 from dice.analysis.statistics import (
     calculate_precision,
     calculate_accuracy_metrics,
-    estimates_precision,
     analyze_simulation_results,
-    precision_counts,
     calculate_confidence_intervals,
-    analyze_cnr_dependence,
 )
-# Use simplified classes for testing
-class RunResult:
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+from dice.models.results import RunResult, MonteCarloOutput
 
-class SimulationResult:
-    def __init__(self, parameters, run_results, num_runs, noise_values):
-        self.parameters = parameters
-        self.run_results = run_results
-        self.num_runs = num_runs
-        self.noise_values = noise_values
-# Import mock classes for testing
-from dice.utils.legacy_compatibility import MockSimulationParameters as SimulationParameters
+
+def get_legacy_simulation_params():
+    """Simulation parameters with fixed values, in the structure the engine reads."""
+    from dice.utils.legacy_compatibility import MockSimulationParameters
+    return MockSimulationParameters()
 
 
 class TestCalculatePrecision:
@@ -128,8 +117,8 @@ class TestCalculateAccuracyMetrics:
         assert metrics['mean'] == pytest.approx(1.0)
         assert metrics['median'] == 1.0
         assert metrics['bias'] == pytest.approx(0.0)
-        # Standard deviation of [0.8, 1.0, 1.2] is ~0.163, not 0.2
-        assert metrics['std'] == pytest.approx(0.16329931618554516)
+        # Sample standard deviation (divisor n - 1) of [0.8, 1.0, 1.2]
+        assert metrics['std'] == pytest.approx(0.2)
         assert metrics['rmse'] == pytest.approx(np.sqrt(0.08/3))
     
     def test_empty_estimates(self):
@@ -144,52 +133,13 @@ class TestCalculateAccuracyMetrics:
         assert np.isnan(metrics['std'])
 
 
-class TestEstimatesPrecision:
-    """Test legacy precision function."""
-    
-    def test_dataframe_precision(self):
-        """Test precision calculation from DataFrame."""
-        df = pd.DataFrame({
-            # Using values clearly outside bounds: 0.89 < 0.9 and 1.11 > 1.1
-            'weighted fit diffusion coeff [cm^2/s]': [0.95, 1.05, 0.89, 1.11],
-            'unweighted fit diffusion coeff [cm^2/s]': [0.92, 1.08, 0.88, 1.12],
-            'nominal diffusion coeff [cm^2/s]': [1.0, 1.0, 1.0, 1.0]
-        })
-        
-        result = estimates_precision(df, proximity_level=0.1)
-        
-        assert '% fits within proximity' in result
-        # Now truly 2/4 values (0.95, 1.05) are within [0.9, 1.1]
-        assert result['% fits within proximity']['weighted fit'] == 50.0  # 2/4
-        # 2/4 values (0.92, 1.08) are within [0.9, 1.1]  
-        assert result['% fits within proximity']['unweighted fit'] == 50.0  # 2/4
-    
-    def test_empty_dataframe(self):
-        """Test with empty DataFrame."""
-        df = pd.DataFrame()
-        
-        with pytest.raises(ValueError, match="DataFrame is empty"):
-            estimates_precision(df, 0.1)
-    
-    def test_missing_columns(self):
-        """Test with missing columns."""
-        df = pd.DataFrame({
-            'nominal diffusion coeff [cm^2/s]': [1.0, 1.0]
-        })
-        
-        result = estimates_precision(df, 0.1)
-        
-        assert result['% fits within proximity']['weighted fit'] == 0.0
-        assert result['% fits within proximity']['unweighted fit'] == 0.0
-
-
-class TestAnalyzeSimulationResults:
+class TestAnalyzeMonteCarloOutputs:
     """Test comprehensive simulation analysis."""
     
     def test_basic_analysis(self):
         """Test basic analysis of simulation results."""
         # Create mock simulation results
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.physics.diffusion_coefficient = 1.0
         params.physics.lifetime = 10.0
         params.physics.diffusion_length = np.sqrt(10.0)
@@ -216,7 +166,7 @@ class TestAnalyzeSimulationResults:
             )
             runs.append(run)
         
-        result = SimulationResult(
+        result = MonteCarloOutput(
             parameters=params,
             run_results=runs,
             num_runs=10,
@@ -244,7 +194,7 @@ class TestAnalyzeSimulationResults:
     
     def test_multiple_noise_levels(self):
         """Test analysis with multiple noise levels."""
-        params = SimulationParameters()
+        params = get_legacy_simulation_params()
         params.physics.diffusion_coefficient = 1.0
         
         runs = []
@@ -270,7 +220,7 @@ class TestAnalyzeSimulationResults:
                 )
                 runs.append(run)
         
-        result = SimulationResult(
+        result = MonteCarloOutput(
             parameters=params,
             run_results=runs,
             num_runs=9,
@@ -324,78 +274,215 @@ class TestCalculateConfidenceIntervals:
         assert np.isnan(upper)
 
 
-class TestAnalyzeCNRDependence:
-    """Test CNR dependence analysis."""
-    
-    def test_cnr_analysis(self):
-        """Test CNR dependence analysis."""
-        # Create DataFrame with different CNR values
-        data = []
-        for cnr in [10, 20, 50, 100]:
-            for _ in range(10):
-                noise = 1.0 / cnr
-                data.append({
-                    'nominal CNR': cnr,
-                    'weighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, noise),
-                    'nominal diffusion coeff [cm^2/s]': 1.0
-                })
-        
-        df = pd.DataFrame(data)
-        
-        analysis = analyze_cnr_dependence(df)
-        
-        assert 10.0 in analysis
-        assert 20.0 in analysis
-        assert 50.0 in analysis
-        assert 100.0 in analysis
-        
-        # Higher CNR should have better precision
-        assert analysis[100.0]['precision_10%'] > analysis[10.0]['precision_10%']
-        
-        # Check structure
-        for cnr_val in [10.0, 20.0, 50.0, 100.0]:
-            assert 'num_runs' in analysis[cnr_val]
-            assert 'mean_ratio' in analysis[cnr_val]
-            assert 'std_ratio' in analysis[cnr_val]
-            assert 'precision_10%' in analysis[cnr_val]
-            assert 'ci_95%_lower' in analysis[cnr_val]
-            assert 'ci_95%_upper' in analysis[cnr_val]
-
-
-class TestPrecisionCounts:
-    """Test precision counting by CNR bins."""
-    
-    def test_binned_precision(self):
-        """Test precision counting in CNR bins."""
-        # Create DataFrame with various CNR values
-        data = []
-        for cnr in np.linspace(5, 50, 20):
-            data.append({
-                'nominal CNR': cnr,
-                'weighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, 0.1/cnr),
-                'unweighted fit diffusion coeff [cm^2/s]': 1.0 + np.random.normal(0, 0.15/cnr),
-                'nominal diffusion coeff [cm^2/s]': 1.0
-            })
-        
-        df = pd.DataFrame(data)
-        cnr_bins = np.array([0, 10, 20, 30, 40, 50])
-        proximity_levels = [0.1, 0.2]
-        
-        results = precision_counts(df, cnr_bins, proximity_levels)
-        
-        assert 'proximity_10%' in results
-        assert 'proximity_20%' in results
-        
-        # Check that bins are present
-        for prox_key in results:
-            bins_found = list(results[prox_key].keys())
-            assert len(bins_found) > 0
-            
-            for bin_key in bins_found:
-                assert 'count' in results[prox_key][bin_key]
-                assert 'ols_precision' in results[prox_key][bin_key]
-                assert 'wls_precision' in results[prox_key][bin_key]
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestNoiseAnalysisCnr:
+    """Per-noise CNR in the analysis is amplitude_0 / noise sigma, from a real simulation."""
+
+    def test_cnr_scales_with_amplitude(self):
+        from pathlib import Path
+        from dice.analysis.simulation import run_monte_carlo_simulation
+        from dice.io.parameters import open_parameters
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+        amplitude_0 = 2.0
+        sim_params = create_parameters_from_legacy(
+            params | {'amplitude_0': amplitude_0}, params['nominal diffusion coefficient'],
+            params['nominal lifetime (tau)'], params['nominal diffusion length'])
+        noise_values = [0.04, 0.08]
+        result = run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], noise_values,
+            num_runs=2, multiprocessing=False, seed=6)
+
+        noise_analysis = analyze_simulation_results(result)['noise_analysis']
+
+        for noise_sigma in noise_values:
+            assert noise_analysis[f'noise_{noise_sigma}']['cnr'] == pytest.approx(amplitude_0 / noise_sigma)
+
+
+class TestCustomProximityLevels:
+    """Each requested proximity level gets its own key, named by its exact percentage."""
+
+    def test_levels_are_keyed_by_their_exact_percentage(self):
+        from pathlib import Path
+        from dice.analysis.simulation import run_monte_carlo_simulation
+        from dice.io.parameters import open_parameters
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+        sim_params = create_parameters_from_legacy(
+            params, params['nominal diffusion coefficient'],
+            params['nominal lifetime (tau)'], params['nominal diffusion length'])
+        result = run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], params['noise series'],
+            num_runs=20, multiprocessing=False, seed=11)
+        # 0.29 * 100 and 0.565 * 100 fall just below 29 and 56.5 in binary floating point.
+        levels = {0.29: '29%', 0.565: '56.5%', 0.57: '57%', 0.025: '2.5%'}
+
+        precision = analyze_simulation_results(result, proximity_levels=list(levels))['precision']
+
+        assert sorted(precision) == sorted(levels.values())
+        nominal_d = params['nominal diffusion coefficient']
+        for level, label in levels.items():
+            for key in ('ols', 'wls'):
+                assert precision[label][key] == calculate_precision(
+                    result.d_estimates(key), nominal_d, level)
+
+
+class TestCnrBins:
+    """A simulation with a noise range is analyzed in bins of nominal CNR with equal numbers of runs."""
+
+    BIN_KEYS = ['cnr_min', 'cnr_max', 'num_runs', 'precision', 'precision_intervals', 'accuracy', 'statistics']
+
+    @staticmethod
+    def _range_output(noise_sigmas, amplitude_0=1.0, failed_wls_runs=()):
+        """Runs whose D estimates deviate from the nominal 0.01 in proportion to their noise sigma."""
+        from dice.models.parameters import NoiseRange
+        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        parameters = create_parameters_from_legacy(
+            {'sigma^2_0': 0.18, 'amplitude_0': amplitude_0, 'mu_0': 0.0},
+            diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
+        runs = []
+        for run_id, sigma in enumerate(noise_sigmas):
+            sign = 1 if run_id % 2 else -1
+            fit = {'slope': 0.02 * (1 + sign * 4 * sigma), 'slope_stderr': 0.001,
+                   'intercept': 0.0, 'intercept_stderr': 0.001}
+            fields = {f'ols_{name}': value for name, value in fit.items()}
+            if run_id not in failed_wls_runs:
+                fields |= {f'wls_{name}': value * (1.01 if name == 'slope' else 1) for name, value in fit.items()}
+            runs.append(RunResult(
+                run_id=run_id, nominal_diffusion_coefficient=0.01, nominal_lifetime=1.0,
+                nominal_diffusion_length=0.1, nominal_sigma2_0=0.18, noise_sigma=sigma,
+                cnr_0_estimate=amplitude_0 / sigma, **fields))
+        return MonteCarloOutput(parameters=parameters, run_results=runs, num_runs=len(runs),
+                                noise_values=list(noise_sigmas), noise_range=NoiseRange(0.01, 0.05))
+
+    @pytest.mark.parametrize('run_count, bins', [
+        (0, 1), (1, 1), (39, 1), (40, 2), (59, 2), (60, 3), (99, 4), (100, 5), (101, 5), (10000, 5)])
+    def test_bin_count_rule(self, run_count, bins):
+        from dice.analysis.statistics import MAX_CNR_BINS, MIN_RUNS_PER_CNR_BIN, cnr_bin_count
+        assert (MAX_CNR_BINS, MIN_RUNS_PER_CNR_BIN) == (5, 20)
+        assert cnr_bin_count(run_count) == bins
+
+    def test_bins_hold_every_run_once_in_order_of_cnr(self):
+        from dice.analysis.statistics import runs_by_cnr_bin
+        rng = np.random.default_rng(3)
+        sigmas = list(rng.uniform(0.01, 0.05, size=63))
+        sigmas[10] = sigmas[40]  # a tie keeps run order
+        bins = runs_by_cnr_bin(self._range_output(sigmas, amplitude_0=2.0))
+
+        assert [len(runs) for runs in bins] == [21, 21, 21]
+        ordered = [run for runs in bins for run in runs]
+        assert sorted(run.run_id for run in ordered) == list(range(63))
+        cnr = [2.0 / run.noise_sigma for run in ordered]
+        assert cnr == sorted(cnr)
+        tied = [run.run_id for run in ordered if run.noise_sigma == sigmas[40]]
+        assert tied == [10, 40]
+
+    def test_bin_sizes_differ_by_at_most_one(self):
+        from dice.analysis.statistics import runs_by_cnr_bin
+        bins = runs_by_cnr_bin(self._range_output(list(np.linspace(0.05, 0.01, 103))))
+        assert [len(runs) for runs in bins] == [21, 21, 21, 20, 20]
+
+    def test_each_bin_reports_the_statistics_of_its_runs(self):
+        from dice.analysis.statistics import calculate_accuracy_metrics
+        sigmas = list(np.random.default_rng(5).uniform(0.01, 0.05, size=45))
+        output = self._range_output(sigmas, amplitude_0=2.0, failed_wls_runs=(0, 1, 2))
+        analysis = analyze_simulation_results(output, proximity_levels=[0.05, 0.2])
+
+        bins = analysis['cnr_bins']
+        assert [list(entry) for entry in bins] == [self.BIN_KEYS] * 2
+        assert [entry['num_runs'] for entry in bins] == [23, 22]
+        assert bins[0]['cnr_max'] <= bins[1]['cnr_min']
+
+        # Recompute each bin independently from the runs whose CNR falls in its interval.
+        run_cnr = np.array([2.0 / s for s in sigmas])
+        for entry in bins:
+            in_bin = [run for run, cnr in zip(output.run_results, run_cnr)
+                      if entry['cnr_min'] <= cnr <= entry['cnr_max']]
+            assert len(in_bin) == entry['num_runs']
+            assert entry['cnr_min'] == pytest.approx(min(2.0 / run.noise_sigma for run in in_bin))
+            assert entry['cnr_max'] == pytest.approx(max(2.0 / run.noise_sigma for run in in_bin))
+            for key in ('wls', 'ols'):
+                d = np.array([getattr(run, f'{key}_slope') / 2 for run in in_bin
+                              if getattr(run, f'{key}_slope') is not None])
+                assert entry['accuracy'][key] == pytest.approx(calculate_accuracy_metrics(d, 0.01))
+                for label, level in (('5%', 0.05), ('20%', 0.2)):
+                    assert entry['precision'][label][key] == pytest.approx(
+                        np.mean(np.abs(d / 0.01 - 1) <= level))
+                assert entry['statistics'][key] == {
+                    'num_successful': len(d), 'num_failed': len(in_bin) - len(d),
+                    'success_rate': len(d) / len(in_bin)}
+        assert sum(entry['statistics']['wls']['num_failed'] for entry in bins) == 3
+
+    def test_noise_range_has_no_per_level_analysis(self):
+        analysis = analyze_simulation_results(self._range_output(list(np.linspace(0.01, 0.05, 30))))
+        assert analysis['noise_analysis'] == {}
+        assert analysis['summary']['total_runs'] == 30
+        assert analysis['statistics']['wls']['num_successful'] == 30
+
+    def test_fixed_noise_has_no_cnr_bins(self):
+        import dataclasses
+        fixed = dataclasses.replace(self._range_output([0.02] * 30), noise_values=[0.02], noise_range=None)
+        assert 'cnr_bins' not in analyze_simulation_results(fixed)
+
+    def test_no_runs_no_bins(self):
+        analysis = analyze_simulation_results(self._range_output([]))
+        assert analysis['cnr_bins'] == []
+
+
+class TestUncertaintyOfTheStatistics:
+    """A statistic of a finite number of runs comes with its uncertainty."""
+
+    @pytest.mark.parametrize('count, total', [(0, 20), (1, 20), (19, 100), (265, 1500), (20, 20), (7, 7)])
+    def test_interval_is_the_score_interval(self, count, total):
+        """
+        The limits are the proportions p whose distance from the observed
+        fraction is 1.96 standard errors of p: the definition of the score
+        interval. An end at 0 or at 1 is exact.
+        """
+        from dice.analysis.statistics import proportion_interval
+
+        lower, upper = proportion_interval(count, total)
+        observed = count / total
+        z = 1.959963984540054
+
+        for limit in (lower, upper):
+            if limit in (0.0, 1.0):
+                assert observed == limit
+            else:
+                assert abs(observed - limit) == pytest.approx(z * np.sqrt(limit * (1 - limit) / total), rel=1e-9)
+        assert 0.0 <= lower <= observed <= upper <= 1.0
+        assert upper - lower > 0  # also for 0 and for all of the estimates
+
+    def test_interval_of_none_and_of_all_has_the_closed_form(self):
+        """For 0 of n the upper limit is z² / (n + z²); for n of n the lower limit is n / (n + z²)."""
+        from dice.analysis.statistics import proportion_interval
+
+        z2 = 1.959963984540054 ** 2
+        assert proportion_interval(0, 20) == (0.0, pytest.approx(z2 / (20 + z2), rel=1e-9))
+        assert proportion_interval(20, 20) == (pytest.approx(20 / (20 + z2), rel=1e-9), 1.0)
+
+    def test_interval_narrows_with_more_runs(self):
+        from dice.analysis.statistics import proportion_interval
+
+        widths = [upper - lower for lower, upper in
+                  (proportion_interval(total // 5, total) for total in (20, 100, 500, 2500))]
+        assert widths == sorted(widths, reverse=True)
+
+    def test_no_estimates_give_no_interval(self):
+        from dice.analysis.statistics import proportion_interval
+
+        assert all(np.isnan(limit) for limit in proportion_interval(0, 0))
+
+    def test_standard_error_is_that_of_the_mean(self):
+        estimates = np.array([0.009, 0.011, 0.0105, 0.0098, 0.0102, 0.0089])
+        metrics = calculate_accuracy_metrics(estimates, 0.01)
+
+        assert metrics['std'] == pytest.approx(estimates.std(ddof=1))
+        assert metrics['standard_error'] == pytest.approx(metrics['std'] / np.sqrt(6))
+        assert 'count' not in metrics  # the number of estimates is statistics['num_successful']
+        single = calculate_accuracy_metrics(estimates[:1], 0.01)
+        assert np.isnan(single['std']) and np.isnan(single['standard_error'])
+        empty = calculate_accuracy_metrics(np.array([]), 0.01)
+        assert np.isnan(empty['std']) and np.isnan(empty['standard_error'])

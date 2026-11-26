@@ -136,7 +136,7 @@ def validate_integer(value: Any, name: str = "value",
     """
     if isinstance(value, (np.integer, np.int_)):
         value = int(value)
-    elif isinstance(value, float):
+    elif isinstance(value, (float, np.floating)):
         if not value.is_integer():
             raise TypeError(f"{name} must be an integer, got float {value}")
         value = int(value)
@@ -238,5 +238,201 @@ def validate_file_path(path: str, must_exist: bool = False,
     if extension is not None:
         if not path.endswith(extension):
             raise ValueError(f"{name} must have extension {extension}, got {path}")
-    
+
     return path
+
+
+# Windows reserves these names for devices in every folder, with or without
+# an extension: a folder or file of such a name cannot be created.
+WINDOWS_RESERVED_NAMES = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$']
+    + [f'COM{digit}' for digit in '123456789\u00b9\u00b2\u00b3']
+    + [f'LPT{digit}' for digit in '123456789\u00b9\u00b2\u00b3']
+)
+
+# The slug names the output folder and is the start of every file name in
+# it, so it appears twice in the path of each output file. File systems take
+# names of 255 characters, and Windows by default paths of 260. The limit
+# leaves about 100 characters for the folder that holds output/.
+MAX_FILENAME_SLUG_LENGTH = 64
+
+
+def validate_filename_slug(value: str, name: str = "filename") -> str:
+    """
+    Validate that a filename slug is a plain file name.
+
+    The slug names the output folder and the output files, so it cannot hold
+    a path separator, be '.' or '..', or end with a dot or a space (Windows
+    drops those, so the files would get another name).
+
+    Parameters
+    ----------
+    value : str
+        The filename slug to validate.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    str
+        The validated filename slug.
+
+    Raises
+    ------
+    TypeError
+        If the value is not a string.
+    ValueError
+        If the value is empty, longer than 64 characters, contains
+        forbidden or control characters, is '.' or '..', ends with a dot or
+        a space, or is a name that Windows
+        reserves for a device (the check applies on every system, so that a
+        parameter file runs everywhere).
+    """
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string, got {type(value).__name__}")
+
+    if not value or not value.strip():
+        raise ValueError(f"{name} cannot be empty")
+
+    invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+    for char in invalid_chars:
+        if char in value:
+            raise ValueError(f"{name} cannot contain: {', '.join(invalid_chars)}")
+
+    if len(value) > MAX_FILENAME_SLUG_LENGTH:
+        raise ValueError(
+            f"{name} cannot be longer than {MAX_FILENAME_SLUG_LENGTH} characters; it has {len(value)}"
+        )
+
+    if any(ord(char) < 32 for char in value):
+        raise ValueError(f"{name} cannot contain control characters such as a tab or a line break")
+
+    if value in ('.', '..'):
+        raise ValueError(f"{name} cannot be '.' or '..'")
+
+    if value.split('.')[0].strip().upper() in WINDOWS_RESERVED_NAMES:
+        raise ValueError(f"{name} cannot be {value!r}: Windows reserves that name for a device")
+
+    if value.endswith(('.', ' ')):
+        raise ValueError(f"{name} cannot end with a dot or a space")
+
+    return value
+
+
+def validate_time_values(values: List[float], name: str = "time values") -> List[float]:
+    """
+    Validate a list of time values (must be finite, unique, and non-empty).
+
+    Parameters
+    ----------
+    values : list of float
+        The time values to validate.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    list of float
+        The validated time values.
+
+    Raises
+    ------
+    TypeError
+        If values is not a list or contains non-numeric types.
+    ValueError
+        If values is empty, contains non-finite numbers, or has duplicates.
+    """
+    if not isinstance(values, list):
+        raise TypeError(f"{name} must be a list, got {type(values).__name__}")
+
+    if len(values) == 0:
+        raise ValueError(f"{name} must contain at least one value")
+
+    validated = []
+    for i, v in enumerate(values):
+        if not isinstance(v, (int, float, np.number)):
+            raise TypeError(f"{name}[{i}] must be numeric, got {type(v).__name__}")
+        float_v = float(v)
+        if not np.isfinite(float_v):
+            raise ValueError(f"All {name} must be finite, got {float_v}")
+        if float_v < 0:
+            raise ValueError(f"{name} must be 0 or greater, got {float_v:g}")
+        validated.append(float_v)
+
+    if len(validated) != len(set(validated)):
+        raise ValueError(f"{name} must be unique")
+
+    return validated
+
+
+def validate_range(start: float, stop: float, steps: int,
+                   name: str = "range") -> Tuple[float, float, int]:
+    """
+    Validate range parameters (start < stop, steps > 0).
+
+    Parameters
+    ----------
+    start : float
+        The start value of the range.
+    stop : float
+        The stop value of the range.
+    steps : int
+        The number of steps in the range.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    tuple
+        A tuple of (start, stop, steps).
+
+    Raises
+    ------
+    TypeError
+        If parameters have wrong types.
+    ValueError
+        If start >= stop or steps <= 0.
+    """
+    start = validate_numeric(start, name=f"{name} start")
+    stop = validate_numeric(stop, name=f"{name} stop")
+    steps = validate_integer(steps, name=f"{name} steps", min_val=1)
+
+    if start < 0:
+        raise ValueError(f"{name} start must be 0 or greater, got {start}")
+
+    if start >= stop:
+        raise ValueError(f"{name} start must be less than stop, got {start} >= {stop}")
+
+    return (start, stop, steps)
+
+
+def validate_limits(value: Any, name: str = "limits") -> List[float]:
+    """
+    Validate a pair of axis limits [low, high].
+
+    Parameters
+    ----------
+    value : list or tuple
+        The two limits.
+    name : str, optional
+        The name of the parameter for error messages.
+
+    Returns
+    -------
+    list of float
+        The limits as [low, high].
+
+    Raises
+    ------
+    ValueError
+        If value is not two increasing finite numbers.
+    """
+    is_pair = isinstance(value, (list, tuple)) and len(value) == 2
+    if (not is_pair
+            or not all(isinstance(limit, (int, float)) and not isinstance(limit, bool)
+                       and np.isfinite(limit) for limit in value)
+            or value[0] >= value[1]):
+        raise ValueError(
+            f"{name} must be two increasing finite numbers [low, high], got {value!r}."
+        )
+    return [float(value[0]), float(value[1])]

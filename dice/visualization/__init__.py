@@ -9,7 +9,6 @@ from .plots import (
     get_color_definitions,
     plot_gaussian_profile,
     plot_profile_evolution,
-    plot_diffusion_msd,
     plot_cnr_dependence,
     close_figure,
     close_all_figures,
@@ -18,6 +17,7 @@ from .plots import (
 
 from .histograms import (
     plot_accuracy_histogram,
+    plot_accuracy_vs_cnr,
     plot_diffusion_coefficient_histogram,
     plot_cnr_histogram,
     plot_precision_vs_parameter,
@@ -31,11 +31,11 @@ __all__ = [
     # Basic plotting
     'plot_gaussian_profile',
     'plot_profile_evolution',
-    'plot_diffusion_msd',
     'plot_cnr_dependence',
     
     # Histograms and distributions
     'plot_accuracy_histogram',
+    'plot_accuracy_vs_cnr',
     'plot_diffusion_coefficient_histogram',
     'plot_cnr_histogram',
     'plot_precision_vs_parameter',

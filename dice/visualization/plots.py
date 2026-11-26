@@ -5,12 +5,15 @@ This module provides functions for creating plots and visualizations
 of simulation results, profiles, and statistical analyses.
 """
 
+import logging
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import norm
 from typing import Dict, List, Tuple, Optional, Union, Any
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_color_definitions() -> Dict[str, Union[str, Any]]:
@@ -117,7 +120,7 @@ def plot_gaussian_profile(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 
@@ -204,6 +207,8 @@ def plot_profile_evolution(
     # Legend (only if not too many profiles)
     if n_profiles <= 10:
         ax.legend(fontsize=font_size-2, frameon=False)
+    else:
+        logger.info("Legend omitted: %d profiles exceeds display limit of 10", n_profiles)
     
     # Make background white and opaque
     fig.patch.set_facecolor('w')
@@ -214,120 +219,7 @@ def plot_profile_evolution(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
-    
-    return fig
-
-
-def plot_diffusion_msd(
-    time_axis: np.ndarray,
-    sigma2_values: np.ndarray,
-    sigma2_errors: Optional[np.ndarray] = None,
-    ols_fit: Optional[Dict] = None,
-    wls_fit: Optional[Dict] = None,
-    title: str = "Mean Squared Displacement",
-    xlabel: str = "Time",
-    ylabel: str = "σ² - σ²₀",
-    time_unit: str = "ns",
-    length_unit: str = "µm",
-    filename: Optional[str] = None,
-    **plot_kwargs
-) -> plt.Figure:
-    """
-    Plot mean squared displacement (MSD) analysis.
-    
-    Parameters
-    ----------
-    time_axis : np.ndarray
-        Time points.
-    sigma2_values : np.ndarray
-        Measured variance values.
-    sigma2_errors : np.ndarray, optional
-        Error bars for variance measurements.
-    ols_fit : dict, optional
-        OLS fit results with 'slope' and 'intercept' keys.
-    wls_fit : dict, optional
-        WLS fit results with 'slope' and 'intercept' keys.
-    title : str
-        Plot title.
-    xlabel : str
-        X-axis label.
-    ylabel : str
-        Y-axis label.
-    time_unit : str
-        Unit for time axis.
-    length_unit : str
-        Unit for length measurements.
-    filename : str, optional
-        If provided, save plot to this filename.
-    **plot_kwargs
-        Additional plotting parameters.
-    
-    Returns
-    -------
-    plt.Figure
-        The matplotlib figure object.
-    """
-    # Extract plot parameters
-    width = plot_kwargs.get('width', 10.0)  # cm
-    height = plot_kwargs.get('height', 8.0)  # cm
-    dpi = plot_kwargs.get('dpi', 100)
-    font_size = plot_kwargs.get('font_size', 12)
-    image_type = plot_kwargs.get('image_type', 'png')
-    
-    # Convert cm to inches
-    inch = 1/2.54
-    width_in, height_in = width * inch, height * inch
-    
-    # Get colors
-    colors = get_color_definitions()
-    
-    # Create figure
-    fig, ax = plt.subplots(layout='constrained', figsize=(width_in, height_in))
-    
-    # Calculate MSD (subtract initial variance)
-    if len(sigma2_values) > 0:
-        msd = sigma2_values - sigma2_values[0]
-    else:
-        msd = sigma2_values
-    
-    # Plot data points
-    if sigma2_errors is not None:
-        ax.errorbar(time_axis, msd, yerr=sigma2_errors, 
-                   fmt='o', color=colors['dice_blue'], 
-                   capsize=3, label='Data')
-    else:
-        ax.plot(time_axis, msd, 'o', color=colors['dice_blue'], 
-                markersize=6, label='Data')
-    
-    # Plot fits if provided
-    if ols_fit is not None:
-        fit_line = ols_fit['slope'] * time_axis + ols_fit['intercept']
-        ax.plot(time_axis, fit_line, '--', color=colors['dice_gold'],
-                linewidth=2, label=f"OLS: D = {ols_fit['slope']/2:.3f}")
-    
-    if wls_fit is not None:
-        fit_line = wls_fit['slope'] * time_axis + wls_fit['intercept']
-        ax.plot(time_axis, fit_line, '-', color=colors['dice_green'],
-                linewidth=2, label=f"WLS: D = {wls_fit['slope']/2:.3f}")
-    
-    # Formatting
-    ax.set_xlabel(f"{xlabel} ({time_unit})", fontsize=font_size)
-    ax.set_ylabel(f"{ylabel} ({length_unit}²)", fontsize=font_size)
-    ax.set_title(title, fontsize=font_size)
-    ax.tick_params(axis='both', labelsize=font_size, direction='in')
-    ax.legend(fontsize=font_size, frameon=False)
-    
-    # Make background white and opaque
-    fig.patch.set_facecolor('w')
-    fig.patch.set_alpha(1)
-    
-    # Save if filename provided
-    if filename:
-        try:
-            plt.savefig(filename, dpi=dpi, format=image_type)
-        except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 
@@ -404,7 +296,7 @@ def plot_cnr_dependence(
         try:
             plt.savefig(filename, dpi=dpi, format=image_type)
         except Exception as e:
-            print(f"Error saving plot: {e}")
+            logger.warning("Error saving plot: %s", e)
     
     return fig
 

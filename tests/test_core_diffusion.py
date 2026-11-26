@@ -41,7 +41,7 @@ class TestCalculateDiffusionCoefficient:
     def test_zero_slope(self):
         """Test with zero slope (no diffusion)."""
         D = calculate_diffusion_coefficient(0, dimensions=1)
-        assert D == 0
+        assert D == pytest.approx(0.0)
     
     def test_invalid_dimensions(self):
         """Test error for invalid dimensions."""
@@ -73,10 +73,14 @@ class TestCalculateDiffusionLength:
         L_D = calculate_diffusion_length(0, 10)
         assert L_D == 0
     
-    def test_zero_lifetime(self):
-        """Test with zero lifetime."""
+    def test_zero_lifetime_is_infinite(self):
+        """A lifetime of 0 means no decay, so a diffusing species has no bound."""
         L_D = calculate_diffusion_length(10, 0)
-        assert L_D == 0
+        assert L_D == np.inf
+
+    def test_zero_diffusion_and_zero_lifetime(self):
+        """A species that does not move has no diffusion length, decaying or not."""
+        assert calculate_diffusion_length(0, 0) == 0
     
     def test_negative_values(self):
         """Test error for negative values."""
@@ -121,9 +125,22 @@ class TestCalculateMSD:
         # Tiny negative values should be set to zero
         sigma2_t = np.array([1.0, 1.0 - 1e-12, 1.0 + 1e-6])
         msd = calculate_msd(sigma2_t)
-        
+
         assert msd[1] == 0  # Tiny negative set to 0
         assert msd[2] > 0  # Positive value preserved
+
+    def test_single_element_array(self):
+        """Test MSD with a single time point."""
+        sigma2_t = np.array([5.0])
+        msd = calculate_msd(sigma2_t)
+        assert len(msd) == 1
+        assert msd[0] == pytest.approx(0.0)
+
+    def test_constant_variance(self):
+        """Test MSD when variance is constant across time (no diffusion)."""
+        sigma2_t = np.array([3.0, 3.0, 3.0, 3.0])
+        msd = calculate_msd(sigma2_t)
+        np.testing.assert_array_almost_equal(msd, [0.0, 0.0, 0.0, 0.0])
 
 
 class TestEstimateDiffusionFromMSD:
