@@ -309,7 +309,7 @@ and Fixed give the details.
   1.0.0 fits the same way, so results from earlier releases with lengths in
   centimeters or meters, or with a small amplitude, are affected. For results
   in micrometers or nanometers with an amplitude near 1 this error was
-  small. The table above lists the other changes in results from 1.2.0.
+  small.
 - Results in length or time units other than micrometer and nanosecond are
   converted and labeled correctly. In 1.2.0 the command-line interface wrote
   the results file and the summary as if the units were micrometer and
