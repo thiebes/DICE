@@ -168,16 +168,17 @@ class TestFailedRun:
         assert error.startswith("Error reading CSV for noise estimation: ")
         assert "absent.csv" in error and "could not be read" in error
         assert log.results == []
-        assert log.messages == ["Running 5 runs (4 worker processes)..."]
+        assert log.messages == ["Running 5 runs (4 at a time)..."]
 
     @pytest.mark.parametrize("number_of_runs, workers_of_joblib, status_text", [
-        (5, 8, "Running 5 runs (5 worker processes)..."),
-        (1, 8, "Running 1 run (1 worker process)..."),
-        (12000, 1, "Running 12,000 runs (1 worker process)..."),
+        (5, 8, "Running 5 runs (5 at a time)..."),
+        (1, 8, "Running 1 run (1 at a time)..."),
+        (12000, 1, "Running 12,000 runs (1 at a time)..."),
+        (12000, 8, "Running 12,000 runs (8 at a time)..."),
     ])
-    def test_status_text_counts_the_runs_and_the_worker_processes(
+    def test_status_text_counts_the_runs_and_how_many_run_at_a_time(
             self, qtbot, work_dir, monkeypatch, number_of_runs, workers_of_joblib, status_text):
-        """No more workers than runs, and no more than joblib uses for all processors."""
+        """No more at a time than there are runs, and no more than joblib uses for all processors."""
         parameters = quick_test_engine_parameters(number_of_runs=number_of_runs)
         del parameters["noise value"]
         parameters["estimate noise from data"] = str(work_dir / "absent.csv")

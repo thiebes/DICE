@@ -34,12 +34,13 @@ class SimulationThread(QThread):
 
             if is_parallel:
                 from joblib import effective_n_jobs
-                # One worker for each processor that joblib may use, and no
-                # more workers than runs.
-                workers = max(1, min(effective_n_jobs(-1), num_runs))
+                # As many runs at the same time as joblib has processors to
+                # use, and no more than there are runs. This holds for joblib,
+                # which keeps all its workers whatever the number of runs,
+                # and for the process pool of a standalone build.
+                at_a_time = max(1, min(effective_n_jobs(-1), num_runs))
                 noun = "run" if num_runs == 1 else "runs"
-                processes = "worker process" if workers == 1 else "worker processes"
-                self.progress.emit(f"Running {num_runs:,} {noun} ({workers} {processes})...")
+                self.progress.emit(f"Running {num_runs:,} {noun} ({at_a_time} at a time)...")
             else:
                 self.progress.emit("Starting simulation...")
 
