@@ -35,7 +35,9 @@ def write_file(file_path: Path, content: str) -> None:
         f.write(content)
 
 
-DEVELOPMENT_SUFFIX = r'\.dev\d+'
+# The number has no leading zero, so that the version is in the form that
+# packaging tools write (PEP 440 reads 1.3.0.dev01 as 1.3.0.dev1).
+DEVELOPMENT_SUFFIX = r'\.dev(0|[1-9]\d*)'
 
 
 def validate_version(version: str) -> bool:
@@ -74,15 +76,14 @@ def update_dice_init(file_path: Path, new_version: str) -> bool:
     return True
 
 
-def update_citation_cff(file_path: Path, new_version: str, new_date: str) -> bool:
-    """Update version and date in CITATION.cff."""
+def update_citation_cff(file_path: Path, new_version: str, new_date: str | None) -> bool:
+    """Update the version in CITATION.cff, and the release date unless new_date is None."""
     content = read_file(file_path)
 
     # Update version (both occurrences)
     version_pattern = r'version: "[^"]+"'
     version_replacement = f'version: "{new_version}"'
     date_pattern = r'date-released: "\d{4}-\d{2}-\d{2}"'
-    date_replacement = f'date-released: "{new_date}"'
 
     if not re.search(version_pattern, content):
         print(f"ERROR: Could not find version in {file_path}")
@@ -93,7 +94,8 @@ def update_citation_cff(file_path: Path, new_version: str, new_date: str) -> boo
         return False
 
     new_content = re.sub(version_pattern, version_replacement, content)
-    new_content = re.sub(date_pattern, date_replacement, new_content)
+    if new_date is not None:
+        new_content = re.sub(date_pattern, f'date-released: "{new_date}"', new_content)
 
     if content == new_content:
         print(f"No changes needed in {file_path}")
@@ -167,8 +169,9 @@ def main():
     )
     parser.add_argument(
         '--date',
-        help='Release date in YYYY-MM-DD format (default: today)',
-        default=datetime.now().strftime('%Y-%m-%d')
+        help='Release date in YYYY-MM-DD format (default: today for a release; '
+             'a development version keeps the date that CITATION.cff has)',
+        default=None
     )
     parser.add_argument(
         '--no-confirm',
@@ -184,7 +187,10 @@ def main():
         print("Version must be X.Y.Z (e.g., 1.2.0), or X.Y.Z.devN for a development version (e.g., 1.3.0.dev0)")
         sys.exit(1)
 
-    if not validate_date(args.date):
+    if args.date is None and not is_development_version(args.version):
+        args.date = datetime.now().strftime('%Y-%m-%d')
+
+    if args.date is not None and not validate_date(args.date):
         print(f"ERROR: Invalid date format: {args.date}")
         print("Date must be in YYYY-MM-DD format")
         sys.exit(1)
@@ -200,7 +206,7 @@ def main():
     if not args.no_confirm:
         print(f"\nCurrent version: {current_version}")
         print(f"New version:     {args.version}")
-        print(f"Release date:    {args.date}")
+        print(f"Release date:    {args.date or 'unchanged'}")
         print("\nFiles to be updated:")
         print("  - dice/__init__.py")
         print("  - CITATION.cff")

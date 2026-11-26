@@ -42,7 +42,7 @@ The script updates the files that cannot import the version:
 python scripts/bump_version.py <new_version> [--date YYYY-MM-DD] [--no-confirm]
 ```
 
-The release date defaults to the current date. Without `--no-confirm`, the script shows the planned change and asks for confirmation.
+For a release, the date defaults to the current date. For a development version, the release date in `CITATION.cff` stays as it is unless `--date` is given. Without `--no-confirm`, the script shows the planned change and asks for confirmation.
 
 If a file already contains the requested version, the script reports that no change is needed in that file and continues. To set only the release date in `CITATION.cff`, run the script with the current version and `--date`. The script stops with an error when the version or the date has an invalid format, when a file has no version field, or when `CITATION.cff` has no `date-released` field. After an update, it prints the next steps of the release workflow.
 
@@ -58,8 +58,8 @@ python scripts/bump_version.py 1.3.0 --date 2025-09-15
 # Skip the confirmation prompt
 python scripts/bump_version.py 1.3.0 --no-confirm
 
-# Set a development version between releases, keeping the date in CITATION.cff
-python scripts/bump_version.py 1.3.0.dev0 --date 2025-09-15
+# Set a development version between releases; the release date in CITATION.cff stays as it is
+python scripts/bump_version.py 1.3.0.dev0
 ```
 
 A version is `X.Y.Z` for a release, or `X.Y.Z.devN` for a development version. The main branch carries a development version of the next release from the time its changes are merged until the release, so that the summary file and `dice --version` do not name a release that does not exist yet. A development version gets no tag and no GitHub release; the release workflow refuses a release whose tag differs from `__version__`.
@@ -76,11 +76,14 @@ A version is `X.Y.Z` for a release, or `X.Y.Z.devN` for a development version. T
 8. Tag the release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`.
 9. Push the commit and the tag: `git push && git push --tags`.
 10. On GitHub, publish a release for the tag. Publishing it, not pushing the tag, starts `.github/workflows/build-release.yml`, which builds the standalone executables and attaches them, their license notices, and `SHA256SUMS.txt` to the release.
+11. When the first change for the next release is merged, set its development version, for example `python scripts/bump_version.py X.Y.Z.dev0` with the next version as `X.Y.Z`, and run `uv lock`.
 
 #### Version format
 
-Versions follow semantic versioning, `MAJOR.MINOR.PATCH` (for example, 1.2.0):
+Release versions follow semantic versioning, `MAJOR.MINOR.PATCH` (for example, 1.2.0):
 
 - MAJOR: changes that are not backward compatible
 - MINOR: added features that are backward compatible
 - PATCH: backward-compatible bug fixes
+
+A development version adds `.devN` to the version of the next release, in the form that PEP 440 defines for Python packages (for example, 1.3.0.dev0). `N` is written without a leading zero.
