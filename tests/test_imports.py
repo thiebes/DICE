@@ -77,7 +77,6 @@ def _run_import_checks():
 
     try:
         from dice.utils.axes import make_x_axis
-        import numpy as np
         x = make_x_axis(10.0, 11, 0.0)
         print(f"[OK] make_x_axis created array with shape {x.shape}")
     except Exception as e:

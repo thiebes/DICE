@@ -6,7 +6,7 @@ diffusion lengths, and mean squared displacement (MSD).
 """
 
 import numpy as np
-from typing import Union, Optional
+from typing import Optional
 from ..utils.validators import validate_numeric, validate_array_like
 
 

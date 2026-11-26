@@ -8,7 +8,7 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 import dataclasses
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional
 from ..core.noise import nominal_cnr
 from ..models.estimators import in_column_order
 from ..models.results import MonteCarloOutput, RunResult

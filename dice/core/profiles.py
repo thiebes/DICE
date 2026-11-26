@@ -6,7 +6,7 @@ over time, including diffusion and exponential decay effects.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict
 from ..utils.validators import validate_numeric, validate_array_like
 from ..utils.converters import sigma2_to_fwhm
 

@@ -29,8 +29,7 @@ from ..core.noise import (
 )
 from ..models.parameters import NoiseRange
 from ..models.parameter_keys import (
-    normalize_parameters, normalize_parameter_key, add_legacy_keys,
-    ParameterKey, LEGACY_OUTPUT_KEYS
+    normalize_parameters, normalize_parameter_key, add_legacy_keys
 )
 
 # Keys of the proximity-level parameter, retired from the simulation schema;

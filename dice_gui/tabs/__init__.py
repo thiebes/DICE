@@ -6,7 +6,6 @@ Each tab is created by a separate module for maintainability.
 
 from dice_gui.tabs.base import (
     create_option_card,
-    create_field_with_unit,
     create_error_label,
     combo_value,
     set_combo_value,
@@ -36,7 +35,6 @@ from dice_gui.tabs.tab_output import create_tab_output_settings
 __all__ = [
     # Base utilities
     "create_option_card",
-    "create_field_with_unit",
     "create_error_label",
     "combo_value",
     "set_combo_value",

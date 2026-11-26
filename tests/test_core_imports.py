@@ -16,11 +16,11 @@ def _run_core_import_checks():
         from dice.core import (
             gaussian,
             integrated_intensity,
-            make_diffusion_decay,
+            make_diffusion_decay,  # noqa: F401 (the import is the test)
             add_noise,
             fft_cnr,
-            gauss_fitting,
-            diffusion_ols_fit,
+            gauss_fitting,  # noqa: F401
+            diffusion_ols_fit,  # noqa: F401
             calculate_diffusion_coefficient,
         )
         print("[OK] All core functions imported successfully")

@@ -12,8 +12,6 @@ from dice.utils.units import (
     Dimension,
     VALID_LENGTH_UNITS,
     VALID_TIME_UNITS,
-    LENGTH_ABBREVIATIONS,
-    TIME_ABBREVIATIONS,
     PARAMETER_DIMENSIONS,
     validate_length_unit,
     validate_time_unit,

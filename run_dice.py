@@ -5,9 +5,7 @@ This script provides backward compatibility with the original run_dice.py interf
 while also supporting the new modular CLI functionality.
 """
 
-import argparse
 import sys
-import os
 
 def main():
     """Main entry point for DICE simulations."""

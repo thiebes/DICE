@@ -15,7 +15,7 @@ from dice.io.results import results_column
 
 from gui_support import (
     EXAMPLES_DIR, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
-    choose_global_units, d_estimates_from_csv, enter_text, fraction_sentence, fraction_within, run_and_wait,
+    choose_global_units, d_estimates_from_csv, enter_text, fraction_sentence, run_and_wait,
     summary_label_texts,
 )
 

@@ -16,7 +16,11 @@ the process is for before it imports Qt or the GUI:
 import multiprocessing
 import sys
 import traceback
-from typing import List, Optional, TextIO, Tuple
+from typing import TYPE_CHECKING, List, Optional, TextIO, Tuple
+
+if TYPE_CHECKING:
+    # Only for annotations: numpy is imported when a simulation starts, not at startup.
+    import numpy as np
 
 SELF_TEST_OPTION = '--self-test'
 

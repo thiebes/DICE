@@ -5,7 +5,6 @@ Tests for dice.cli.arguments module.
 import pytest
 import tempfile
 import os
-from pathlib import Path
 import argparse
 from dice.cli.arguments import (
     create_parser,

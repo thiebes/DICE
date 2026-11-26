@@ -6,8 +6,6 @@ This module handles parameter conversion and simulation execution.
 
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
-import sys
-import os
 
 from dice.models.estimators import ESTIMATORS, SlopeFit, get_estimator
 from dice.models.results import RunResult, MonteCarloOutput
@@ -135,7 +133,7 @@ class DiceInterface:
 
     def build_parameters_dict(self, gui_params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Build a parameters dictionary from GUI inputs in the format expected by dice.py.
+        Build a parameters dictionary from GUI inputs in the format that the parser of the dice package reads.
 
         Args:
             gui_params: Dictionary containing all GUI parameter values
@@ -573,7 +571,6 @@ class DiceInterface:
         """
         try:
             import pandas as pd
-            import numpy as np
             from pathlib import Path
             from dice.visualization.histograms import plot_accuracy_histogram
 

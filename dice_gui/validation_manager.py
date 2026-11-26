@@ -36,7 +36,7 @@ class ValidationManager(QObject):
     Responsibilities:
     - Track validation state for all registered fields
     - Handle conditional field groups (radio button selections)
-    - Debounce validation on text input
+    - Validate a field each time its text changes
     - Emit signals when overall validity changes
     - Manage Run button enabled state
     """

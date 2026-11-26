@@ -296,7 +296,7 @@ class TestRunMonteCarloSimulation:
         def progress_callback(current, total):
             progress_calls.append((current, total))
         
-        result = run_monte_carlo_simulation(
+        run_monte_carlo_simulation(
             parameters=params,
             x_axis=x_axis,
             time_axis=time_axis,

@@ -87,8 +87,7 @@ def isolated_settings(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pyt
     def ini_settings(organization: str, application: str) -> QSettings:
         return QSettings(str(settings_dir / f"{organization}_{application}.ini"), QSettings.Format.IniFormat)
 
-    for module in ("dice_gui.dice_gui", "dice_gui.collapsible_group"):
-        monkeypatch.setattr(f"{module}.QSettings", ini_settings)
+    monkeypatch.setattr("dice_gui.dice_gui.QSettings", ini_settings)
     return settings_dir
 
 

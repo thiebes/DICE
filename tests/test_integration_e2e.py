@@ -6,7 +6,6 @@ after the modular refactoring.
 """
 
 import pytest
-import tempfile
 from pathlib import Path
 import numpy as np
 
@@ -45,7 +44,6 @@ class TestEndToEndSimulation:
         """Verify Monte Carlo simulation executes without errors."""
         from dice.analysis.simulation import run_monte_carlo_simulation
         from dice.models.parameters import simulation_parameters_from_dict
-        from dice.utils.axes import make_x_axis
 
         # Create minimal parameters
         x_axis = np.linspace(-5, 5, 50)

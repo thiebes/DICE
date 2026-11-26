@@ -398,7 +398,6 @@ class TestMixedUnitParameters:
         """A mixed-unit parameter set should produce the same parsed result
         as an equivalent single-unit-system parameter set."""
         from dice.utils.units import resolve_units
-        from dice.utils.converters import fwhm_to_sigma2
 
         # Single unit system: everything in μm/ns
         params_uniform = self._base_params()

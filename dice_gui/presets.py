@@ -103,11 +103,3 @@ def get_preset(name: str) -> OutputPreset:
 def list_presets() -> list:
     """List all available preset names."""
     return list(PRESETS.keys())
-
-
-def get_preset_choices() -> list:
-    """Get list of (name, display_name, description) tuples for UI."""
-    return [
-        (key, preset.name, preset.description)
-        for key, preset in PRESETS.items()
-    ]

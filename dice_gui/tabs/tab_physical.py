@@ -13,14 +13,12 @@ from PyQt6.QtWidgets import (
 )
 
 from dice_gui.tabs.base import (
-    create_option_card, create_error_label, create_scrollable_tab, create_unit_combo, combo_value,
+    create_error_label, create_scrollable_tab, create_unit_combo, combo_value,
     format_computed_value,
 )
 from dice_gui.accessibility import add_keyboard_shortcut_to_label, set_tab_order
 from dice_gui.validators import (
-    validate_positive_float, validate_float,
-    convert_fwhm_to_sigma, convert_sigma_to_fwhm,
-    calculate_diffusion_length
+    convert_fwhm_to_sigma, convert_sigma_to_fwhm
 )
 
 if TYPE_CHECKING:

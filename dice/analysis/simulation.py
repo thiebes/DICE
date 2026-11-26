@@ -11,11 +11,10 @@ import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import Callable, Iterator, List, Tuple, Optional, Any, Sequence, Union
+from typing import Callable, Iterator, List, Optional, Any, Sequence, Union
 from joblib import Parallel, delayed, effective_n_jobs
-import pandas as pd
 
-from ..core.profiles import gaussian, make_diffusion_decay
+from ..core.profiles import make_diffusion_decay
 from fft_cnr import fft_cnr
 from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, calculate_wls_weights

@@ -6,7 +6,6 @@ Gaussian width parameters (FWHM, sigma, sigma^2).
 """
 
 import numpy as np
-from typing import Union
 
 
 def sigma_to_fwhm(sigma: float) -> float:
