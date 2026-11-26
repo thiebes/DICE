@@ -125,6 +125,13 @@ def qt_source_url(qt_version: str) -> str:
     return f"https://download.qt.io/archive/qt/{major_minor}/{qt_version}/single/"
 
 
+def source_revision(version: str) -> str:
+    """Where in the repository the source of this version is: at its tag, or for a development version at no tag."""
+    if ".dev" in version:
+        return "at the commit that this development build was made from, which has no tag"
+    return f"at the tag v{version}"
+
+
 def notice_header(version: str, packaged_with_pyinstaller: bool, qt_version: str) -> str:
     """The opening of the notice: what the application is licensed under and where its source is."""
     python_version = ".".join(str(part) for part in sys.version_info[:3])
@@ -146,7 +153,8 @@ entry.
 
 Source code: the complete source of this application is the DICE repository,
 {REPOSITORY_URL}
-at the tag v{version}. In that repository, uv.lock gives the exact version
+{source_revision(version)}.
+In that repository, uv.lock gives the exact version
 of every package of section 2 that the application runs with, and
 {BUILD_REQUIREMENTS_FILE} gives the exact version of the
 packages that build it (PyInstaller and the packages it needs). Each package

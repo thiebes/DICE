@@ -43,6 +43,14 @@ class TestNoticeContent:
         assert "https://github.com/thiebes/DICE\nat the tag v9.8.7" in header
         assert "uv.lock" in header
 
+    def test_header_of_a_development_build_names_no_tag(self):
+        header = collect_licenses.notice_header("9.8.7.dev0", packaged_with_pyinstaller=True, qt_version="6.10.0")
+
+        assert header.startswith("DICE 9.8.7.dev0: licenses of the standalone application")
+        assert ("https://github.com/thiebes/DICE\n"
+                "at the commit that this development build was made from, which has no tag.\n") in header
+        assert "at the tag" not in header
+
     def test_header_names_both_files_that_pin_the_packages(self, notice):
         """Every installed package is pinned in one of the two files the header names."""
         import re
