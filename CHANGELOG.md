@@ -275,10 +275,16 @@ and Fixed give the details.
   line, and in the GUI. It reported nothing until it had finished.
 - Python API: `dice.dice_runner()` returns a `MonteCarloOutput`. `RunResult` holds the
   fit results as flat fields, and its `cnr_estimate` field is renamed
-  `cnr_0_estimate`. The `GaussianParameters` fields `amplitude`, `sigma2`, and
-  `mu` are renamed `amplitude_0`, `sigma2_0`, and `mu_0`. The ratio key of
-  `plot_accuracy_histogram()` is renamed from `d_wls_over_d_nom` to
-  `d_est_over_d_nom`.
+  `cnr_0_estimate`. The ratio key of `plot_accuracy_histogram()` is renamed
+  from `d_wls_over_d_nom` to `d_est_over_d_nom`.
+- Python API: the classes that `run_monte_carlo_simulation()` takes as input
+  are `SimulationParameters`, `ProfileParameters`, and `PhysicsParameters` in
+  `dice.models.parameters`, and `simulation_parameters_from_dict()` in the
+  same module builds them from a parsed parameters dictionary. In 1.2.0 they
+  were `LegacySimulationParameters`, `LegacyProfileParameters`,
+  `LegacyPhysicsParameters`, and `create_parameters_from_legacy()` in
+  `dice.utils.legacy_compatibility`; that module is removed. The fields and
+  the arguments keep their names.
 - Python API: `load_time_series_profiles()` takes the first column as the
   time axis only when called with `time_column=True`. It guessed, and took any
   first column whose values increased as time, including the first pixel of a
@@ -417,6 +423,15 @@ and Fixed give the details.
   and `analyze_cnr_dependence()` (use `calculate_precision()`);
   `scan_runner_compatibility()` and `convert_legacy_result_to_dict()`; and
   `plot_diffusion_msd()`.
+- Python API dataclasses that the simulation never read: `GaussianParameters`,
+  `NoiseParameters`, `SpatialParameters`, `TemporalParameters`,
+  `OutputParameters`, and the `SimulationParameters` of 1.2.0, which held
+  them. The name `SimulationParameters` now belongs to the class that the
+  simulation takes as input (see Changed), so code that built the 1.2.0
+  dataclass fails with a `TypeError`. Also removed:
+  `create_simulation_parameters()`, which returned its argument, and the
+  test stand-ins `MockSimulationParameters`, `MockProfileParameters`, and
+  `MockPhysicsParameters`.
 - The built-in CNR implementation based on the fast Fourier transform (FFT),
   `dice.core.noise.fft_cnr`. Import `fft_cnr` from the `fft_cnr` package. It
   returns a result object; the CNR estimate is its `cnr` attribute.
