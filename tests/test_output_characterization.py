@@ -34,7 +34,7 @@ from dice.analysis.statistics import analyze_simulation_results
 from dice.io.results import export_collated_results, write_summary_file
 from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput, RunResult
-from dice.utils.legacy_compatibility import create_parameters_from_legacy
+from dice.models.parameters import simulation_parameters_from_dict
 
 GOLDEN_DIR = Path(__file__).parent / 'golden' / 'estimators'
 SUMMARY_PARAMETERS = {'spatial width': 5, 'pixel width': 100, 'time series': [0.0, 0.5, 1.0]}
@@ -57,7 +57,7 @@ def _run(run_id: int, noise: float, ols: Optional[Fit] = None,
 
 
 def _output(runs, noise_values) -> MonteCarloOutput:
-    parameters = create_parameters_from_legacy(
+    parameters = simulation_parameters_from_dict(
         {'sigma^2_0': 0.18033688, 'amplitude_0': 1.0, 'mu_0': 0.0},
         diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
     return MonteCarloOutput(parameters=parameters, run_results=runs, num_runs=len(runs),

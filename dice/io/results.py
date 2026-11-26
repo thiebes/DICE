@@ -8,14 +8,12 @@ files and text summaries, and for loading result CSV files.
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Sequence, Tuple, Union, TextIO
-import csv
+from typing import Dict, Any, Optional, Sequence, Tuple, Union, TextIO
 
 from ..core.noise import nominal_cnr
 from ..models.estimators import ESTIMATORS, in_display_order
-from ..models.results import MonteCarloOutput, RunResult
+from ..models.results import MonteCarloOutput
 from ..models.parameters import OutputUnitPreferences
-from ..utils.converters import slope_to_diffusion_constant
 from ..utils.units import (
     convert_diffusion_coefficient, length_abbreviation, time_abbreviation,
     diffusion_coefficient_label, global_length_unit, global_time_unit,
@@ -434,34 +432,34 @@ def write_summary_file(
         # Write parameters
         f.write("Simulation Parameters:\n")
         f.write("-" * 30 + "\n")
-        f.write(f"Number of runs:\n")
+        f.write("Number of runs:\n")
         f.write(f"    {results.num_runs}\n")
-        f.write(f"Spatial width:\n")
+        f.write("Spatial width:\n")
         f.write(f"    {parameters.get('spatial width', 'N/A')} {length_unit}\n")
-        f.write(f"Pixel width:\n")
+        f.write("Pixel width:\n")
         f.write(f"    {parameters.get('pixel width', 'N/A')} pixels\n")
         time_series = parameters.get('time series', [])
-        f.write(f"Time frames:\n")
+        f.write("Time frames:\n")
         f.write(f"    {len(time_series)} frames\n")
         if len(time_series) > 0:
-            f.write(f"Time range:\n")
+            f.write("Time range:\n")
             time_scale = max(abs(time_series[0]), abs(time_series[-1]))
             f.write(f"    {format_quantity(time_series[0], 3, time_scale)} to "
                     f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}\n")
         if noise_range is None:
-            f.write(f"Noise standard deviation values:\n")
+            f.write("Noise standard deviation values:\n")
             f.write(f"    {results.noise_values}\n")
-            f.write(f"Initial CNR (Contrast-to-Noise Ratio):\n")
+            f.write("Initial CNR (Contrast-to-Noise Ratio):\n")
             f.write(f"    {nominal_cnr(amplitude_0, results.noise_values[0]):.3f}\n")
         else:
             write_noise_range(f)
-        f.write(f"Initial profile squared width (sigma^2):\n")
+        f.write("Initial profile squared width (sigma^2):\n")
         f.write(f"    {format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2\n")
-        f.write(f"Nominal diffusion length:\n")
+        f.write("Nominal diffusion length:\n")
         f.write(f"    {format_quantity(results.parameters.physics.diffusion_length, 3)} {length_unit}\n")
-        f.write(f"Nominal diffusion coefficient:\n")
+        f.write("Nominal diffusion coefficient:\n")
         f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
-        f.write(f"Nominal lifetime:\n")
+        f.write("Nominal lifetime:\n")
         from .parameters import LIFETIME_ASSUMED_KEY
         assumed = (" (assumed: the file gives only the diffusion length, so its times are in units "
                    "of the lifetime)") if parameters.get(LIFETIME_ASSUMED_KEY) else ""

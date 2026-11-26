@@ -6,8 +6,7 @@ Shared utility functions for building tab UI components.
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
-    QFrame, QFormLayout, QVBoxLayout, QHBoxLayout,
-    QWidget, QLineEdit, QLabel, QComboBox, QScrollArea
+    QFrame, QFormLayout, QVBoxLayout, QWidget, QLabel, QComboBox, QScrollArea
 )
 
 # Unit lists ordered from smallest to largest for combo box display.
@@ -133,22 +132,6 @@ def create_option_card(layout_type: str = "form") -> tuple[QFrame, QFormLayout |
         layout = QFormLayout(frame)
     layout.setContentsMargins(12, 8, 12, 8)
     return frame, layout
-
-
-def create_field_with_unit(unit_label: str) -> tuple[QWidget, QLineEdit, QLabel]:
-    """Create an input field with unit label suffix.
-
-    Returns:
-        Tuple of (container_widget, line_edit, unit_label).
-    """
-    widget = QWidget()
-    layout = QHBoxLayout(widget)
-    layout.setContentsMargins(0, 0, 0, 0)
-    line_edit = QLineEdit()
-    label = QLabel(unit_label)
-    layout.addWidget(line_edit)
-    layout.addWidget(label)
-    return widget, line_edit, label
 
 
 def create_unit_combo(unit_type: str, default_unit: str = None,

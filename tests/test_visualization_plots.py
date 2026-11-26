@@ -193,12 +193,13 @@ class TestUtilityFunctions:
     
     def test_close_all_figures(self):
         """Test closing all figures."""
-        # Create multiple figures
-        fig1 = plt.figure()
-        fig2 = plt.figure()
-        
+        plt.figure()
+        plt.figure()
+        assert len(plt.get_fignums()) >= 2
+
         close_all_figures()
-        # If this doesn't raise an error, the function works
+
+        assert plt.get_fignums() == []
     
     def test_configure_matplotlib_style(self):
         """Test matplotlib style configuration."""

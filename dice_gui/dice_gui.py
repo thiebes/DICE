@@ -25,8 +25,7 @@ from dice_gui.validators import (
     validate_positive_integer, validate_positive_float, validate_float,
     validate_time_range, validate_time_series,
     validate_file_path, validate_filename_slug,
-    convert_fwhm_to_sigma, convert_sigma_to_fwhm,
-    calculate_diffusion_length, calculate_pixel_size
+    calculate_pixel_size
 )
 from dice_gui.dice_interface import DiceInterface, parameters_for_form
 from dice_gui.tabs.base import set_spin_value
@@ -34,9 +33,7 @@ from dice_gui.output_location import output_root
 from dice_gui.styles import DiceTheme, apply_theme
 from dice_gui.accessibility import (
     name_inputs_for_screen_readers,
-    add_accessible_name_and_description,
-    add_tooltip_with_accessible_description,
-    set_tab_order
+    add_accessible_name_and_description
 )
 from dice_gui.validation_manager import ValidationManager, apply_validation_style, clear_validation_style
 from dice_gui.simulation_thread import SimulationThread
@@ -58,7 +55,6 @@ from dice_gui.tabs import (
     selected_estimator_key,
 )
 
-# Legacy code moved to separate modules - see dice_gui/tabs/, dice_gui/example_parameters.py, dice_gui/simulation_thread.py
 
 
 class DiceGUI(QMainWindow):
@@ -2562,7 +2558,7 @@ def main():
     app = QApplication(sys.argv)
 
     # Apply theme with accessibility support
-    theme = apply_theme(app)
+    apply_theme(app)
 
     window = DiceGUI()
     window.show()

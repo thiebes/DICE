@@ -6,7 +6,7 @@ at different time points during diffusion simulations.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import List, Optional
 import numpy as np
 
 

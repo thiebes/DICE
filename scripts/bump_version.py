@@ -132,27 +132,6 @@ def update_pyproject_toml(file_path: Path, new_version: str) -> bool:
     return True
 
 
-def update_setup_py(file_path: Path, new_version: str) -> bool:
-    """Update version in setup.py if it exists."""
-    if not file_path.exists():
-        print(f"Skipping {file_path} (file does not exist)")
-        return True
-
-    content = read_file(file_path)
-    pattern = r'(version=")[^"]+("),'
-    replacement = rf'\g<1>{new_version}\g<2>,'
-
-    new_content = re.sub(pattern, replacement, content)
-
-    if content == new_content:
-        print(f"WARNING: No changes made to {file_path}")
-        return True
-
-    write_file(file_path, new_content)
-    print(f"Updated {file_path}")
-    return True
-
-
 def get_current_version(repo_root: Path) -> str:
     """Get current version from dice/__init__.py."""
     init_file = repo_root / 'dice' / '__init__.py'
@@ -215,7 +194,6 @@ def main():
         print("  - dice/__init__.py")
         print("  - CITATION.cff")
         print("  - pyproject.toml")
-        print("  - setup.py (if exists)")
 
         response = input("\nProceed with version bump? [y/N]: ")
         if response.lower() not in ['y', 'yes']:
@@ -229,7 +207,6 @@ def main():
     success &= update_dice_init(repo_root / 'dice' / '__init__.py', args.version)
     success &= update_citation_cff(repo_root / 'CITATION.cff', args.version, args.date)
     success &= update_pyproject_toml(repo_root / 'pyproject.toml', args.version)
-    success &= update_setup_py(repo_root / 'setup.py', args.version)
 
     if success:
         print(f"\nVersion successfully bumped to {args.version}")

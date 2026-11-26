@@ -16,7 +16,11 @@ the process is for before it imports Qt or the GUI:
 import multiprocessing
 import sys
 import traceback
-from typing import List, Optional, TextIO, Tuple
+from typing import TYPE_CHECKING, List, Optional, TextIO, Tuple
+
+if TYPE_CHECKING:
+    # Only for annotations: numpy is imported when a simulation starts, not at startup.
+    import numpy as np
 
 SELF_TEST_OPTION = '--self-test'
 
@@ -83,12 +87,12 @@ def run_self_test(output: Optional[TextIO]) -> bool:
         seeded_results_agree,
     )
     from dice.io.parameters import open_parameters
-    from dice.utils.legacy_compatibility import create_parameters_from_legacy
+    from dice.models.parameters import simulation_parameters_from_dict
     from dice.utils.runtime import bundled_license_notice, examples_directory, is_standalone_build
 
     example = examples_directory() / SELF_TEST_EXAMPLE
     parameters = open_parameters(example)
-    simulation_parameters = create_parameters_from_legacy(
+    simulation_parameters = simulation_parameters_from_dict(
         parameters_dict=parameters,
         diffusion_coefficient=parameters['nominal diffusion coefficient'],
         lifetime=parameters['nominal lifetime (tau)'],

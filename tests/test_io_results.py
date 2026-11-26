@@ -24,7 +24,7 @@ from dice.io.results import (
 )
 from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput
-from dice.utils.legacy_compatibility import create_parameters_from_legacy
+from dice.models.parameters import simulation_parameters_from_dict
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 PLUS_MINUS = '±'
@@ -39,7 +39,7 @@ def quick_test_parameters() -> dict:
 @pytest.fixture(scope='module')
 def quick_test_simulation(quick_test_parameters) -> MonteCarloOutput:
     params = quick_test_parameters
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         parameters_dict=params,
         diffusion_coefficient=params['nominal diffusion coefficient'],
         lifetime=params['nominal lifetime (tau)'],
@@ -94,7 +94,7 @@ class TestZeroNoise:
 
 
 def simulate_quick_test(params: dict, time_axis, num_runs: int, **options) -> MonteCarloOutput:
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         params, params['nominal diffusion coefficient'],
         params['nominal lifetime (tau)'], params['nominal diffusion length'])
     return run_monte_carlo_simulation(
@@ -214,7 +214,7 @@ def range_simulation(quick_test_parameters) -> MonteCarloOutput:
     from dice.models.parameters import NoiseRange
     params = quick_test_parameters
     noise_range = NoiseRange(0.01, 0.05, logarithmic=False)
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         params | {'amplitude_0': 2.0}, params['nominal diffusion coefficient'],
         params['nominal lifetime (tau)'], params['nominal diffusion length'])
     return run_monte_carlo_simulation(
@@ -350,7 +350,7 @@ class TestSummaryRecordsWhatReproducesIt:
 
     @staticmethod
     def _simulate(params, seed):
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy as adapt
+        from dice.models.parameters import simulation_parameters_from_dict as adapt
         return run_monte_carlo_simulation(
             adapt(params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
                   params['nominal diffusion length']),

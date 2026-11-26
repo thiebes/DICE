@@ -7,7 +7,6 @@ orchestrating argument parsing, parameter loading, simulation execution, and out
 
 import dataclasses
 import sys
-import os
 import time
 import warnings
 from pathlib import Path
@@ -28,7 +27,6 @@ from ..visualization.histograms import (
     accuracy_scatter_options, histogram_options, plot_accuracy_histogram, plot_accuracy_vs_cnr,
     remove_plots_of_earlier_runs, use_file_backend,
 )
-from ..utils.axes import make_x_axis, make_time_axis
 from ..utils.units import diffusion_coefficient_label, global_length_unit, global_time_unit
 
 
@@ -97,7 +95,7 @@ def create_progress_callback(verbose: bool, quiet: bool, interval: int = 100):
     return progress_callback
 
 
-def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[str, Any]:
+def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> MonteCarloOutput:
     """
     Execute the Monte Carlo simulation.
 
@@ -137,10 +135,10 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
     )
     
     # Convert legacy parameters format to modern structure
-    from ..utils.legacy_compatibility import create_parameters_from_legacy
+    from ..models.parameters import simulation_parameters_from_dict
     
     # Create simulation parameters object
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         parameters_dict=parameters,
         diffusion_coefficient=parameters['nominal diffusion coefficient'],
         lifetime=parameters['nominal lifetime (tau)'],
@@ -191,7 +189,7 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
     return result
 
 
-def save_results(result: Dict[str, Any], parameters: Dict[str, Any], 
+def save_results(result: MonteCarloOutput, parameters: Dict[str, Any], 
                 output_dir: Path, args) -> None:
     """
     Save simulation results to files.
@@ -217,12 +215,6 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     # Analyze results with standard proximity levels
     analysis = analyze_simulation_results(result)
     
-    # Prepare collated results for export
-    collated_data = {
-        'analysis': analysis,
-        'parameters': parameters,
-        'run_results': result.run_results
-    }
     
     # Export format
     export_format = getattr(args, 'export_format', 'csv')
@@ -230,8 +222,8 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
     # Export results  
     if export_format in ['csv', 'both']:
         csv_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}.csv"
-        # The export function returns a DataFrame and writes CSV automatically
-        df = export_collated_results(
+        # The export function writes the CSV file.
+        export_collated_results(
             result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
             output_units=output_units,
         )
@@ -281,7 +273,7 @@ def save_results(result: Dict[str, Any], parameters: Dict[str, Any],
         print(f"Summary saved to: {summary_file}")
 
 
-def create_plots(result: Dict[str, Any], parameters: Dict[str, Any], 
+def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any], 
                 output_dir: Path, args) -> None:
     """
     Create and save plots from simulation results.

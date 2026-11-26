@@ -14,7 +14,7 @@ import pytest
 
 from dice.io.results import export_collated_results
 from dice.models.results import MonteCarloOutput, RunResult
-from dice.utils.legacy_compatibility import create_parameters_from_legacy
+from dice.models.parameters import simulation_parameters_from_dict
 from dice_gui.dice_interface import DiceInterface
 
 NOMINAL_D = 0.01
@@ -28,7 +28,7 @@ IMAGE_SETTINGS = {'image_type': 'png'}
 
 
 def _output(wls_slopes, ols_slopes) -> MonteCarloOutput:
-    parameters = create_parameters_from_legacy(
+    parameters = simulation_parameters_from_dict(
         {'sigma^2_0': 0.18, 'amplitude_0': 1.0, 'mu_0': 0.0},
         diffusion_coefficient=NOMINAL_D, lifetime=1.0, diffusion_length=0.1)
     runs = [

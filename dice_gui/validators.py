@@ -6,7 +6,6 @@ GUI validators wrap core validators from dice.utils.validators, converting
 exceptions to ValidationResult objects and handling string input parsing.
 """
 
-from typing import Optional, Tuple, List, Union
 
 from dice.utils.validators import (
     validate_numeric as _validate_numeric,
@@ -21,7 +20,6 @@ from dice.utils.converters import (
     sigma_to_fwhm as _sigma_to_fwhm,
     calculate_pixel_size as _calculate_pixel_size,
 )
-from dice.core.diffusion import calculate_diffusion_length as _calculate_diffusion_length
 
 
 class ValidationResult:
@@ -86,25 +84,6 @@ def validate_float(value: str, param_name: str = "Value") -> ValidationResult:
 
     try:
         validated = _validate_numeric(parsed, name=param_name)
-        return ValidationResult(True, value=validated)
-    except (TypeError, ValueError) as e:
-        return ValidationResult(False, str(e))
-
-
-def validate_proximity_level(value: str) -> ValidationResult:
-    """Validate proximity level (must be between 0 and 1, exclusive)."""
-    if not value or value.strip() == "":
-        return ValidationResult(False, "Proximity level is required")
-
-    try:
-        parsed = float(value.strip())
-    except ValueError:
-        return ValidationResult(False, "Proximity level must be a valid number")
-
-    try:
-        validated = _validate_numeric(parsed, name="Proximity level", min_val=0.0, max_val=1.0)
-        if validated <= 0 or validated >= 1:
-            return ValidationResult(False, "Proximity level must be between 0 and 1")
         return ValidationResult(True, value=validated)
     except (TypeError, ValueError) as e:
         return ValidationResult(False, str(e))
@@ -209,23 +188,6 @@ def convert_sigma_to_fwhm(sigma_str: str) -> ValidationResult:
     try:
         fwhm = _sigma_to_fwhm(result.value)
         return ValidationResult(True, value=fwhm)
-    except ValueError as e:
-        return ValidationResult(False, str(e))
-
-
-def calculate_diffusion_length(d_str: str, tau_str: str) -> ValidationResult:
-    """Calculate diffusion length from D and tau strings, returning ValidationResult."""
-    d_result = validate_positive_float(d_str, "D", allow_zero=True)
-    if not d_result:
-        return d_result
-
-    tau_result = validate_positive_float(tau_str, "tau", allow_zero=True)
-    if not tau_result:
-        return tau_result
-
-    try:
-        length = _calculate_diffusion_length(d_result.value, tau_result.value)
-        return ValidationResult(True, value=length)
     except ValueError as e:
         return ValidationResult(False, str(e))
 

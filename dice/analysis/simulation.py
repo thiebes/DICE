@@ -11,11 +11,10 @@ import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from typing import Callable, Iterator, List, Tuple, Optional, Any, Sequence, Union
+from typing import Callable, Iterator, List, Optional, Any, Sequence, Union
 from joblib import Parallel, delayed, effective_n_jobs
-import pandas as pd
 
-from ..core.profiles import gaussian, make_diffusion_decay
+from ..core.profiles import make_diffusion_decay
 from fft_cnr import fft_cnr
 from ..core.noise import Seed, add_noise
 from ..core.fitting import gauss_fitting, calculate_wls_weights
@@ -23,7 +22,7 @@ from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
 from ..models.parameters import NoiseRange
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import joblib_workers_supported
-from ..utils.legacy_compatibility import LegacySimulationParameters
+from ..models.parameters import SimulationParameters
 
 # The shortest time between two progress reports of a parallel simulation in
 # joblib's workers. Its results come back as they finish; a report for each
@@ -64,7 +63,7 @@ def run_single_simulation(
     run_id: int,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
-    parameters: LegacySimulationParameters,
+    parameters: SimulationParameters,
     noise_sigma: float,
     retain_profile_data: bool = False,
     seed: Seed = None,
@@ -83,7 +82,7 @@ def run_single_simulation(
         Spatial axis values.
     time_axis : np.ndarray
         Time axis values.
-    parameters : LegacySimulationParameters
+    parameters : SimulationParameters
         Simulation parameters including initial conditions and physics.
     noise_sigma : float
         Standard deviation of noise to add.
@@ -162,7 +161,7 @@ def run_single_simulation(
 
 
 def run_monte_carlo_simulation(
-    parameters: LegacySimulationParameters,
+    parameters: SimulationParameters,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
     noise_values: List[float],
@@ -180,8 +179,8 @@ def run_monte_carlo_simulation(
 
     Parameters
     ----------
-    parameters : LegacySimulationParameters
-        Simulation parameters, as create_parameters_from_legacy builds them.
+    parameters : SimulationParameters
+        Simulation parameters, as simulation_parameters_from_dict builds them.
     x_axis : np.ndarray
         Spatial axis values.
     time_axis : np.ndarray

@@ -13,6 +13,7 @@ import contextlib
 import importlib
 import json
 import re
+import subprocess
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -933,8 +934,7 @@ class TestNarrowPeakWarning:
     """The CLI shows the warning for a measured profile too narrow for fft-cnr, on stderr."""
 
     @staticmethod
-    def _dry_run(directory: Path, profile_file: Path) -> 'subprocess.CompletedProcess[str]':
-        import subprocess
+    def _dry_run(directory: Path, profile_file: Path) -> subprocess.CompletedProcess:
         import sys
         params_file = write_quick_test_variant(
             directory, 'estimated', {'estimate noise from data': str(profile_file)},

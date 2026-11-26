@@ -7,7 +7,6 @@ while maintaining WCAG AA/AAA accessibility standards.
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
-from PyQt6.QtCore import Qt
 from typing import Dict
 
 
@@ -104,12 +103,6 @@ class DiceTheme:
 
             QLabel.status-error {{
                 color: {to_css(colors['error'])};
-            }}
-
-            /* Proximity display */
-            QLabel#proximity-display {{
-                font-weight: bold;
-                font-size: 11pt;
             }}
 
             /* Enhanced focus indicators - WCAG 2.4.7 */
@@ -241,20 +234,6 @@ class DiceTheme:
                 color: palette(midlight);
             }}
 
-            /* Collapsible group box styling */
-            CollapsibleGroupBox {{
-                border: 1px solid palette(mid);
-                border-radius: 4px;
-                margin-top: 8px;
-                padding-top: 4px;
-            }}
-
-            CollapsibleGroupBox::title {{
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px 0 24px;
-            }}
-
             /* Required field indicators */
             QLabel.required-label {{
                 font-weight: 600;
@@ -278,11 +257,6 @@ class DiceTheme:
             QFrame.option-card:disabled {{
                 background-color: transparent;
                 border-color: palette(midlight);
-            }}
-
-            /* Advanced section styling */
-            CollapsibleGroupBox.advanced-section {{
-                border-left: 2px dashed palette(mid);
             }}
 
             /* Reset button styling */

@@ -27,10 +27,9 @@ from ..core.diffusion import calculate_diffusion_length
 from ..core.noise import (
     MIN_CNR_PEAK_FWHM, MINIMUM_PROFILE_POINTS, Seed, make_noise_distribution, peak_fwhm_samples,
 )
-from ..models.parameters import NoiseRange, SimulationParameters
+from ..models.parameters import NoiseRange
 from ..models.parameter_keys import (
-    normalize_parameters, normalize_parameter_key, add_legacy_keys,
-    ParameterKey, LEGACY_OUTPUT_KEYS
+    normalize_parameters, normalize_parameter_key, add_legacy_keys
 )
 
 # Keys of the proximity-level parameter, retired from the simulation schema;
@@ -663,82 +662,55 @@ def parameter_parser(parameters_dictionary: Dict[str, Any], seed: Seed = None) -
     return parameters_dictionary
 
 
-def create_simulation_parameters(params_dict: Dict[str, Any]):
-    """
-    Create SimulationParameters object from dictionary.
-    
-    Parameters
-    ----------
-    params_dict : dict
-        Parsed parameters dictionary.
-    
-    Returns
-    -------
-    SimulationParameters
-        Structured parameters object.
-    """
-    # This would create a SimulationParameters object
-    # For now, just return the dictionary as compatibility layer
-    return params_dict
-
-
-def validate_parameters(params) -> None:
+def validate_parameters(params: Dict[str, Any]) -> None:
     """
     Validate simulation parameters.
     
     Parameters
     ----------
-    params : dict or SimulationParameters
-        Parameters to validate.
+    params : dict
+        Parsed parameters dictionary to validate.
     
     Raises
     ------
     ValueError
         If parameters are invalid.
     """
-    # Basic validation for dictionary format
-    if isinstance(params, dict):
-        # parameter_parser checks each value on its own (counts, widths, the
-        # time axis, the noise). The checks here need several values, or
-        # concern the outputs.
+    # parameter_parser checks each value on its own (counts, widths, the
+    # time axis, the noise). The checks here need several values, or
+    # concern the outputs.
 
-        # Outputs convert from the global units, so reject an unknown unit
-        # before the simulation runs rather than when the results are written.
-        validate_length_unit(global_length_unit(params))
-        validate_time_unit(global_time_unit(params))
-        validate_output_units(params)
+    # Outputs convert from the global units, so reject an unknown unit
+    # before the simulation runs rather than when the results are written.
+    validate_length_unit(global_length_unit(params))
+    validate_time_unit(global_time_unit(params))
+    validate_output_units(params)
 
-        # The Gaussian fit looks for the center of a profile only in the
-        # central 40% of the window. Outside it, the fit holds the center at
-        # the limit and reports a wrong width without failing.
-        center = params.get('mu_0', params.get('mean_0'))
-        if center is not None and 'x array' in params:
-            from ..core.fitting import center_search_limits
-            low, high = center_search_limits(params['x array'])
-            if not low <= center <= high:
-                raise ValueError(
-                    f"'mean_0' is {center:g}, outside the central 40% of the spatial window "
-                    f"({low:g} to {high:g}), where the fit looks for the center of the profile. "
-                    "Move the profile toward the center, or increase 'spatial width'."
-                )
+    # The Gaussian fit looks for the center of a profile only in the
+    # central 40% of the window. Outside it, the fit holds the center at
+    # the limit and reports a wrong width without failing.
+    center = params.get('mu_0', params.get('mean_0'))
+    if center is not None and 'x array' in params:
+        from ..core.fitting import center_search_limits
+        low, high = center_search_limits(params['x array'])
+        if not low <= center <= high:
+            raise ValueError(
+                f"'mean_0' is {center:g}, outside the central 40% of the spatial window "
+                f"({low:g} to {high:g}), where the fit looks for the center of the profile. "
+                "Move the profile toward the center, or increase 'spatial width'."
+            )
 
-        # The slug names the output folder and every output file, so it must
-        # be a plain name; a path separator or '..' would write outside it.
-        validate_filename_slug(
-            params.get('filename slug', params.get('filename_slug', 'dice_simulation')),
-            name="'filename slug'",
-        )
+    # The slug names the output folder and every output file, so it must
+    # be a plain name; a path separator or '..' would write outside it.
+    validate_filename_slug(
+        params.get('filename slug', params.get('filename_slug', 'dice_simulation')),
+        name="'filename slug'",
+    )
 
-        # The histogram is drawn after the simulation, so reject malformed
-        # limits and an image type it cannot be written as here instead of
-        # losing the plot at the end of a long run.
-        if params.get('image x_lim') is not None:
-            validate_limits(params['image x_lim'], "'image x_lim'")
-        from ..visualization.histograms import validate_image_type
-        validate_image_type(params.get('image type', params.get('image_type', 'png')))
-
-        return
-    
-    # Original validation for SimulationParameters object
-    # (kept for future when proper classes are implemented)
-    pass
+    # The histogram is drawn after the simulation, so reject malformed
+    # limits and an image type it cannot be written as here instead of
+    # losing the plot at the end of a long run.
+    if params.get('image x_lim') is not None:
+        validate_limits(params['image x_lim'], "'image x_lim'")
+    from ..visualization.histograms import validate_image_type
+    validate_image_type(params.get('image type', params.get('image_type', 'png')))

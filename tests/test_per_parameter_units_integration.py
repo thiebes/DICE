@@ -263,13 +263,13 @@ class TestSimulationEquivalence:
     @staticmethod
     def _run_seeded_simulation(params, seed=42):
         """Resolve units, parse, and run a simulation with a fixed seed."""
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         from dice.analysis.simulation import run_monte_carlo_simulation
 
         resolved = resolve_units(params)
         parsed = parameter_parser(resolved)
 
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             parameters_dict=parsed,
             diffusion_coefficient=parsed['nominal diffusion coefficient'],
             lifetime=parsed['nominal lifetime (tau)'],

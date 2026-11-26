@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 def create_tab_output_settings(main_window: "DiceGUI") -> QWidget:
     """Create Tab 5: Output."""
-    from dice_gui.presets import PRESETS, OUTPUT_DEFAULTS, get_preset
 
     tab, layout = create_scrollable_tab()
 

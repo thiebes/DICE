@@ -398,7 +398,6 @@ class TestMixedUnitParameters:
         """A mixed-unit parameter set should produce the same parsed result
         as an equivalent single-unit-system parameter set."""
         from dice.utils.units import resolve_units
-        from dice.utils.converters import fwhm_to_sigma2
 
         # Single unit system: everything in μm/ns
         params_uniform = self._base_params()
@@ -942,10 +941,10 @@ class TestFileThatCannotRunIsRejected:
         """The limit is the one of the CNR estimate: a run with it gives an estimate."""
         from dice.core.noise import MINIMUM_PROFILE_POINTS
         from dice.analysis.simulation import run_single_simulation
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
 
         parsed = parameter_parser(quick_test_raw() | {'pixel width': MINIMUM_PROFILE_POINTS})
-        parameters = create_parameters_from_legacy(
+        parameters = simulation_parameters_from_dict(
             parameters_dict=parsed,
             diffusion_coefficient=parsed['nominal diffusion coefficient'],
             lifetime=parsed['nominal lifetime (tau)'],

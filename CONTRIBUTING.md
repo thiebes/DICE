@@ -55,7 +55,7 @@ When you change dependencies in `pyproject.toml`, run `uv lock` and commit the u
 
 ### Code standards
 
-- Follow the PEP 8 style guidelines. The repository includes a flake8 configuration (`.flake8`).
+- Follow the PEP 8 style guidelines. CI runs `ruff check`, which reports unused imports, unused variables and undefined names (the Pyflakes rules, selected in `pyproject.toml`); run it before you open a pull request, with `uv run --group lint ruff check`. The flake8 configuration (`.flake8`) is for a fuller local check and is not run in CI.
 - Include docstrings for new functions and classes.
 - Add type hints where appropriate.
 - Keep compatibility with the dependency ranges declared in `pyproject.toml`.

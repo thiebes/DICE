@@ -195,7 +195,7 @@ print(f"Within ±15%: {ratio.between(0.85, 1.15).mean():.1%}")
 
 ### Check a parameters file
 
-`open_parameters()` reads and parses a parameters file and raises `ValueError` with a description if the file is invalid. `validate_parameters()` checks that the number of runs, the spatial width, and the number of pixels are positive, that the global length and time units are known, and that `image x_lim`, if given, is two increasing numbers:
+`open_parameters()` reads and parses a parameters file and raises `ValueError` with a description if the file is invalid. The parser checks each value by itself, for example that the number of runs is positive. `validate_parameters()` makes the checks that need several values or concern the outputs: that the global length and time units and the output units are known, that `mean_0` lies in the central 40% of the spatial window, that `filename slug` is a plain name, that `image x_lim`, if given, is two increasing numbers, and that the plot can be written as `image type`:
 
 ```python
 from dice.io.parameters import open_parameters, validate_parameters

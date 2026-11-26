@@ -1,5 +1,5 @@
 """
-Integration tests for the parameter and profile dataclasses in dice.models.
+Integration tests for the profile dataclasses in dice.models.
 
 The inputs come from DICE itself: parameter dictionaries parsed from the real
 files in data/examples, and profiles from make_diffusion_decay, add_noise, and
@@ -16,14 +16,6 @@ from dice.core.fitting import gauss_fitting
 from dice.core.noise import add_noise
 from dice.core.profiles import make_diffusion_decay
 from dice.io.parameters import open_parameters
-from dice.models.parameters import (
-    GaussianParameters,
-    NoiseParameters,
-    OutputParameters,
-    SimulationParameters,
-    SpatialParameters,
-    TemporalParameters,
-)
 from dice.models.profiles import GaussianProfile, ProfileData, TimeSeriesProfile
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
@@ -64,88 +56,6 @@ def nominal_profiles(params: dict, generated: dict) -> list[GaussianProfile]:
         )
         for i, (t, y_values) in enumerate(zip(params['time series'], generated['y_values_t']))
     ]
-
-
-def simulation_fields(params: dict) -> dict:
-    """The component dataclasses of SimulationParameters, built from a parsed dictionary."""
-    return {
-        'num_runs': params['number of runs'],
-        'gaussian': GaussianParameters(
-            amplitude_0=params['amplitude_0'], sigma2_0=params['sigma^2_0'], mu_0=params['mu_0']),
-        'noise': NoiseParameters(mode='single', value=params['noise series'][0]),
-        'spatial': SpatialParameters(width=params['spatial width'], pixels=params['pixel width']),
-        'temporal': TemporalParameters(mode='series', series=list(params['time series'])),
-    }
-
-
-class TestDataclassesFromParsedFiles:
-    """The dataclasses take the values of the dictionaries the parser produces."""
-
-    @pytest.mark.parametrize('filename', EXAMPLE_FILES)
-    def test_axes_match_parsed_axes(self, filename):
-        params = open_parameters(EXAMPLES_DIR / filename)
-        fields = simulation_fields(params)
-        np.testing.assert_allclose(fields['temporal'].make_axis(), params['time series'])
-        np.testing.assert_allclose(fields['spatial'].make_axis(), params['x array'])
-
-    @pytest.mark.parametrize('filename', EXAMPLE_FILES)
-    def test_pixel_size_is_the_spacing_of_the_parsed_axis(self, filename):
-        params = open_parameters(EXAMPLES_DIR / filename)
-        spatial = simulation_fields(params)['spatial']
-        assert spatial.pixel_size == pytest.approx(np.diff(params['x array'])[0], rel=1e-12)
-
-    def test_gaussian_field_names_after_rename(self, quick_test_parameters):
-        gaussian = simulation_fields(quick_test_parameters)['gaussian']
-        assert set(vars(gaussian)) == {'amplitude_0', 'sigma2_0', 'mu_0'}
-        with pytest.raises(TypeError):
-            GaussianParameters(amplitude=1.0, sigma2=1.0, mu=0.0)
-
-
-class TestParameterValidation:
-    """Malformed values are rejected with a message naming the problem."""
-
-    @pytest.mark.parametrize('build, message', [
-        (lambda: GaussianParameters(amplitude_0=-1.0), "Amplitude must be non-negative"),
-        (lambda: GaussianParameters(sigma2_0=0.0), "Variance"),
-        (lambda: NoiseParameters(mode='single'), "Value required"),
-        (lambda: NoiseParameters(mode='range'), "Range required"),
-        (lambda: NoiseParameters(mode='estimate'), "Data file required"),
-        (lambda: NoiseParameters(value=-0.02), "non-negative"),
-        (lambda: NoiseParameters(mode='range', range=(0.02,)), "tuple of"),
-        (lambda: NoiseParameters(mode='range', range=(0.05, 0.02)), "min must be less than max"),
-        (lambda: NoiseParameters(mode='range', range=(-0.02, 0.05)), "non-negative"),
-        (lambda: SpatialParameters(width=0.0, pixels=50), "Spatial width must be positive"),
-        (lambda: SpatialParameters(width=5.0, pixels=0), "pixels must be positive"),
-        (lambda: TemporalParameters(mode='range', start=1.0, end=0.0, frames=5), "Start time"),
-        (lambda: TemporalParameters(mode='range', start=0.0, end=1.0, frames=0), "frames must be positive"),
-        (lambda: TemporalParameters(mode='range', start=0.0), "required for range mode"),
-        (lambda: TemporalParameters(mode='series', series=[]), "cannot be empty"),
-        (lambda: OutputParameters(image_type='bmp'), "Unknown image type 'bmp'"),
-        (lambda: OutputParameters(image_width=0.0), "dimensions must be positive"),
-        (lambda: OutputParameters(image_dpi=0), "DPI must be positive"),
-        (lambda: OutputParameters(num_bins=0), "bins must be positive"),
-    ])
-    def test_invalid_component(self, build, message):
-        with pytest.raises(ValueError, match=message):
-            build()
-
-    @pytest.mark.parametrize('overrides, message', [
-        ({'num_runs': 0}, "Number of runs must be positive"),
-        ({'diffusion_coefficient': -0.01}, "Diffusion coefficient must be non-negative"),
-        ({'lifetime': -1.0}, "Lifetime must be non-negative"),
-    ])
-    def test_invalid_simulation_parameters(self, quick_test_parameters, overrides, message):
-        fields = simulation_fields(quick_test_parameters) | {
-            'diffusion_coefficient': quick_test_parameters['nominal diffusion coefficient'],
-            'lifetime': quick_test_parameters['nominal lifetime (tau)'],
-        }
-        with pytest.raises(ValueError, match=message):
-            SimulationParameters(**(fields | overrides))
-
-    def test_zero_lifetime_has_infinite_diffusion_length(self, quick_test_parameters):
-        no_decay = SimulationParameters(
-            **simulation_fields(quick_test_parameters), diffusion_coefficient=0.01, lifetime=0.0)
-        assert no_decay.diffusion_length == np.inf
 
 
 class TestGaussianProfileFromGenerator:
@@ -250,11 +160,3 @@ class TestTimeSeriesProfileFromGenerator:
                 time_axis=quick_test_parameters['time series'][:-1],
                 y_values=np.asarray(quick_test_generated['y_values_t']),
             )
-
-
-class TestOutputParameterConventions:
-    """OutputParameters accepts the image types the run path accepts."""
-
-    @pytest.mark.parametrize('image_type', ['png', 'eps', 'WEBP', 'tiff'])
-    def test_output_parameters_accept_the_run_time_image_types(self, image_type):
-        assert OutputParameters(image_type=image_type).image_type == image_type

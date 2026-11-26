@@ -9,8 +9,7 @@ factors, and display abbreviations.
 
 import difflib
 from enum import Enum
-from typing import Optional, Dict, Any, List, Union
-import warnings
+from typing import Optional, Dict, Any, List
 
 
 class Dimension(Enum):
