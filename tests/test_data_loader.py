@@ -186,9 +186,9 @@ class TestLoadExperimentalData:
     def test_csv_with_header_reads_columns(self, tmp_path, quick_test_parameters):
         from dice.analysis.simulation import run_monte_carlo_simulation
         from dice.io.results import export_collated_results
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         params = quick_test_parameters
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             params, params['nominal diffusion coefficient'],
             params['nominal lifetime (tau)'], params['nominal diffusion length'])
         result = run_monte_carlo_simulation(

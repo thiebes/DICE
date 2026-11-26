@@ -7,12 +7,10 @@ results, and profile data.
 
 from .parameters import (
     SimulationParameters,
-    GaussianParameters,
-    NoiseParameters,
+    ProfileParameters,
+    PhysicsParameters,
     NoiseRange,
-    SpatialParameters,
-    TemporalParameters,
-    OutputParameters,
+    simulation_parameters_from_dict,
 )
 from .results import (
     MonteCarloOutput,
@@ -36,12 +34,10 @@ from .estimators import (
 __all__ = [
     # Parameters
     "SimulationParameters",
-    "GaussianParameters",
-    "NoiseParameters",
+    "ProfileParameters",
+    "PhysicsParameters",
     "NoiseRange",
-    "SpatialParameters",
-    "TemporalParameters",
-    "OutputParameters",
+    "simulation_parameters_from_dict",
     # Results
     "MonteCarloOutput",
     "RunResult",

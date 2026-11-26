@@ -23,7 +23,7 @@ from ..models.estimators import DEFAULT_ESTIMATOR_KEYS, FrameFits, get_estimator
 from ..models.parameters import NoiseRange
 from ..models.results import RunResult, MonteCarloOutput
 from ..utils.runtime import joblib_workers_supported
-from ..utils.legacy_compatibility import LegacySimulationParameters
+from ..models.parameters import SimulationParameters
 
 # The shortest time between two progress reports of a parallel simulation in
 # joblib's workers. Its results come back as they finish; a report for each
@@ -64,7 +64,7 @@ def run_single_simulation(
     run_id: int,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
-    parameters: LegacySimulationParameters,
+    parameters: SimulationParameters,
     noise_sigma: float,
     retain_profile_data: bool = False,
     seed: Seed = None,
@@ -83,7 +83,7 @@ def run_single_simulation(
         Spatial axis values.
     time_axis : np.ndarray
         Time axis values.
-    parameters : LegacySimulationParameters
+    parameters : SimulationParameters
         Simulation parameters including initial conditions and physics.
     noise_sigma : float
         Standard deviation of noise to add.
@@ -162,7 +162,7 @@ def run_single_simulation(
 
 
 def run_monte_carlo_simulation(
-    parameters: LegacySimulationParameters,
+    parameters: SimulationParameters,
     x_axis: np.ndarray,
     time_axis: np.ndarray,
     noise_values: List[float],
@@ -180,8 +180,8 @@ def run_monte_carlo_simulation(
 
     Parameters
     ----------
-    parameters : LegacySimulationParameters
-        Simulation parameters, as create_parameters_from_legacy builds them.
+    parameters : SimulationParameters
+        Simulation parameters, as simulation_parameters_from_dict builds them.
     x_axis : np.ndarray
         Spatial axis values.
     time_axis : np.ndarray

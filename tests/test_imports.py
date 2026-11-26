@@ -85,9 +85,9 @@ def _run_import_checks():
         success = False
 
     try:
-        from dice.models.parameters import GaussianParameters
-        params = GaussianParameters(amplitude_0=1.0, sigma2_0=2.0, mu_0=0.0)
-        print(f"[OK] GaussianParameters created with FWHM={params.fwhm:.6f}")
+        from dice.models.parameters import ProfileParameters
+        params = ProfileParameters(sigma2_0=2.0, amplitude_0=1.0, mu_0=0.0)
+        print(f"[OK] ProfileParameters created with variance={params.sigma2_0:.6f}")
     except Exception as e:
         print(f"[FAIL] Dataclass creation failed: {e}")
         success = False

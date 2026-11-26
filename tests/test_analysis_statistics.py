@@ -13,10 +13,13 @@ from dice.analysis.statistics import (
 from dice.models.results import RunResult, MonteCarloOutput
 
 
-def get_legacy_simulation_params():
-    """Simulation parameters with fixed values, in the structure the engine reads."""
-    from dice.utils.legacy_compatibility import MockSimulationParameters
-    return MockSimulationParameters()
+def fixed_simulation_parameters():
+    """Simulation parameters with fixed values: a unit profile centered at 0, D = 1 and a lifetime of 10."""
+    from dice.models.parameters import PhysicsParameters, ProfileParameters, SimulationParameters
+    return SimulationParameters(
+        profile=ProfileParameters(sigma2_0=1.0, amplitude_0=1.0, mu_0=0.0),
+        physics=PhysicsParameters(diffusion_coefficient=1.0, lifetime=10.0, diffusion_length=np.sqrt(10.0)),
+    )
 
 
 class TestCalculatePrecision:
@@ -139,7 +142,7 @@ class TestAnalyzeMonteCarloOutputs:
     def test_basic_analysis(self):
         """Test basic analysis of simulation results."""
         # Create mock simulation results
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.physics.diffusion_coefficient = 1.0
         params.physics.lifetime = 10.0
         params.physics.diffusion_length = np.sqrt(10.0)
@@ -194,7 +197,7 @@ class TestAnalyzeMonteCarloOutputs:
     
     def test_multiple_noise_levels(self):
         """Test analysis with multiple noise levels."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.physics.diffusion_coefficient = 1.0
         
         runs = []
@@ -284,10 +287,10 @@ class TestNoiseAnalysisCnr:
         from pathlib import Path
         from dice.analysis.simulation import run_monte_carlo_simulation
         from dice.io.parameters import open_parameters
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
         amplitude_0 = 2.0
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             params | {'amplitude_0': amplitude_0}, params['nominal diffusion coefficient'],
             params['nominal lifetime (tau)'], params['nominal diffusion length'])
         noise_values = [0.04, 0.08]
@@ -308,9 +311,9 @@ class TestCustomProximityLevels:
         from pathlib import Path
         from dice.analysis.simulation import run_monte_carlo_simulation
         from dice.io.parameters import open_parameters
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             params, params['nominal diffusion coefficient'],
             params['nominal lifetime (tau)'], params['nominal diffusion length'])
         result = run_monte_carlo_simulation(
@@ -338,8 +341,8 @@ class TestCnrBins:
     def _range_output(noise_sigmas, amplitude_0=1.0, failed_wls_runs=()):
         """Runs whose D estimates deviate from the nominal 0.01 in proportion to their noise sigma."""
         from dice.models.parameters import NoiseRange
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
-        parameters = create_parameters_from_legacy(
+        from dice.models.parameters import simulation_parameters_from_dict
+        parameters = simulation_parameters_from_dict(
             {'sigma^2_0': 0.18, 'amplitude_0': amplitude_0, 'mu_0': 0.0},
             diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
         runs = []

@@ -14,10 +14,13 @@ from dice.analysis.simulation import (
 )
 
 
-def get_legacy_simulation_params():
-    """Simulation parameters with fixed values, in the structure the engine reads."""
-    from dice.utils.legacy_compatibility import MockSimulationParameters
-    return MockSimulationParameters()
+def fixed_simulation_parameters():
+    """Simulation parameters with fixed values: a unit profile centered at 0, D = 1 and a lifetime of 10."""
+    from dice.models.parameters import PhysicsParameters, ProfileParameters, SimulationParameters
+    return SimulationParameters(
+        profile=ProfileParameters(sigma2_0=1.0, amplitude_0=1.0, mu_0=0.0),
+        physics=PhysicsParameters(diffusion_coefficient=1.0, lifetime=10.0, diffusion_length=np.sqrt(10.0)),
+    )
 
 
 class TestCalculateWLSWeights:
@@ -87,7 +90,7 @@ class TestRunSingleSimulation:
     def test_basic_simulation(self):
         """Test basic simulation run."""
         # Set up parameters
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -120,7 +123,7 @@ class TestRunSingleSimulation:
     
     def test_single_timepoint(self):
         """Test with single time point (no diffusion fit)."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -148,7 +151,7 @@ class TestRunSingleSimulation:
     
     def test_retain_profile_data(self):
         """Test retaining profile data."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -182,7 +185,7 @@ class TestRunSingleSimulation:
     
     def test_high_noise(self):
         """Test with high noise level."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -212,7 +215,7 @@ class TestRunMonteCarloSimulation:
     
     def test_basic_monte_carlo(self):
         """Test basic Monte Carlo simulation."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -251,7 +254,7 @@ class TestRunMonteCarloSimulation:
     
     def test_single_noise_value(self):
         """Test with single noise value."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -277,7 +280,7 @@ class TestRunMonteCarloSimulation:
     
     def test_progress_callback(self):
         """Test progress callback functionality."""
-        params = get_legacy_simulation_params()
+        params = fixed_simulation_parameters()
         params.profile.sigma2_0 = 1.0
         params.profile.amplitude_0 = 1.0
         params.profile.mu_0 = 0.0
@@ -313,7 +316,7 @@ class TestSeededSimulation:
 
     def _simulate(self, seed, noise_values=(0.02, 0.05), num_runs=3, **parallel_options):
         return run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(),
+            parameters=fixed_simulation_parameters(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
             noise_values=list(noise_values),
@@ -396,7 +399,7 @@ class TestUnitAndAmplitudeInvariance:
         import ast
         from pathlib import Path
         from dice.io.parameters import parameter_parser
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         from dice.utils.units import convert_length
 
         quick_test = Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt'
@@ -412,7 +415,7 @@ class TestUnitAndAmplitudeInvariance:
             'number of runs': cls.RUNS,
         })
         parsed = parameter_parser(params)
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             parsed, parsed['nominal diffusion coefficient'], parsed['nominal lifetime (tau)'],
             parsed['nominal diffusion length'])
         result = run_monte_carlo_simulation(
@@ -444,7 +447,7 @@ class TestProcessPoolBackend:
 
     def _simulate(self, num_runs=7, noise_values=(0.02,), **options):
         return run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(),
+            parameters=fixed_simulation_parameters(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
             noise_values=list(noise_values),
@@ -626,7 +629,7 @@ class TestWorkerCountReachesJoblib:
 
     def _simulate(self, **options):
         return run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(),
+            parameters=fixed_simulation_parameters(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
             noise_values=[0.02],
@@ -789,7 +792,7 @@ class TestJoblibProgressAndStop:
             """Process identifiers of the workers that joblib uses for two jobs."""
             return set(Parallel(n_jobs=2)(delayed(os.getpid)() for _ in range(8)))
 
-        parameters = get_legacy_simulation_params()
+        parameters = fixed_simulation_parameters()
         x_axis, time_axis = np.linspace(-10, 10, 51), np.array([0.0, 1.0, 2.0])
         arguments = [(run_id, x_axis, time_axis, parameters, 0.02, False, None) for run_id in range(3000)]
         reports = []
@@ -897,7 +900,7 @@ class TestNoiseLevelForEachRun:
     def _simulate(self, noise_values, num_runs, noise_range=None, **options):
         from dice.models.parameters import NoiseRange
         return run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(),
+            parameters=fixed_simulation_parameters(),
             x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]),
             noise_values=list(noise_values),
@@ -928,7 +931,7 @@ class TestNoiseLevelForEachRun:
 
     def test_fixed_levels_record_no_range(self):
         result = run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(), x_axis=np.linspace(-10, 10, 51),
+            parameters=fixed_simulation_parameters(), x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0]), noise_values=[0.02, 0.05], num_runs=2,
             multiprocessing=False, seed=17,
         )
@@ -940,7 +943,7 @@ class TestNoiseLevelForEachRun:
         # a fixed level or its own value, so equal sigmas give equal runs.
         per_run = self._simulate([0.02] * 4, 4)
         fixed = run_monte_carlo_simulation(
-            parameters=get_legacy_simulation_params(), x_axis=np.linspace(-10, 10, 51),
+            parameters=fixed_simulation_parameters(), x_axis=np.linspace(-10, 10, 51),
             time_axis=np.array([0.0, 1.0, 2.0]), noise_values=[0.02], num_runs=4,
             multiprocessing=False, seed=17,
         )

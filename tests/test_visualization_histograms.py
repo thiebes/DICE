@@ -568,11 +568,11 @@ def quick_test_ratios() -> np.ndarray:
     """D estimate / nominal D of a seeded serial simulation of the quick_test example."""
     from dice.analysis.simulation import run_monte_carlo_simulation
     from dice.io.parameters import open_parameters
-    from dice.utils.legacy_compatibility import create_parameters_from_legacy
+    from dice.models.parameters import simulation_parameters_from_dict
 
     params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
     result = run_monte_carlo_simulation(
-        create_parameters_from_legacy(
+        simulation_parameters_from_dict(
             params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
             params['nominal diffusion length']),
         params['x array'], params['time series'], params['noise series'],
@@ -585,13 +585,13 @@ def noise_range_points() -> tuple:
     """Initial CNR and D estimate / nominal D of each run of the seeded noise_range example."""
     from dice.analysis.simulation import run_monte_carlo_simulation
     from dice.io.parameters import noise_range_from_parameters, open_parameters
-    from dice.utils.legacy_compatibility import create_parameters_from_legacy
+    from dice.models.parameters import simulation_parameters_from_dict
 
     noise_draws, runs = np.random.SeedSequence(7).spawn(2)
     params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'noise_range.txt',
                              seed=noise_draws)
     result = run_monte_carlo_simulation(
-        create_parameters_from_legacy(
+        simulation_parameters_from_dict(
             params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
             params['nominal diffusion length']),
         params['x array'], params['time series'], params['noise series'],

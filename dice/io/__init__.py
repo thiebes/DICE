@@ -12,7 +12,6 @@ from .parameters import (
     handle_noise_parameters,
     handle_profile_width_parameters,
     handle_diffusion_parameters,
-    create_simulation_parameters,
     validate_parameters,
 )
 
@@ -40,7 +39,6 @@ __all__ = [
     'handle_noise_parameters',
     'handle_profile_width_parameters',
     'handle_diffusion_parameters',
-    'create_simulation_parameters',
     'validate_parameters',
     # Results functions
     'print_and_append',

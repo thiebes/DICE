@@ -258,7 +258,7 @@ class DiceInterface:
             # Import required modules from dice
             from dice.io.parameters import parameter_parser, validate_parameters
             from dice.analysis.simulation import run_monte_carlo_simulation
-            from dice.utils.legacy_compatibility import create_parameters_from_legacy
+            from dice.models.parameters import simulation_parameters_from_dict
 
             # Resolve per-parameter unit overrides before parsing,
             # so that values are in the global unit system when the
@@ -277,7 +277,7 @@ class DiceInterface:
             time_axis = processed_params['time series']
 
             # Create simulation parameters object from legacy format
-            sim_params = create_parameters_from_legacy(
+            sim_params = simulation_parameters_from_dict(
                 parameters_dict=processed_params,
                 diffusion_coefficient=processed_params['nominal diffusion coefficient'],
                 lifetime=processed_params['nominal lifetime (tau)'],

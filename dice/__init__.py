@@ -15,7 +15,7 @@ _LAZY_IMPORTS = {
     "open_parameters": ".io.parameters",
     "run_monte_carlo_simulation": ".analysis.simulation",
     "analyze_simulation_results": ".analysis.statistics",
-    "create_parameters_from_legacy": ".utils.legacy_compatibility",
+    "simulation_parameters_from_dict": ".models.parameters",
     "make_x_axis": ".utils.axes",
     "make_time_axis": ".utils.axes",
 }
@@ -46,7 +46,7 @@ def dice_runner(parameters_filename):
     from .io.parameters import noise_range_from_parameters, open_parameters, validate_parameters
     from .analysis.simulation import run_monte_carlo_simulation
     from .analysis.statistics import analyze_simulation_results
-    from .utils.legacy_compatibility import create_parameters_from_legacy
+    from .models.parameters import simulation_parameters_from_dict
 
     # Load parameters
     parameters = open_parameters(parameters_filename)
@@ -57,7 +57,7 @@ def dice_runner(parameters_filename):
     time_axis = parameters['time series']
 
     # Create simulation parameters
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         parameters_dict=parameters,
         diffusion_coefficient=parameters['nominal diffusion coefficient'],
         lifetime=parameters['nominal lifetime (tau)'],
@@ -89,7 +89,7 @@ __all__ = [
     "open_parameters",
     "run_monte_carlo_simulation",
     "analyze_simulation_results",
-    "create_parameters_from_legacy",
+    "simulation_parameters_from_dict",
     "make_x_axis",
     "make_time_axis",
     "core",

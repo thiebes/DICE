@@ -44,7 +44,7 @@ class TestEndToEndSimulation:
     def test_monte_carlo_simulation_runs(self):
         """Verify Monte Carlo simulation executes without errors."""
         from dice.analysis.simulation import run_monte_carlo_simulation
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
         from dice.utils.axes import make_x_axis
 
         # Create minimal parameters
@@ -52,7 +52,7 @@ class TestEndToEndSimulation:
         time_axis = np.array([0.0, 0.5, 1.0])
         noise_values = [0.02]  # Single noise value for predictable run count
 
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             parameters_dict={
                 'sigma^2_0': 0.25,
                 'amplitude_0': 1.0,
@@ -169,7 +169,7 @@ class TestLegacyCompatibility:
 
     def test_legacy_parameter_conversion(self):
         """Verify legacy parameters can be converted to new format."""
-        from dice.utils.legacy_compatibility import create_parameters_from_legacy
+        from dice.models.parameters import simulation_parameters_from_dict
 
         legacy_params = {
             'sigma^2_0': 1.0,
@@ -177,7 +177,7 @@ class TestLegacyCompatibility:
             'mu_0': 0.0,
         }
 
-        sim_params = create_parameters_from_legacy(
+        sim_params = simulation_parameters_from_dict(
             parameters_dict=legacy_params,
             diffusion_coefficient=0.01,
             lifetime=10.0,

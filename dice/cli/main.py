@@ -137,10 +137,10 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Dict[
     )
     
     # Convert legacy parameters format to modern structure
-    from ..utils.legacy_compatibility import create_parameters_from_legacy
+    from ..models.parameters import simulation_parameters_from_dict
     
     # Create simulation parameters object
-    sim_params = create_parameters_from_legacy(
+    sim_params = simulation_parameters_from_dict(
         parameters_dict=parameters,
         diffusion_coefficient=parameters['nominal diffusion coefficient'],
         lifetime=parameters['nominal lifetime (tau)'],

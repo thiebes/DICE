@@ -21,7 +21,7 @@ from dice.core.fitting import (
 )
 from dice.core.noise import add_noise
 from dice.core.profiles import make_diffusion_decay
-from dice.utils.legacy_compatibility import create_parameters_from_legacy
+from dice.models.parameters import simulation_parameters_from_dict
 from seeded_results import assert_seeded_results_agree
 
 X_AXIS = np.linspace(-2.5, 2.5, 60)
@@ -39,7 +39,7 @@ FIT_FIELDS = {
 
 @pytest.fixture(scope='module')
 def parameters():
-    return create_parameters_from_legacy(
+    return simulation_parameters_from_dict(
         {'sigma^2_0': 0.18033688, 'amplitude_0': 1.0, 'mu_0': 0.0},
         diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
 
