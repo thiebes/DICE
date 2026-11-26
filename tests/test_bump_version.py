@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -85,20 +86,36 @@ def test_development_version_updates_every_file_and_asks_for_no_tag(repo_copy: P
     assert "Publish a GitHub release" not in result.stdout
 
 
+def release_dates(repo: Path) -> list:
+    return re.findall(r'date-released: "([^"]+)"', (repo / "CITATION.cff").read_text(encoding="utf-8"))
+
+
+def test_release_without_a_date_gets_the_current_date(repo_copy: Path) -> None:
+    # A date that is not the current one, so that the test fails if the script leaves it.
+    assert run_bump(repo_copy, current_version(repo_copy), "--date", "2031-02-03").returncode == 0
+    day_before_the_run = date.today()
+
+    result = run_bump(repo_copy, "9.8.7")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    # Two dates are right if the run passes midnight.
+    assert release_dates(repo_copy) in ([str(day_before_the_run)] * 2, [str(date.today())] * 2)
+
+
 def test_development_version_without_a_date_keeps_the_release_date(repo_copy: Path) -> None:
-    dates = r'date-released: "([^"]+)"'
-    before = re.findall(dates, (repo_copy / "CITATION.cff").read_text(encoding="utf-8"))
+    # A date that is not the current one, so that the test fails if the script writes the current date.
+    assert run_bump(repo_copy, current_version(repo_copy), "--date", "2031-02-03").returncode == 0
 
     result = run_bump(repo_copy, "9.8.7.dev12")
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert current_version(repo_copy) == "9.8.7.dev12"
-    assert len(before) == 2
-    assert re.findall(dates, (repo_copy / "CITATION.cff").read_text(encoding="utf-8")) == before
+    assert release_dates(repo_copy) == ["2031-02-03"] * 2
 
 
 @pytest.mark.parametrize(
-    "version", ["9.8", "v9.8.7", "9.8.7.dev", "9.8.7-dev0", "9.8.7.dev0.1", "9.8.7.dev01", "9.8.7rc1"])
+    "version", ["9.8", "v9.8.7", "9.8.7.dev", "9.8.7-dev0", "9.8.7.dev0.1", "9.8.7.dev01", "9.8.7rc1",
+                "09.8.7", "9.08.7", "9.8.07"])
 def test_version_of_another_form_is_refused_and_no_file_changes(repo_copy: Path, version: str) -> None:
     before = {relative: (repo_copy / relative).read_bytes() for relative in VERSIONED_FILES}
 

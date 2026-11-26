@@ -86,4 +86,4 @@ Release versions follow semantic versioning, `MAJOR.MINOR.PATCH` (for example, 1
 - MINOR: added features that are backward compatible
 - PATCH: backward-compatible bug fixes
 
-A development version adds `.devN` to the version of the next release, in the form that PEP 440 defines for Python packages (for example, 1.3.0.dev0). `N` is written without a leading zero.
+A development version adds `.devN` to the version of the next release, in the form that PEP 440 defines for Python packages (for example, 1.3.0.dev0). No number of a version is written with a leading zero: the script refuses `1.03.0` and `1.3.0.dev01`.
