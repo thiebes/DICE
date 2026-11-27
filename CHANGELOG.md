@@ -39,8 +39,8 @@ and Fixed give the details.
   for the heavy-tailed estimates at a low CNR. The resampling is seeded from
   the seed of the simulation, so `--seed` repeats the interval. The interval
   is given from 100 estimates on: with fewer, the bootstrap interval is too
-  narrow (on DICE's own estimates, it covered the standard deviation in
-  about 85% of subsets of 20 estimates).
+  narrow (on DICE's own estimates, it covered the standard deviation in 81%
+  to 85% of subsets of 20 estimates).
 - Graphical user interface (GUI), started with `dice-gui` or
   `python -m dice_gui`. It has five tabs (Simulation Setup, Physical
   Parameters, Experimental Conditions, Analysis, Output) and
