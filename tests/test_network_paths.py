@@ -23,7 +23,12 @@ from dice.io.parameters import is_network_path, network_paths, open_parameters
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 QUICK_TEST = EXAMPLES_DIR / 'quick_test.txt'
-NETWORK_PROFILE = '\\\\dice-test.invalid\\share\\profile.csv'
+# The forward-slash form is absolute on every platform, so a path that is let
+# through reaches the reader unchanged. The backslash form is absolute only on
+# Windows; on Linux and macOS it is a relative file name, which DICE resolves
+# against the folder of the parameters file. Both are refused alike.
+NETWORK_PROFILE = '//dice-test.invalid/share/profile.csv'
+BACKSLASH_PROFILE = '\\\\dice-test.invalid\\share\\profile.csv'
 
 # The example profile is narrower than fft-cnr needs, which the parser warns about.
 pytestmark = pytest.mark.filterwarnings("ignore:The peak of the measured profile:UserWarning")
@@ -99,14 +104,15 @@ def test_network_paths_names_each_profile_key_with_a_network_path():
 
 class TestOpenParameters:
 
+    @pytest.mark.parametrize('profile', [NETWORK_PROFILE, BACKSLASH_PROFILE])
     @pytest.mark.parametrize('key', ['estimate noise from data', 'estimate_noise_from_data'])
-    def test_network_path_is_refused_before_it_is_opened(self, tmp_path, profile_reads, key):
-        params_file = write_file_with_profile(tmp_path, NETWORK_PROFILE, key)
+    def test_network_path_is_refused_before_it_is_opened(self, tmp_path, profile_reads, key, profile):
+        params_file = write_file_with_profile(tmp_path, profile, key)
 
         with pytest.raises(ValueError, match="names a network or device path") as raised:
             open_parameters(params_file)
 
-        assert NETWORK_PROFILE in str(raised.value)
+        assert profile in str(raised.value)
         assert '--allow-network-paths' in str(raised.value)
         assert profile_reads == []
 
