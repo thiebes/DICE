@@ -10,7 +10,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from .. import __version__
@@ -20,7 +20,8 @@ from ..analysis.simulation import run_monte_carlo_simulation
 from ..core.noise import Seed, nominal_cnr
 from ..analysis.statistics import analyze_simulation_results
 from ..io.results import (
-    completion_message, export_collated_results, file_error_text, output_unit_preferences, write_summary_file,
+    completion_message, export_collated_results, file_error_text, output_unit_preferences, result_sentence,
+    write_summary_file,
 )
 from ..models.results import MonteCarloOutput
 from ..visualization.histograms import (
@@ -189,8 +190,8 @@ def run_simulation(parameters: Dict[str, Any], args, seed: Seed = None) -> Monte
     return result
 
 
-def save_results(result: MonteCarloOutput, parameters: Dict[str, Any], 
-                output_dir: Path, args) -> None:
+def save_results(result: MonteCarloOutput, parameters: Dict[str, Any],
+                 output_dir: Path, args) -> Tuple[List[Path], Dict[str, Any]]:
     """
     Save simulation results to files.
     
@@ -204,7 +205,13 @@ def save_results(result: MonteCarloOutput, parameters: Dict[str, Any],
         Output directory.
     args : Namespace
         Command-line arguments.
+
+    Returns
+    -------
+    tuple
+        The files written, in the order written, and the analysis of the results.
     """
+    written = []
     length_unit = global_length_unit(parameters)
     time_unit = global_time_unit(parameters)
     output_units = output_unit_preferences(parameters)
@@ -227,8 +234,7 @@ def save_results(result: MonteCarloOutput, parameters: Dict[str, Any],
             result, str(csv_file), length_unit=length_unit, time_unit=time_unit,
             output_units=output_units,
         )
-        if not args.quiet:
-            print(f"Results saved to: {csv_file}")
+        written.append(csv_file)
     
     if export_format in ['json', 'both']:
         # For JSON, we'll create our own export since the function doesn't support it
@@ -260,8 +266,7 @@ def save_results(result: MonteCarloOutput, parameters: Dict[str, Any],
         with open(json_file, 'w') as f:
             json.dump(json_data, f, indent=2, default=str)
         
-        if not args.quiet:
-            print(f"Results saved to: {json_file}")
+        written.append(json_file)
     
     # Write summary  
     summary_file = output_dir / f"{parameters.get('filename slug', 'dice_results')}_summary.txt"
@@ -269,12 +274,12 @@ def save_results(result: MonteCarloOutput, parameters: Dict[str, Any],
         result, str(summary_file), parameters, analysis,
         length_unit=length_unit, time_unit=time_unit, output_units=output_units,
     )
-    if not args.quiet:
-        print(f"Summary saved to: {summary_file}")
+    written.append(summary_file)
+    return written, analysis
 
 
-def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any], 
-                output_dir: Path, args) -> None:
+def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
+                 output_dir: Path, args) -> List[Path]:
     """
     Create and save plots from simulation results.
     
@@ -288,6 +293,11 @@ def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
         Output directory.
     args : Namespace
         Command-line arguments.
+
+    Returns
+    -------
+    list of Path
+        The plot written, or none.
     """
     # The results file and the summary are new; no plot of an earlier run
     # with this slug stays beside them, also when this run draws none.
@@ -299,7 +309,7 @@ def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
             f"{file_error_text(e)}") from e
 
     if args.no_plots:
-        return
+        return []
     
     if not args.quiet:
         print("Creating plots...")
@@ -307,10 +317,10 @@ def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
     
     # Across a noise range the accuracy depends on the CNR, so it is plotted against it.
     if result.noise_range is not None:
-        create_accuracy_scatter_plot(result, parameters, output_dir, args)
-        return
+        return create_accuracy_scatter_plot(result, parameters, output_dir, args)
 
     fig = None
+    written = []
     try:
         # Prepare simulation result in legacy format for plotting
         # Extract diffusion coefficients (WLS estimates, slope / 2)
@@ -336,8 +346,7 @@ def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
                 **histogram_options(parameters)
             )
 
-            if not args.quiet:
-                print(f"Accuracy histogram saved to: {plot_file}")
+            written.append(plot_file)
         else:
             report_missing_plot(result)
 
@@ -350,6 +359,7 @@ def create_plots(result: MonteCarloOutput, parameters: Dict[str, Any],
         if fig is not None:
             import matplotlib.pyplot as plt
             plt.close(fig)
+    return written
 
 
 class PlotError(RuntimeError):
@@ -357,7 +367,7 @@ class PlotError(RuntimeError):
 
 
 def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str, Any],
-                                 output_dir: Path, args) -> None:
+                                 output_dir: Path, args) -> List[Path]:
     """
     Save the scatter plot of the WLS D_est/D_nom against initial CNR of a simulation with a noise range.
 
@@ -389,8 +399,7 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
                 **accuracy_scatter_options(parameters),
             )
 
-            if not args.quiet:
-                print(f"Accuracy scatter plot saved to: {plot_file}")
+            return [plot_file]
         else:
             report_missing_plot(result)
 
@@ -403,21 +412,27 @@ def create_accuracy_scatter_plot(result: MonteCarloOutput, parameters: Dict[str,
         if fig is not None:
             import matplotlib.pyplot as plt
             plt.close(fig)
+    return []
 
 
-def report_completion(result: MonteCarloOutput, quiet: bool) -> None:
+def report_completion(result: MonteCarloOutput, analysis: Dict[str, Any], quiet: bool,
+                      output_dir: Optional[Path] = None, written: Sequence[Path] = ()) -> None:
     """
-    Print how the simulation ended.
+    Print how the simulation ended: the folder of the output files, then the result.
 
+    The result is the line that opens the summary file (result_sentence).
     A simulation without estimates is reported as a warning on the error
     stream, also with --quiet. It is printed directly: Python shows a
     warning from one place only once in a process, and a program can call
     main() several times.
     """
-    if not result.has_estimates():
+    if not quiet and output_dir is not None and written:
+        print(f"Output files in {output_dir}: {', '.join(Path(path).name for path in written)}")
+    sentence = result_sentence(result, analysis)
+    if sentence is None:
         print(f"Warning: {completion_message(result)}", file=sys.stderr)
     elif not quiet:
-        print(completion_message(result))
+        print(sentence)
 
 
 def report_missing_plot(result: MonteCarloOutput) -> None:
@@ -513,12 +528,12 @@ def run_command(argv: Optional[list] = None) -> int:
         result.seed = args.seed
         
         # Save results
-        save_results(result, parameters, output_dir, args)
+        written, analysis = save_results(result, parameters, output_dir, args)
         
         # Create plots
-        create_plots(result, parameters, output_dir, args)
+        written += create_plots(result, parameters, output_dir, args)
         
-        report_completion(result, args.quiet)
+        report_completion(result, analysis, args.quiet, output_dir, written)
         
         return 0
     

@@ -13,7 +13,7 @@ from PyQt6.QtCore import QEvent, Qt
 from PyQt6.QtGui import QFocusEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from gui_support import EXAMPLE_PROFILE_CSV, TAB_NAMES, enter_text, run_and_wait
+from gui_support import EXAMPLE_PROFILE_CSV, TAB_NAMES, enter_text, run_and_wait, summary_parameter
 
 pytestmark = pytest.mark.gui
 
@@ -212,7 +212,7 @@ class TestZeroDiffusionInputs:
         assert (frame["nominal lifetime [ns]"] == 0).all()
         assert (frame["nominal diffusion length [μm]"] == float("inf")).all()
         summary = (work_dir / "output" / "no_decay" / "no_decay_summary.txt").read_text(encoding="utf-8")
-        assert "Nominal diffusion length:\n    inf micrometer\n" in summary
+        assert summary_parameter(summary, "Nominal diffusion length") == "inf micrometer"
 
     def test_infinite_length_with_a_coefficient_gives_zero_lifetime(self, qtbot, window):
         enter_text(qtbot, window.diffusion_coeff_input, "0.01")

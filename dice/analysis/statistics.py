@@ -108,9 +108,57 @@ def sample_standard_deviation(values: np.ndarray) -> float:
     return float(np.std(values, ddof=1)) if values.size > 1 else float('nan')
 
 
+# Resamples of the bootstrap interval of the standard deviation.
+BOOTSTRAP_RESAMPLES = 10_000
+# Largest number of resampled values held in memory at once.
+BOOTSTRAP_BATCH_VALUES = 4_000_000
+
+
+def standard_deviation_interval(
+    values: np.ndarray, rng: np.random.Generator, confidence: float = 0.95,
+    resamples: int = BOOTSTRAP_RESAMPLES,
+) -> Tuple[float, float]:
+    """
+    Percentile bootstrap interval of the sample standard deviation.
+
+    The estimates at a low CNR have heavy tails, for which the normal-theory
+    interval s / sqrt(2(n - 1)) is too narrow, so the interval comes from the
+    standard deviations of resamples drawn with replacement.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        The estimates.
+    rng : numpy.random.Generator
+        Source of the resampling; a seeded one repeats the interval.
+    confidence : float
+        Coverage of the interval.
+    resamples : int
+        Number of resamples.
+
+    Returns
+    -------
+    tuple of float
+        Lower and upper limit; NaN for fewer than two values.
+    """
+    values = np.asarray(values, dtype=float)
+    if values.size < 2:
+        return float('nan'), float('nan')
+    batch = max(1, min(resamples, BOOTSTRAP_BATCH_VALUES // values.size))
+    spreads = np.empty(resamples)
+    for start in range(0, resamples, batch):
+        stop = min(start + batch, resamples)
+        indices = rng.integers(0, values.size, size=(stop - start, values.size))
+        spreads[start:stop] = values[indices].std(axis=1, ddof=1)
+    tail = (1 - confidence) / 2
+    lower, upper = np.quantile(spreads, [tail, 1 - tail])
+    return float(lower), float(upper)
+
+
 def calculate_accuracy_metrics(
     estimates: np.ndarray,
-    nominal_value: float
+    nominal_value: float,
+    rng: Optional[np.random.Generator] = None,
 ) -> Dict[str, float]:
     """
     Calculate accuracy metrics for estimates.
@@ -121,6 +169,9 @@ def calculate_accuracy_metrics(
         Array of estimated values.
     nominal_value : float
         The true/nominal value.
+    rng : numpy.random.Generator, optional
+        Source of the resampling of the interval of the standard deviation.
+        Without it, the interval is not computed.
     
     Returns
     -------
@@ -130,10 +181,12 @@ def calculate_accuracy_metrics(
         'standard_error' the standard error of their mean ('std' divided by
         the square root of the number of estimates), which is also the
         standard error of the bias, because the nominal value is exact. Both
-        are NaN for fewer than two estimates.
+        are NaN for fewer than two estimates. With rng, 'std_interval' is
+        the 95% bootstrap interval of 'std' (standard_deviation_interval),
+        and 'relative_std_interval' the same divided by the nominal value.
     """
     if len(estimates) == 0:
-        return {
+        empty = {
             'mean': np.nan,
             'median': np.nan,
             'std': np.nan,
@@ -143,6 +196,10 @@ def calculate_accuracy_metrics(
             'rmse': np.nan,
             'relative_rmse': np.nan
         }
+        if rng is not None:
+            empty['std_interval'] = [np.nan, np.nan]
+            empty['relative_std_interval'] = [np.nan, np.nan]
+        return empty
     
     mean_est = np.mean(estimates)
     median_est = np.median(estimates)
@@ -159,7 +216,7 @@ def calculate_accuracy_metrics(
     
     standard_error = std_est / np.sqrt(len(estimates))
 
-    return {
+    metrics = {
         'mean': mean_est,
         'median': median_est,
         'std': std_est,
@@ -169,6 +226,12 @@ def calculate_accuracy_metrics(
         'rmse': rmse,
         'relative_rmse': relative_rmse
     }
+    if rng is not None:
+        lower, upper = standard_deviation_interval(estimates, rng)
+        metrics['std_interval'] = [lower, upper]
+        metrics['relative_std_interval'] = (
+            [lower / nominal_value, upper / nominal_value] if nominal_value != 0 else [np.nan, np.nan])
+    return metrics
 
 
 def analyze_simulation_results(
@@ -198,7 +261,10 @@ def analyze_simulation_results(
     # Estimators that ran, in column order. An estimator whose every fit failed is kept.
     keys = [spec.key for spec in in_column_order(result.estimator_keys)]
     nominal_d = result.parameters.physics.diffusion_coefficient
-    estimates = estimate_statistics(result, keys, proximity_levels)
+    # One stream for every bootstrap of this analysis, in a fixed order, so
+    # that a seeded simulation repeats its intervals.
+    rng = np.random.default_rng(result.analysis_seed)
+    estimates = estimate_statistics(result, keys, proximity_levels, rng)
 
     # Analyze by noise level if multiple fixed noise levels
     noise_analysis = {}
@@ -237,12 +303,13 @@ def analyze_simulation_results(
         'statistics': estimates['statistics'],
     }
     if result.noise_range is not None:
-        analysis['cnr_bins'] = analyze_cnr_bins(result, keys, proximity_levels)
+        analysis['cnr_bins'] = analyze_cnr_bins(result, keys, proximity_levels, rng)
     return analysis
 
 
 def estimate_statistics(
-    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float]
+    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float],
+    rng: Optional[np.random.Generator] = None,
 ) -> Dict[str, Dict]:
     """
     Precision, accuracy, and fit success of the D estimates of each estimator.
@@ -255,6 +322,9 @@ def estimate_statistics(
         Estimator keys, in the order of the output.
     proximity_levels : List[float]
         Fractional proximity levels for the precision (0.1 for ±10%).
+    rng : numpy.random.Generator, optional
+        Source of the bootstrap interval of each standard deviation; without
+        it, the intervals are not computed (calculate_accuracy_metrics).
 
     Returns
     -------
@@ -286,7 +356,7 @@ def estimate_statistics(
         }
 
     # Calculate accuracy metrics
-    accuracy = {key: calculate_accuracy_metrics(d_estimates[key], nominal_d) for key in keys}
+    accuracy = {key: calculate_accuracy_metrics(d_estimates[key], nominal_d, rng) for key in keys}
 
     statistics = {
         key: {
@@ -354,7 +424,8 @@ def runs_by_cnr_bin(result: MonteCarloOutput) -> List[List[RunResult]]:
 
 
 def analyze_cnr_bins(
-    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float]
+    result: MonteCarloOutput, keys: List[str], proximity_levels: List[float],
+    rng: Optional[np.random.Generator] = None,
 ) -> List[Dict]:
     """
     Statistics of the D estimates in each bin of nominal CNR (runs_by_cnr_bin).
@@ -377,7 +448,8 @@ def analyze_cnr_bins(
         One entry per bin, in order of increasing CNR: 'cnr_min' and
         'cnr_max', the lowest and highest nominal CNR of the bin's runs;
         'num_runs'; and the 'precision', 'accuracy', and 'statistics' of
-        estimate_statistics for the bin's runs.
+        estimate_statistics for the bin's runs. rng is passed on to
+        estimate_statistics, bin by bin in this order.
     """
     amplitude_0 = result.parameters.profile.amplitude_0
     bins = []
@@ -389,7 +461,7 @@ def analyze_cnr_bins(
             'cnr_min': min(cnr),
             'cnr_max': max(cnr),
             'num_runs': len(runs),
-            **estimate_statistics(bin_result, keys, proximity_levels),
+            **estimate_statistics(bin_result, keys, proximity_levels, rng),
         })
     return bins
 

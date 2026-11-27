@@ -266,6 +266,7 @@ def run_monte_carlo_simulation(
         estimator_keys=DEFAULT_ESTIMATOR_KEYS,
         noise_range=noise_range,
         seed=seed_record(seed),
+        analysis_seed=analysis_seed(seed, len(run_seeds)),
     )
 
     return simulation_result
@@ -326,6 +327,23 @@ def spawn_run_seeds(seed: Seed, run_count: int) -> List[Optional[np.random.SeedS
     else:
         root = np.random.SeedSequence(seed)
     return root.spawn(run_count)
+
+
+def analysis_seed(seed: Seed, run_count: int) -> Optional[np.random.SeedSequence]:
+    """
+    The seed of the resampling in the analysis of a simulation; None when unseeded.
+
+    It is the child of the simulation's root seed after the run_count run
+    seeds that spawn_run_seeds gives, so a seeded simulation repeats its
+    intervals, and the run seeds are those they would be without it.
+    """
+    if seed is None:
+        return None
+    if isinstance(seed, np.random.SeedSequence):
+        entropy, spawn_key, pool_size = seed.entropy, tuple(seed.spawn_key), seed.pool_size
+    else:
+        entropy, spawn_key, pool_size = seed, (), np.random.SeedSequence(seed).pool_size
+    return np.random.SeedSequence(entropy, spawn_key=spawn_key + (run_count,), pool_size=pool_size)
 
 
 def seeded_results_agree(actual: Any, desired: Any, rtol: float = SEEDED_RESULTS_RTOL) -> bool:

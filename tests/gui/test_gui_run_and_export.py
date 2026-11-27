@@ -16,7 +16,7 @@ from dice.io.results import results_column
 from gui_support import (
     EXAMPLES_DIR, NOMINAL_D_COLUMN, OLS_SLOPE_COLUMN, WLS_SLOPE_COLUMN,
     choose_global_units, d_estimates_from_csv, enter_text, fraction_sentence, run_and_wait,
-    summary_label_texts,
+    summary_label_texts, summary_parameter,
 )
 
 pytestmark = pytest.mark.gui
@@ -120,6 +120,6 @@ class TestExportUnits:
         )
 
         summary = (output_dir / "units_check_summary.txt").read_text()
-        assert f"Nominal diffusion coefficient:\n    {d:.5f} {length_unit}^2/{time_unit}\n" in summary
-        assert f"Spatial width:\n    {spatial_width} {length_unit}\n" in summary
-        assert f"Time range:\n    0.000 to 1.000 {time_unit}\n" in summary
+        assert summary_parameter(summary, "Nominal diffusion coefficient") == f"{d:.5f} {length_unit}^2/{time_unit}"
+        assert summary_parameter(summary, "Spatial width") == f"{spatial_width} {length_unit}"
+        assert summary_parameter(summary, "Time range") == f"0.000 to 1.000 {time_unit}"

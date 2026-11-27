@@ -182,6 +182,10 @@ class MonteCarloOutput:
         or the text of a SeedSequence that one integer does not describe
         (seed_record in dice.analysis.simulation). None when the simulation
         drew fresh entropy, or for results loaded from a file.
+    analysis_seed : numpy.random.SeedSequence, optional
+        Seed of the resampling in the analysis (analysis_seed in
+        dice.analysis.simulation), so that a seeded simulation repeats its
+        intervals. None draws fresh entropy. Not part of equality.
     """
     parameters: Any
     run_results: List[RunResult]
@@ -190,6 +194,7 @@ class MonteCarloOutput:
     estimator_keys: Tuple[str, ...] = DEFAULT_ESTIMATOR_KEYS
     noise_range: Optional[NoiseRange] = None
     seed: Optional[Union[int, str]] = None
+    analysis_seed: Optional[Any] = field(default=None, compare=False, repr=False)
 
     def has_estimates(self) -> bool:
         """Whether a run gave a diffusion coefficient estimate, with any estimator."""

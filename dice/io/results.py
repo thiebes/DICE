@@ -8,7 +8,7 @@ files and text summaries, and for loading result CSV files.
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, Optional, Sequence, Tuple, Union, TextIO
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from ..core.noise import nominal_cnr
 from ..models.estimators import ESTIMATORS, in_display_order
@@ -279,6 +279,82 @@ def fraction_text(fraction: float, interval: Optional[Dict[str, float]] = None,
             f"{interval_label}{interval['lower']:.1%} to {interval['upper']:.1%})")
 
 
+# The proximity level of the fraction in the result block (0.1 for ±10%).
+HEADLINE_LEVEL = '10%'
+
+
+def table_lines(rows: List[List[str]], indent: str = "") -> List[str]:
+    """Rows of cells as aligned text: each column as wide as its widest cell, two spaces apart."""
+    widths = [max(len(row[column]) for row in rows) for column in range(len(rows[0]))]
+    return [(indent + "  ".join(cell.ljust(width) for cell, width in zip(row, widths))).rstrip()
+            for row in rows]
+
+
+def _headline(analysis: Dict[str, Any]) -> Tuple[Any, str, List[str]]:
+    """The estimator of the result, its count of runs with an estimate, and the parts of its result."""
+    spec = in_display_order(analysis['accuracy'])[0]
+    metrics = analysis['accuracy'][spec.key]
+    fits = analysis.get('statistics', {}).get(spec.key)
+    runs = (f"{fits['num_successful']} of {fits['num_successful'] + fits['num_failed']} runs"
+            if fits else "")
+    if fits is not None and fits['num_successful'] == 0:
+        return spec, runs, ["no estimate from this fit"]
+    nominal = analysis.get('summary', {}).get('nominal_diffusion_coefficient')
+    parts = []
+    if HEADLINE_LEVEL in analysis.get('precision', {}):
+        fraction = analysis['precision'][HEADLINE_LEVEL][spec.key]
+        parts.append(f"{fraction:.1%} of estimates within ±{HEADLINE_LEVEL} of nominal")
+    if nominal:
+        parts.append(f"relative standard deviation {metrics['std'] / nominal:.3f}")
+        parts.append(f"mean estimate / nominal {metrics['mean'] / nominal:.3f}")
+    return spec, runs, parts
+
+
+def result_lines(results: MonteCarloOutput, analysis: Dict[str, Any]) -> List[str]:
+    """
+    The result block at the top of the summary file.
+
+    For the first estimator in display order (the weighted fit): the fraction
+    of its estimates within ±10% of nominal, their relative standard
+    deviation, and the mean estimate / nominal. A simulation with a noise
+    range has no such block, because its statistics pooled over the range of
+    CNR would mix noise regimes.
+    """
+    if not results.has_estimates():
+        return ["No run gave an estimate of the diffusion coefficient."]
+    if results.noise_range is not None:
+        return ["The statistics below are given for each bin of initial contrast-to-noise ratio (CNR);",
+                "pooled over the range of CNR, they would mix noise regimes."]
+    spec, runs, parts = _headline(analysis)
+    return [f"Result, {spec.summary_name} ({spec.short_name}), {runs}:"] + [f"  {part}" for part in parts]
+
+
+def result_sentence(results: MonteCarloOutput, analysis: Dict[str, Any]) -> Optional[str]:
+    """The result block in one line, for the end of the console output; None when no run gave an estimate."""
+    if not results.has_estimates():
+        return None
+    if results.noise_range is not None:
+        return ("Result: the summary gives the statistics for each bin of initial "
+                "contrast-to-noise ratio (CNR).")
+    spec, runs, parts = _headline(analysis)
+    return f"Result, {spec.summary_name} ({spec.short_name}), {runs}: {'; '.join(parts)}."
+
+
+def _fraction_cell(fraction: float, interval: Optional[Dict[str, float]]) -> str:
+    """A fraction of the estimates as a table cell: "16.0%", or "no estimates" when it is of none."""
+    if interval is not None and not interval['total']:
+        return "no estimates"
+    return f"{fraction:.1%}"
+
+
+def _interval_cell(limits: Sequence[float], text) -> str:
+    """The limits of an interval as "lower to upper", or empty when they are not finite."""
+    lower, upper = limits
+    if not (np.isfinite(lower) and np.isfinite(upper)):
+        return ""
+    return f"{text(lower)} to {text(upper)}"
+
+
 def write_summary_file(
     results: MonteCarloOutput,
     filename: Union[str, Path],
@@ -346,7 +422,7 @@ def write_summary_file(
         """An initial CNR of a simulation with a noise range, in the format its lowest CNR sets."""
         return format_quantity(value, 3, reference=lowest_cnr)
 
-    def write_noise_range(f: TextIO) -> None:
+    def noise_range_rows() -> List[List[str]]:
         """The noise sigma and initial CNR drawn for the runs, and the range they were drawn from."""
         drawn = results.noise_values
 
@@ -355,136 +431,135 @@ def write_summary_file(
 
         # CNR is amplitude_0 / sigma, so the highest noise gives the lowest CNR.
         distribution = 'uniform in log10 of the CNR' if noise_range.logarithmic else 'uniform in CNR'
-        f.write("Noise standard deviation, drawn for each run:\n")
-        f.write(f"    {len(drawn)} values from {sigma_text(min(drawn))} to {sigma_text(max(drawn))}"
-                f" (range {sigma_text(noise_range.low)} to {sigma_text(noise_range.high)})\n")
-        f.write("Initial CNR (Contrast-to-Noise Ratio), drawn for each run:\n")
-        f.write(f"    {cnr_text(nominal_cnr(amplitude_0, max(drawn)))} to "
-                f"{cnr_text(nominal_cnr(amplitude_0, min(drawn)))} (range {cnr_text(lowest_cnr)} to "
-                f"{cnr_text(nominal_cnr(amplitude_0, noise_range.low))}, {distribution})\n")
+        return [
+            ["Noise standard deviation, drawn for each run",
+             f"{len(drawn)} values from {sigma_text(min(drawn))} to {sigma_text(max(drawn))}"
+             f" (range {sigma_text(noise_range.low)} to {sigma_text(noise_range.high)})"],
+            ["Initial CNR (Contrast-to-Noise Ratio), drawn for each run",
+             f"{cnr_text(nominal_cnr(amplitude_0, max(drawn)))} to "
+             f"{cnr_text(nominal_cnr(amplitude_0, min(drawn)))} (range {cnr_text(lowest_cnr)} to "
+             f"{cnr_text(nominal_cnr(amplitude_0, noise_range.low))}, {distribution})"],
+        ]
 
     nominal_d = (analysis or {}).get('summary', {}).get('nominal_diffusion_coefficient', None)
 
-    def write_estimate_statistics(f: TextIO, statistics: Dict[str, Any], indent: str) -> None:
-        """The accuracy and precision of each estimator's D estimates, each line after `indent`."""
-        if 'accuracy' in statistics:
-            f.write(f"{indent}Diffusion Coefficient Estimate Statistics:\n")
-            for spec in in_display_order(statistics['accuracy']):
-                metrics = statistics['accuracy'][spec.key]
-                f.write(f"{indent}  {spec.summary_name}:\n")
-                if 'statistics' in statistics:
-                    fits = statistics['statistics'][spec.key]
-                    runs = fits['num_successful'] + fits['num_failed']
-                    f.write(f"{indent}    Estimates:\n")
-                    f.write(f"{indent}        {fits['num_successful']} of {runs} runs "
-                            f"({fits['num_failed']} without an estimate)\n")
-                f.write(f"{indent}    Standard deviation:\n")
-                f.write(f"{indent}        {d_text(metrics['std'])} {d_unit}\n")
-                if nominal_d and nominal_d != 0:
-                    relative_standard_deviation = metrics['std'] / nominal_d
-                    f.write(f"{indent}    Relative standard deviation:\n")
-                    f.write(f"{indent}        {relative_standard_deviation:.3f}\n")
-                f.write(f"{indent}    Mean estimate:\n")
-                f.write(f"{indent}        {d_text(metrics['mean'])} {d_unit}\n")
-                if 'standard_error' in metrics:
-                    f.write(f"{indent}    Standard error of the mean and of the bias:\n")
-                    f.write(f"{indent}        {d_text(metrics['standard_error'])} {d_unit}\n")
-                f.write(f"{indent}    Bias (mean - nominal):\n")
-                f.write(f"{indent}        {d_text(metrics['bias'])} {d_unit}\n")
-                if nominal_d and nominal_d != 0:
-                    # The form in which the 2024 paper reports the bias (its Fig. 7);
-                    # the Analysis tab of the GUI shows it as "Mean D_est / D_nom".
-                    f.write(f"{indent}    Mean estimate / nominal:\n")
-                    f.write(f"{indent}        {metrics['mean'] / nominal_d:.3f}\n")
-                f.write(f"{indent}    Root Mean Square Error:\n")
-                f.write(f"{indent}        {d_text(metrics['rmse'])} {d_unit}\n")
+    def statistics_table(statistics: Dict[str, Any]) -> List[str]:
+        """The statistics of each estimator's D estimates: one row per statistic, one column per estimator."""
+        if 'accuracy' not in statistics:
+            return []
+        specs = in_display_order(statistics['accuracy'])
+        accuracy = {spec.key: statistics['accuracy'][spec.key] for spec in specs}
+        rows = [[""] + [spec.short_name for spec in specs]]
 
-        if 'precision' in statistics:
-            intervals = statistics.get('precision_intervals', {})
-            f.write(f"\n{indent}Precision at standard thresholds:\n")
-            if intervals:
-                f.write(f"{indent}  (each fraction with its count of estimates and its 95% interval)\n")
-            for level, values in statistics['precision'].items():
-                f.write(f"{indent}  Fraction within ±{level} of nominal:\n")
-                # One line in display order, e.g.
-                # "    WLS: 19.0% (19 of 100; 12.5% to 27.8%)    OLS: 15.0% (15 of 100; 9.3% to 23.3%)"
-                f.write(indent + "".join(
-                    f"    {spec.short_name}: {fraction_text(values[spec.key], intervals.get(level, {}).get(spec.key))}"
-                    for spec in in_display_order(values)
-                ) + "\n")
+        def add(label: str, cell) -> None:
+            cells = [cell(spec.key, accuracy[spec.key]) for spec in specs]
+            # An interval row with no interval (no estimates, or fewer than two) is left out.
+            if label.startswith("  ") and not any(cells):
+                return
+            rows.append([label] + cells)
+
+        if 'statistics' in statistics:
+            fits = statistics['statistics']
+            add("Runs with an estimate", lambda key, _: (
+                f"{fits[key]['num_successful']} of {fits[key]['num_successful'] + fits[key]['num_failed']}"))
+        intervals = statistics.get('precision_intervals', {})
+        for level, values in statistics.get('precision', {}).items():
+            level_intervals = intervals.get(level, {})
+            add(f"Within ±{level} of nominal",
+                lambda key, _: _fraction_cell(values[key], level_intervals.get(key)))
+            if level_intervals:
+                add("  95% interval", lambda key, _: (
+                    f"{level_intervals[key]['lower']:.1%} to {level_intervals[key]['upper']:.1%}"
+                    if level_intervals[key]['total'] else ""))
+        if nominal_d:
+            # The mean ratio is the form in which the 2024 paper reports the bias
+            # (its Fig. 7); the Analysis tab of the GUI shows it as "Mean D_est / D_nom".
+            add("Mean estimate / nominal", lambda key, m: f"{m['mean'] / nominal_d:.3f}")
+            add("Relative standard deviation", lambda key, m: f"{m['std'] / nominal_d:.3f}")
+            if all('relative_std_interval' in m for m in accuracy.values()):
+                add("  95% interval", lambda key, m: _interval_cell(
+                    m['relative_std_interval'], lambda value: f"{value:.3f}"))
+        add("Standard deviation", lambda key, m: d_text(m['std']))
+        if all('std_interval' in m for m in accuracy.values()):
+            add("  95% interval", lambda key, m: _interval_cell(m['std_interval'], d_text))
+        add("Mean estimate", lambda key, m: d_text(m['mean']))
+        add("Bias (mean - nominal)", lambda key, m: d_text(m['bias']))
+        if all('standard_error' in m for m in accuracy.values()):
+            add("  standard error", lambda key, m: d_text(m['standard_error']))
+        add("Root mean square error", lambda key, m: d_text(m['rmse']))
+        return table_lines(rows)
+
+    def table_notes(statistics: Dict[str, Any]) -> List[str]:
+        """What the names, the unit and the intervals of the tables are."""
+        from ..analysis.statistics import BOOTSTRAP_RESAMPLES
+        specs = in_display_order(statistics['accuracy'])
+        notes = [" ".join(f"{spec.short_name}: {spec.summary_name}." for spec in specs),
+                 f"Diffusion coefficients in {d_unit}."]
+        if any('std_interval' in metrics for metrics in statistics['accuracy'].values()):
+            notes.append("Intervals are 95%: for a fraction, the Wilson score interval; for a standard "
+                         f"deviation, a bootstrap interval from {BOOTSTRAP_RESAMPLES:,} resamples.")
+        elif statistics.get('precision_intervals'):
+            notes.append("Intervals are 95% Wilson score intervals of the fractions.")
+        return notes
+
+    lines = []
+    slug = parameters.get('filename slug')
+    lines += [f"DICE simulation summary: {slug}" if slug else "DICE simulation summary", ""]
+
+    # The result, then the statistics behind it
+    if analysis:
+        lines += result_lines(results, analysis) + [""]
+        if noise_range is None:
+            table = statistics_table(analysis)
+            noted = analysis
+        else:
+            table = []
+            for cnr_bin in analysis['cnr_bins']:
+                table += ([f"Initial CNR {cnr_text(cnr_bin['cnr_min'])} to {cnr_text(cnr_bin['cnr_max'])} "
+                           f"({cnr_bin['num_runs']} runs)"] + statistics_table(cnr_bin) + [""])
+            table = table[:-1]
+            noted = analysis['cnr_bins'][0] if analysis['cnr_bins'] else {}
+        if table:
+            lines += table + [""] + table_notes(noted) + [""]
+
+    # The parameters of the simulation
+    rows = [["Number of runs", f"{results.num_runs}"],
+            ["Spatial width", f"{parameters.get('spatial width', 'N/A')} {length_unit}"],
+            ["Pixel width", f"{parameters.get('pixel width', 'N/A')} pixels"]]
+    time_series = parameters.get('time series', [])
+    rows.append(["Time frames", f"{len(time_series)} frames"])
+    if len(time_series) > 0:
+        time_scale = max(abs(time_series[0]), abs(time_series[-1]))
+        rows.append(["Time range", f"{format_quantity(time_series[0], 3, time_scale)} to "
+                                   f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}"])
+    if noise_range is None:
+        rows.append(["Noise standard deviation values", ", ".join(str(value) for value in results.noise_values)])
+        rows.append(["Initial CNR (Contrast-to-Noise Ratio)",
+                     f"{nominal_cnr(amplitude_0, results.noise_values[0]):.3f}"])
+    else:
+        rows += noise_range_rows()
+    rows.append(["Initial profile squared width (sigma^2)",
+                 f"{format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2"])
+    rows.append(["Nominal diffusion length",
+                 f"{format_quantity(results.parameters.physics.diffusion_length, 3)} {length_unit}"])
+    rows.append(["Nominal diffusion coefficient",
+                 f"{d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}"])
+    rows.append(["Nominal lifetime", f"{results.parameters.physics.lifetime} {time_unit}"])
+    from .parameters import LIFETIME_ASSUMED_KEY
+    if parameters.get(LIFETIME_ASSUMED_KEY):
+        rows.append(["", "(assumed: the file gives only the diffusion length, so its times are in units "
+                         "of the lifetime)"])
+    lines += ["Simulation parameters"] + table_lines(rows, indent="  ") + [""]
+
+    # What reproduces the simulation
+    from .. import __version__
+    if results.seed is None:
+        lines.append(f"DICE {__version__}, no seed (another simulation with these parameters draws other noise)")
+    else:
+        lines.append(f"DICE {__version__}, seed {results.seed}")
 
     with open(filename, 'w', encoding='utf-8') as f:
-        # Write header
-        f.write("DICE Simulation Summary\n")
-        f.write("=" * 50 + "\n\n")
-
-        # What reproduces the simulation
-        from .. import __version__
-        f.write("DICE version:\n")
-        f.write(f"    {__version__}\n")
-        f.write("Seed:\n")
-        if results.seed is None:
-            f.write("    none (another simulation with these parameters draws other noise)\n")
-        else:
-            f.write(f"    {results.seed}\n")
-        f.write("\n")
-        
-        # Write parameters
-        f.write("Simulation Parameters:\n")
-        f.write("-" * 30 + "\n")
-        f.write("Number of runs:\n")
-        f.write(f"    {results.num_runs}\n")
-        f.write("Spatial width:\n")
-        f.write(f"    {parameters.get('spatial width', 'N/A')} {length_unit}\n")
-        f.write("Pixel width:\n")
-        f.write(f"    {parameters.get('pixel width', 'N/A')} pixels\n")
-        time_series = parameters.get('time series', [])
-        f.write("Time frames:\n")
-        f.write(f"    {len(time_series)} frames\n")
-        if len(time_series) > 0:
-            f.write("Time range:\n")
-            time_scale = max(abs(time_series[0]), abs(time_series[-1]))
-            f.write(f"    {format_quantity(time_series[0], 3, time_scale)} to "
-                    f"{format_quantity(time_series[-1], 3, time_scale)} {time_unit}\n")
-        if noise_range is None:
-            f.write("Noise standard deviation values:\n")
-            f.write(f"    {results.noise_values}\n")
-            f.write("Initial CNR (Contrast-to-Noise Ratio):\n")
-            f.write(f"    {nominal_cnr(amplitude_0, results.noise_values[0]):.3f}\n")
-        else:
-            write_noise_range(f)
-        f.write("Initial profile squared width (sigma^2):\n")
-        f.write(f"    {format_quantity(results.parameters.profile.sigma2_0, 3)} {length_unit}^2\n")
-        f.write("Nominal diffusion length:\n")
-        f.write(f"    {format_quantity(results.parameters.physics.diffusion_length, 3)} {length_unit}\n")
-        f.write("Nominal diffusion coefficient:\n")
-        f.write(f"    {d_text(results.parameters.physics.diffusion_coefficient)} {d_unit}\n")
-        f.write("Nominal lifetime:\n")
-        from .parameters import LIFETIME_ASSUMED_KEY
-        assumed = (" (assumed: the file gives only the diffusion length, so its times are in units "
-                   "of the lifetime)") if parameters.get(LIFETIME_ASSUMED_KEY) else ""
-        f.write(f"    {results.parameters.physics.lifetime} {time_unit}{assumed}\n")
-        f.write("\n")
-        
-        # Write analysis results if available
-        if analysis:
-            f.write("Analysis Results:\n")
-            f.write("-" * 30 + "\n")
-
-            if noise_range is None:
-                write_estimate_statistics(f, analysis, indent="")
-            else:
-                # Statistics pooled over a range of CNR would mix noise regimes.
-                f.write("Statistics in bins of initial CNR with equal numbers of runs:\n")
-                for cnr_bin in analysis['cnr_bins']:
-                    f.write(f"\nInitial CNR {cnr_text(cnr_bin['cnr_min'])} to "
-                            f"{cnr_text(cnr_bin['cnr_max'])} ({cnr_bin['num_runs']} runs):\n")
-                    write_estimate_statistics(f, cnr_bin, indent="  ")
-
-            f.write("\n")
-        
-        # Write completion message
-        f.write(f"{completion_message(results)}\n")
+        f.write("\n".join(lines) + "\n")
 
 
 def file_error_text(error: OSError) -> str:

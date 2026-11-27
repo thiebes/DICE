@@ -16,6 +16,7 @@ from dice.io.results import export_collated_results
 from dice.models.results import MonteCarloOutput, RunResult
 from dice.models.parameters import simulation_parameters_from_dict
 from dice_gui.dice_interface import DiceInterface
+from summary_text import summary_values
 
 NOMINAL_D = 0.01
 # Per-run MSD slopes (2 D); None where that estimator produced no fit.
@@ -283,7 +284,8 @@ class TestRunValidation:
         frame = pd.read_csv(output_dir / 'quick_test.csv')
         assert frame['nominal diffusion coeff [nm\u00b2/ps]'].to_numpy() == pytest.approx(10.0, rel=1e-12)
         summary = (output_dir / 'quick_test_summary.txt').read_text(encoding='utf-8')
-        assert "Nominal diffusion coefficient:\n    10.00000 nanometer^2/picosecond\n" in summary
+        assert summary_values(summary)['Nominal diffusion coefficient'] == ['10.00000 nanometer^2/picosecond']
+        assert "Diffusion coefficients in nanometer^2/picosecond." in summary
 
 
 

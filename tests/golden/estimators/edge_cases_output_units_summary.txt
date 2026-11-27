@@ -1,83 +1,45 @@
-DICE Simulation Summary
-==================================================
+DICE simulation summary
 
-DICE version:
-    <version>
-Seed:
-    none (another simulation with these parameters draws other noise)
+Result, Weighted Least Squares (WLS), 4 of 6 runs:
+  75.0% of estimates within ±10% of nominal
+  relative standard deviation 0.161
+  mean estimate / nominal 1.071
 
-Simulation Parameters:
-------------------------------
-Number of runs:
-    6
-Spatial width:
-    5 micrometer
-Pixel width:
-    100 pixels
-Time frames:
-    3 frames
-Time range:
-    0.000 to 1.000 nanosecond
-Noise standard deviation values:
-    [0.02, 0.05]
-Initial CNR (Contrast-to-Noise Ratio):
-    50.000
-Initial profile squared width (sigma^2):
-    0.180 micrometer^2
-Nominal diffusion length:
-    0.100 micrometer
-Nominal diffusion coefficient:
-    0.10000 centimeter^2/second
-Nominal lifetime:
-    1.0 nanosecond
+                             WLS                 OLS
+Runs with an estimate        4 of 6              4 of 6
+Within ±5% of nominal        50.0%               25.0%
+  95% interval               15.0% to 85.0%      4.6% to 69.9%
+Within ±10% of nominal       75.0%               50.0%
+  95% interval               30.1% to 95.4%      15.0% to 85.0%
+Within ±20% of nominal       75.0%               100.0%
+  95% interval               30.1% to 95.4%      51.0% to 100.0%
+Within ±50% of nominal       100.0%              100.0%
+  95% interval               51.0% to 100.0%     51.0% to 100.0%
+Mean estimate / nominal      1.071               1.018
+Relative standard deviation  0.161               0.123
+  95% interval               0.022 to 0.194      0.035 to 0.144
+Standard deviation           0.01606             0.01231
+  95% interval               0.00225 to 0.01945  0.00350 to 0.01443
+Mean estimate                0.10712             0.10175
+Bias (mean - nominal)        0.00712             0.00175
+  standard error             0.00803             0.00616
+Root mean square error       0.01563             0.01081
 
-Analysis Results:
-------------------------------
-Diffusion Coefficient Estimate Statistics:
-  Weighted Least Squares:
-    Estimates:
-        4 of 6 runs (2 without an estimate)
-    Standard deviation:
-        0.01606 centimeter^2/second
-    Relative standard deviation:
-        0.161
-    Mean estimate:
-        0.10712 centimeter^2/second
-    Standard error of the mean and of the bias:
-        0.00803 centimeter^2/second
-    Bias (mean - nominal):
-        0.00712 centimeter^2/second
-    Mean estimate / nominal:
-        1.071
-    Root Mean Square Error:
-        0.01563 centimeter^2/second
-  Ordinary (unweighted) Least Squares, for comparison:
-    Estimates:
-        4 of 6 runs (2 without an estimate)
-    Standard deviation:
-        0.01231 centimeter^2/second
-    Relative standard deviation:
-        0.123
-    Mean estimate:
-        0.10175 centimeter^2/second
-    Standard error of the mean and of the bias:
-        0.00616 centimeter^2/second
-    Bias (mean - nominal):
-        0.00175 centimeter^2/second
-    Mean estimate / nominal:
-        1.018
-    Root Mean Square Error:
-        0.01081 centimeter^2/second
+WLS: Weighted Least Squares. OLS: Ordinary (unweighted) Least Squares, for comparison.
+Diffusion coefficients in centimeter^2/second.
+Intervals are 95%: for a fraction, the Wilson score interval; for a standard deviation, a bootstrap interval from 10,000 resamples.
 
-Precision at standard thresholds:
-  (each fraction with its count of estimates and its 95% interval)
-  Fraction within ±5% of nominal:
-    WLS: 50.0% (2 of 4; 15.0% to 85.0%)    OLS: 25.0% (1 of 4; 4.6% to 69.9%)
-  Fraction within ±10% of nominal:
-    WLS: 75.0% (3 of 4; 30.1% to 95.4%)    OLS: 50.0% (2 of 4; 15.0% to 85.0%)
-  Fraction within ±20% of nominal:
-    WLS: 75.0% (3 of 4; 30.1% to 95.4%)    OLS: 100.0% (4 of 4; 51.0% to 100.0%)
-  Fraction within ±50% of nominal:
-    WLS: 100.0% (4 of 4; 51.0% to 100.0%)    OLS: 100.0% (4 of 4; 51.0% to 100.0%)
+Simulation parameters
+  Number of runs                           6
+  Spatial width                            5 micrometer
+  Pixel width                              100 pixels
+  Time frames                              3 frames
+  Time range                               0.000 to 1.000 nanosecond
+  Noise standard deviation values          0.02, 0.05
+  Initial CNR (Contrast-to-Noise Ratio)    50.000
+  Initial profile squared width (sigma^2)  0.180 micrometer^2
+  Nominal diffusion length                 0.100 micrometer
+  Nominal diffusion coefficient            0.10000 centimeter^2/second
+  Nominal lifetime                         1.0 nanosecond
 
-Simulation completed successfully.
+DICE <version>, no seed (another simulation with these parameters draws other noise)
