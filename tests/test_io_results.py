@@ -25,7 +25,7 @@ from dice.io.results import (
 from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput
 from dice.models.parameters import simulation_parameters_from_dict
-from summary_text import last_line, result_block, summary_values
+from summary_text import last_line, result_block, row_after, summary_values
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 PLUS_MINUS = '±'
@@ -283,7 +283,7 @@ class TestNoiseRangeOutputs:
             assert values['Mean estimate'][0] == f"{wls.mean():.5f}"
             assert values['Standard deviation'][0] == f"{wls.std(ddof=1):.5f}"
             count = int(np.sum(np.abs(wls / 0.01 - 1) <= 0.1))
-            assert values['Within ±10% of nominal'][0] == f"{count / len(wls):.1%}"
+            assert values['Within ±10% of nominal'][0] == f"{count / len(wls):.1%} ({count} of {len(wls)})"
             assert values['Runs with an estimate'][0] == f"{len(wls)} of {len(runs_in_bin)}"
             assert values['standard error'][0] == f"{wls.std(ddof=1) / np.sqrt(len(wls)):.5f}"
         # The pooled statistics of all runs are not reported: each table belongs to a bin.
@@ -327,6 +327,28 @@ class TestWritersTakeTheUnitsOfTheRun:
         assert text == explicit.read_text(encoding='utf-8')
         assert 'nanometer' in text and 'picosecond' in text
         assert 'micrometer' not in text and 'nanosecond' not in text
+
+
+class TestIntervalOfTheStandardDeviation:
+    """The bootstrap interval in the summary, from 100 estimates on, in the unit of the diffusion coefficients."""
+
+    def test_interval_follows_the_output_unit(self, tmp_path, quick_test_parameters):
+        result = simulate_quick_test(quick_test_parameters, quick_test_parameters['time series'], num_runs=110)
+        analysis = analyze_simulation_results(result)
+        assert len(result.d_estimates('wls')) >= 100
+        texts = {}
+        for name, units in (('global', None),
+                            ('cm2_per_s', OutputUnitPreferences(diffusion_length='centimeter', diffusion_time='second'))):
+            write_summary_file(result, tmp_path / f'{name}.txt', quick_test_parameters, analysis, output_units=units)
+            texts[name] = (tmp_path / f'{name}.txt').read_text(encoding='utf-8')
+
+        lower, upper = analysis['accuracy']['wls']['std_interval']
+        # 1 micrometer^2/ns is 10 cm^2/s; the relative standard deviation has no unit.
+        assert row_after(texts['global'], 'Standard deviation') == (
+            '95% interval', [f"{lower:.5f} to {upper:.5f}", row_after(texts['global'], 'Standard deviation')[1][1]])
+        assert row_after(texts['cm2_per_s'], 'Standard deviation')[1][0] == f"{lower * 10:.5f} to {upper * 10:.5f}"
+        assert (row_after(texts['cm2_per_s'], 'Relative standard deviation')
+                == row_after(texts['global'], 'Relative standard deviation'))
 
 
 class TestSummaryRecordsWhatReproducesIt:

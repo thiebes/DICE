@@ -290,24 +290,28 @@ def table_lines(rows: List[List[str]], indent: str = "") -> List[str]:
             for row in rows]
 
 
-def _headline(analysis: Dict[str, Any]) -> Tuple[Any, str, List[str]]:
-    """The estimator of the result, its count of runs with an estimate, and the parts of its result."""
+def _headline(analysis: Dict[str, Any]) -> Tuple[str, List[str]]:
+    """The opening of the result line ("Result, <fit>, <runs>") and the parts of the result."""
     spec = in_display_order(analysis['accuracy'])[0]
+    # The name without a note such as ", for comparison".
+    opening = f"Result, {spec.summary_name.split(', ')[0]} ({spec.short_name})"
     metrics = analysis['accuracy'][spec.key]
     fits = analysis.get('statistics', {}).get(spec.key)
-    runs = (f"{fits['num_successful']} of {fits['num_successful'] + fits['num_failed']} runs"
-            if fits else "")
-    if fits is not None and fits['num_successful'] == 0:
-        return spec, runs, ["no estimate from this fit"]
+    if fits is not None:
+        opening += f", {fits['num_successful']} of {fits['num_successful'] + fits['num_failed']} runs"
+        if fits['num_successful'] == 0:
+            return opening, ["no estimate from this fit"]
     nominal = analysis.get('summary', {}).get('nominal_diffusion_coefficient')
     parts = []
     if HEADLINE_LEVEL in analysis.get('precision', {}):
         fraction = analysis['precision'][HEADLINE_LEVEL][spec.key]
         parts.append(f"{fraction:.1%} of estimates within ±{HEADLINE_LEVEL} of nominal")
     if nominal:
-        parts.append(f"relative standard deviation {metrics['std'] / nominal:.3f}")
+        relative_sd = metrics['std'] / nominal
+        parts.append(f"relative standard deviation {relative_sd:.3f}" if np.isfinite(relative_sd)
+                     else "relative standard deviation not defined for one estimate")
         parts.append(f"mean estimate / nominal {metrics['mean'] / nominal:.3f}")
-    return spec, runs, parts
+    return opening, parts
 
 
 def result_lines(results: MonteCarloOutput, analysis: Dict[str, Any]) -> List[str]:
@@ -325,8 +329,10 @@ def result_lines(results: MonteCarloOutput, analysis: Dict[str, Any]) -> List[st
     if results.noise_range is not None:
         return ["The statistics below are given for each bin of initial contrast-to-noise ratio (CNR);",
                 "pooled over the range of CNR, they would mix noise regimes."]
-    spec, runs, parts = _headline(analysis)
-    return [f"Result, {spec.summary_name} ({spec.short_name}), {runs}:"] + [f"  {part}" for part in parts]
+    if 'accuracy' not in analysis:
+        return []
+    opening, parts = _headline(analysis)
+    return [f"{opening}:"] + [f"  {part}" for part in parts]
 
 
 def result_sentence(results: MonteCarloOutput, analysis: Dict[str, Any]) -> Optional[str]:
@@ -336,15 +342,22 @@ def result_sentence(results: MonteCarloOutput, analysis: Dict[str, Any]) -> Opti
     if results.noise_range is not None:
         return ("Result: the summary gives the statistics for each bin of initial "
                 "contrast-to-noise ratio (CNR).")
-    spec, runs, parts = _headline(analysis)
-    return f"Result, {spec.summary_name} ({spec.short_name}), {runs}: {'; '.join(parts)}."
+    if 'accuracy' not in analysis:
+        return None
+    opening, parts = _headline(analysis)
+    return f"{opening}: {'; '.join(parts)}."
 
 
 def _fraction_cell(fraction: float, interval: Optional[Dict[str, float]]) -> str:
-    """A fraction of the estimates as a table cell: "16.0%", or "no estimates" when it is of none."""
-    if interval is not None and not interval['total']:
+    """A fraction of the estimates as a table cell: "16.0% (16 of 100)", or "no estimates" when it is of none.
+
+    Without the interval, which holds the count, the cell is the percent alone.
+    """
+    if interval is None:
+        return f"{fraction:.1%}"
+    if not interval['total']:
         return "no estimates"
-    return f"{fraction:.1%}"
+    return f"{fraction:.1%} ({interval['count']} of {interval['total']})"
 
 
 def _interval_cell(limits: Sequence[float], text) -> str:
@@ -491,13 +504,14 @@ def write_summary_file(
 
     def table_notes(statistics: Dict[str, Any]) -> List[str]:
         """What the names, the unit and the intervals of the tables are."""
-        from ..analysis.statistics import BOOTSTRAP_RESAMPLES
+        from ..analysis.statistics import BOOTSTRAP_RESAMPLES, MIN_BOOTSTRAP_ESTIMATES
         specs = in_display_order(statistics['accuracy'])
         notes = [" ".join(f"{spec.short_name}: {spec.summary_name}." for spec in specs),
                  f"Diffusion coefficients in {d_unit}."]
         if any('std_interval' in metrics for metrics in statistics['accuracy'].values()):
             notes.append("Intervals are 95%: for a fraction, the Wilson score interval; for a standard "
-                         f"deviation, a bootstrap interval from {BOOTSTRAP_RESAMPLES:,} resamples.")
+                         f"deviation, a bootstrap interval from {BOOTSTRAP_RESAMPLES:,} resamples, given from "
+                         f"{MIN_BOOTSTRAP_ESTIMATES} estimates on, because with fewer it is too narrow.")
         elif statistics.get('precision_intervals'):
             notes.append("Intervals are 95% Wilson score intervals of the fractions.")
         return notes
@@ -508,7 +522,8 @@ def write_summary_file(
 
     # The result, then the statistics behind it
     if analysis:
-        lines += result_lines(results, analysis) + [""]
+        block = result_lines(results, analysis)
+        lines += block + [""] if block else []
         if noise_range is None:
             table = statistics_table(analysis)
             noted = analysis
@@ -570,7 +585,7 @@ def file_error_text(error: OSError) -> str:
 
 
 def completion_message(results: MonteCarloOutput) -> str:
-    """The last line of the summary, of the console output and of the GUI's status after a simulation."""
+    """The GUI's status after a simulation, and the console's warning when no run gave an estimate."""
     if results.has_estimates():
         return "Simulation completed successfully."
     return "Simulation completed, but no run gave an estimate of the diffusion coefficient."

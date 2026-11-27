@@ -18,7 +18,7 @@ Root mean square error       nan           nan
 
 WLS: Weighted Least Squares. OLS: Ordinary (unweighted) Least Squares, for comparison.
 Diffusion coefficients in micrometer^2/nanosecond.
-Intervals are 95%: for a fraction, the Wilson score interval; for a standard deviation, a bootstrap interval from 10,000 resamples.
+Intervals are 95%: for a fraction, the Wilson score interval; for a standard deviation, a bootstrap interval from 10,000 resamples, given from 100 estimates on, because with fewer it is too narrow.
 
 Simulation parameters
   Number of runs                           2

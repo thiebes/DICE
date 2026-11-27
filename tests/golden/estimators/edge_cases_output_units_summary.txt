@@ -5,29 +5,27 @@ Result, Weighted Least Squares (WLS), 4 of 6 runs:
   relative standard deviation 0.161
   mean estimate / nominal 1.071
 
-                             WLS                 OLS
-Runs with an estimate        4 of 6              4 of 6
-Within ±5% of nominal        50.0%               25.0%
-  95% interval               15.0% to 85.0%      4.6% to 69.9%
-Within ±10% of nominal       75.0%               50.0%
-  95% interval               30.1% to 95.4%      15.0% to 85.0%
-Within ±20% of nominal       75.0%               100.0%
-  95% interval               30.1% to 95.4%      51.0% to 100.0%
-Within ±50% of nominal       100.0%              100.0%
-  95% interval               51.0% to 100.0%     51.0% to 100.0%
-Mean estimate / nominal      1.071               1.018
-Relative standard deviation  0.161               0.123
-  95% interval               0.022 to 0.194      0.035 to 0.144
-Standard deviation           0.01606             0.01231
-  95% interval               0.00225 to 0.01945  0.00350 to 0.01443
-Mean estimate                0.10712             0.10175
-Bias (mean - nominal)        0.00712             0.00175
-  standard error             0.00803             0.00616
-Root mean square error       0.01563             0.01081
+                             WLS              OLS
+Runs with an estimate        4 of 6           4 of 6
+Within ±5% of nominal        50.0% (2 of 4)   25.0% (1 of 4)
+  95% interval               15.0% to 85.0%   4.6% to 69.9%
+Within ±10% of nominal       75.0% (3 of 4)   50.0% (2 of 4)
+  95% interval               30.1% to 95.4%   15.0% to 85.0%
+Within ±20% of nominal       75.0% (3 of 4)   100.0% (4 of 4)
+  95% interval               30.1% to 95.4%   51.0% to 100.0%
+Within ±50% of nominal       100.0% (4 of 4)  100.0% (4 of 4)
+  95% interval               51.0% to 100.0%  51.0% to 100.0%
+Mean estimate / nominal      1.071            1.018
+Relative standard deviation  0.161            0.123
+Standard deviation           0.01606          0.01231
+Mean estimate                0.10712          0.10175
+Bias (mean - nominal)        0.00712          0.00175
+  standard error             0.00803          0.00616
+Root mean square error       0.01563          0.01081
 
 WLS: Weighted Least Squares. OLS: Ordinary (unweighted) Least Squares, for comparison.
 Diffusion coefficients in centimeter^2/second.
-Intervals are 95%: for a fraction, the Wilson score interval; for a standard deviation, a bootstrap interval from 10,000 resamples.
+Intervals are 95%: for a fraction, the Wilson score interval; for a standard deviation, a bootstrap interval from 10,000 resamples, given from 100 estimates on, because with fewer it is too narrow.
 
 Simulation parameters
   Number of runs                           6

@@ -266,10 +266,10 @@ def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
 
     changed = [(a.split(), b.split()) for a, b in zip(global_lines, converted_lines) if a != b]
     assert len(global_lines) == len(converted_lines)
-    # The rows of std, its interval, mean, bias, standard error and RMSE, the
-    # note that names the unit, and the nominal value.
+    # The rows of std, mean, bias, standard error and RMSE, the note that names
+    # the unit, and the nominal value. With 4 estimates no interval of std is given.
     assert [a[0] for a, _ in changed] == [
-        'Standard', '95%', 'Mean', 'Bias', 'standard', 'Root', 'Diffusion', 'Nominal']
+        'Standard', 'Mean', 'Bias', 'standard', 'Root', 'Diffusion', 'Nominal']
     assert "Diffusion coefficients in centimeter^2/second." in converted_lines
     rows = dict(summary_rows('\n'.join(converted_lines)))
     assert rows['Nominal diffusion coefficient'] == ['0.10000 centimeter^2/second']

@@ -6,6 +6,7 @@ of diffusion coefficient estimates from Monte Carlo simulations.
 """
 
 import dataclasses
+import zlib
 
 import numpy as np
 from typing import Dict, List, Tuple, Optional
@@ -112,6 +113,12 @@ def sample_standard_deviation(values: np.ndarray) -> float:
 BOOTSTRAP_RESAMPLES = 10_000
 # Largest number of resampled values held in memory at once.
 BOOTSTRAP_BATCH_VALUES = 4_000_000
+# Fewest estimates for which the bootstrap interval of the standard deviation
+# is reported. On 4000 WLS estimates of the quick_test example at CNR 50 and
+# CNR 10, the 95% interval covered the standard deviation of all of them in
+# about 94% of subsets of 100 or 200 estimates, but in 90% to 92% of subsets
+# of 50 and 81% to 85% of subsets of 20.
+MIN_BOOTSTRAP_ESTIMATES = 100
 
 
 def standard_deviation_interval(
@@ -183,7 +190,9 @@ def calculate_accuracy_metrics(
         standard error of the bias, because the nominal value is exact. Both
         are NaN for fewer than two estimates. With rng, 'std_interval' is
         the 95% bootstrap interval of 'std' (standard_deviation_interval),
-        and 'relative_std_interval' the same divided by the nominal value.
+        and 'relative_std_interval' the same divided by the nominal value;
+        both are NaN for fewer than MIN_BOOTSTRAP_ESTIMATES estimates, for
+        which the bootstrap interval is too narrow.
     """
     if len(estimates) == 0:
         empty = {
@@ -227,7 +236,8 @@ def calculate_accuracy_metrics(
         'relative_rmse': relative_rmse
     }
     if rng is not None:
-        lower, upper = standard_deviation_interval(estimates, rng)
+        lower, upper = (standard_deviation_interval(estimates, rng)
+                        if len(estimates) >= MIN_BOOTSTRAP_ESTIMATES else (np.nan, np.nan))
         metrics['std_interval'] = [lower, upper]
         metrics['relative_std_interval'] = (
             [lower / nominal_value, upper / nominal_value] if nominal_value != 0 else [np.nan, np.nan])
@@ -261,10 +271,8 @@ def analyze_simulation_results(
     # Estimators that ran, in column order. An estimator whose every fit failed is kept.
     keys = [spec.key for spec in in_column_order(result.estimator_keys)]
     nominal_d = result.parameters.physics.diffusion_coefficient
-    # One stream for every bootstrap of this analysis, in a fixed order, so
-    # that a seeded simulation repeats its intervals.
-    rng = np.random.default_rng(result.analysis_seed)
-    estimates = estimate_statistics(result, keys, proximity_levels, rng)
+    # Group 0 of the resampling streams: all runs (interval_generator).
+    estimates = estimate_statistics(result, keys, proximity_levels, interval_group=0)
 
     # Analyze by noise level if multiple fixed noise levels
     noise_analysis = {}
@@ -303,13 +311,34 @@ def analyze_simulation_results(
         'statistics': estimates['statistics'],
     }
     if result.noise_range is not None:
-        analysis['cnr_bins'] = analyze_cnr_bins(result, keys, proximity_levels, rng)
+        analysis['cnr_bins'] = analyze_cnr_bins(result, keys, proximity_levels, with_intervals=True)
     return analysis
+
+
+def interval_generator(
+    analysis_seed: Optional[np.random.SeedSequence], group: int, key: str,
+) -> np.random.Generator:
+    """
+    Source of the bootstrap of one estimator's estimates in one group of runs.
+
+    Group 0 is all runs of the simulation, and group i the i-th bin of initial
+    CNR. Each pair of group and estimator has its own stream, derived from the
+    seed of the simulation (MonteCarloOutput.analysis_seed), so an interval
+    does not depend on which other estimators or bins are analyzed, and a
+    seeded simulation repeats it. Without a seed, the stream draws fresh
+    entropy.
+    """
+    if analysis_seed is None:
+        return np.random.default_rng()
+    estimator_number = zlib.crc32(key.encode('utf-8'))
+    return np.random.default_rng(np.random.SeedSequence(
+        analysis_seed.entropy, spawn_key=tuple(analysis_seed.spawn_key) + (group, estimator_number),
+        pool_size=analysis_seed.pool_size))
 
 
 def estimate_statistics(
     result: MonteCarloOutput, keys: List[str], proximity_levels: List[float],
-    rng: Optional[np.random.Generator] = None,
+    interval_group: Optional[int] = None,
 ) -> Dict[str, Dict]:
     """
     Precision, accuracy, and fit success of the D estimates of each estimator.
@@ -322,9 +351,10 @@ def estimate_statistics(
         Estimator keys, in the order of the output.
     proximity_levels : List[float]
         Fractional proximity levels for the precision (0.1 for ±10%).
-    rng : numpy.random.Generator, optional
-        Source of the bootstrap interval of each standard deviation; without
-        it, the intervals are not computed (calculate_accuracy_metrics).
+    interval_group : int, optional
+        The group of runs that `result` holds, which selects the streams of
+        the bootstrap intervals of the standard deviations
+        (interval_generator). Without it, the intervals are not computed.
 
     Returns
     -------
@@ -356,7 +386,12 @@ def estimate_statistics(
         }
 
     # Calculate accuracy metrics
-    accuracy = {key: calculate_accuracy_metrics(d_estimates[key], nominal_d, rng) for key in keys}
+    accuracy = {
+        key: calculate_accuracy_metrics(
+            d_estimates[key], nominal_d,
+            None if interval_group is None else interval_generator(result.analysis_seed, interval_group, key))
+        for key in keys
+    }
 
     statistics = {
         key: {
@@ -425,7 +460,7 @@ def runs_by_cnr_bin(result: MonteCarloOutput) -> List[List[RunResult]]:
 
 def analyze_cnr_bins(
     result: MonteCarloOutput, keys: List[str], proximity_levels: List[float],
-    rng: Optional[np.random.Generator] = None,
+    with_intervals: bool = False,
 ) -> List[Dict]:
     """
     Statistics of the D estimates in each bin of nominal CNR (runs_by_cnr_bin).
@@ -441,6 +476,9 @@ def analyze_cnr_bins(
         Estimator keys, in the order of the output.
     proximity_levels : List[float]
         Fractional proximity levels for the precision (0.1 for ±10%).
+    with_intervals : bool
+        Compute the bootstrap intervals of the standard deviations; bin i
+        (from 1, in order of increasing CNR) is group i of interval_generator.
 
     Returns
     -------
@@ -448,12 +486,11 @@ def analyze_cnr_bins(
         One entry per bin, in order of increasing CNR: 'cnr_min' and
         'cnr_max', the lowest and highest nominal CNR of the bin's runs;
         'num_runs'; and the 'precision', 'accuracy', and 'statistics' of
-        estimate_statistics for the bin's runs. rng is passed on to
-        estimate_statistics, bin by bin in this order.
+        estimate_statistics for the bin's runs.
     """
     amplitude_0 = result.parameters.profile.amplitude_0
     bins = []
-    for runs in runs_by_cnr_bin(result):
+    for number, runs in enumerate(runs_by_cnr_bin(result), start=1):
         bin_result = dataclasses.replace(
             result, run_results=runs, num_runs=len(runs), noise_values=[run.noise_sigma for run in runs])
         cnr = [nominal_cnr(amplitude_0, run.noise_sigma) for run in runs]
@@ -461,7 +498,8 @@ def analyze_cnr_bins(
             'cnr_min': min(cnr),
             'cnr_max': max(cnr),
             'num_runs': len(runs),
-            **estimate_statistics(bin_result, keys, proximity_levels, rng),
+            **estimate_statistics(bin_result, keys, proximity_levels,
+                                  interval_group=number if with_intervals else None),
         })
     return bins
 

@@ -92,12 +92,12 @@
    "rmse": 0.00108050913925,
    "relative_rmse": 0.108050913925,
    "std_interval": [
-    0.00035,
-    0.00144308696897
+    NaN,
+    NaN
    ],
    "relative_std_interval": [
-    0.035,
-    0.144308696897
+    NaN,
+    NaN
    ]
   },
   "wls": {
@@ -110,12 +110,12 @@
    "rmse": 0.0015626499928,
    "relative_rmse": 0.15626499928,
    "std_interval": [
-    0.000225,
-    0.00194486503388
+    NaN,
+    NaN
    ],
    "relative_std_interval": [
-    0.0225,
-    0.194486503388
+    NaN,
+    NaN
    ]
   }
  },

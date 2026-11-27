@@ -510,7 +510,7 @@ CSV_COLUMNS = [
 
 # The summary for quick_test.txt with every number replaced by '#' and every gap
 # between cells by two spaces (summary_skeleton).
-WITHIN_ROWS = ["Within ±#% of nominal  #%  #%", "  #% interval  #% to #%  #% to #%"]
+WITHIN_ROWS = ["Within ±#% of nominal  #% (# of #)  #% (# of #)", "  #% interval  #% to #%  #% to #%"]
 
 SUMMARY_SKELETON = [
     "DICE simulation summary: quick_test",
@@ -536,7 +536,7 @@ SUMMARY_SKELETON = [
     "WLS: Weighted Least Squares. OLS: Ordinary (unweighted) Least Squares, for comparison.",
     "Diffusion coefficients in micrometer^2/nanosecond.",
     "Intervals are #%: for a fraction, the Wilson score interval; for a standard deviation, "
-    "a bootstrap interval from #,# resamples.",
+    "a bootstrap interval from #,# resamples, given from # estimates on, because with fewer it is too narrow.",
     "",
     "Simulation parameters",
     "  Number of runs  #",
@@ -698,7 +698,7 @@ class TestQuickTestOutputSchema:
         def fraction(method: str) -> tuple[str, str]:
             count = int(np.sum(np.abs(d_estimates[method] / 0.01 - 1) <= 0.1))
             lower, upper = proportion_confint(count, 100, alpha=0.05, method='wilson')
-            return f"{count / 100:.1%}", f"{lower:.1%} to {upper:.1%}"
+            return f"{count / 100:.1%} ({count} of 100)", f"{lower:.1%} to {upper:.1%}"
 
         assert values['Within ±10% of nominal'] == [fraction(m)[0] for m in ('wls', 'ols')]
         assert row_after(summary, 'Within ±10% of nominal') == (

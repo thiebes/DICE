@@ -420,7 +420,7 @@ def report_completion(result: MonteCarloOutput, analysis: Dict[str, Any], quiet:
     """
     Print how the simulation ended: the folder of the output files, then the result.
 
-    The result is the line that opens the summary file (result_sentence).
+    The result is the result block of the summary file in one line (result_sentence).
     A simulation without estimates is reported as a warning on the error
     stream, also with --quiet. It is printed directly: Python shows a
     warning from one place only once in a process, and a program can call
