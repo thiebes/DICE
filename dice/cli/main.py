@@ -428,10 +428,11 @@ def report_completion(result: MonteCarloOutput, analysis: Dict[str, Any], quiet:
     """
     if not quiet and output_dir is not None and written:
         print(f"Output files in {output_dir}: {', '.join(Path(path).name for path in written)}")
-    sentence = result_sentence(result, analysis)
-    if sentence is None:
+    if not result.has_estimates():
         print(f"Warning: {completion_message(result)}", file=sys.stderr)
-    elif not quiet:
+        return
+    sentence = result_sentence(result, analysis)
+    if sentence is not None and not quiet:
         print(sentence)
 
 

@@ -382,6 +382,26 @@ class TestCnrBins:
         tied = [run.run_id for run in ordered if run.noise_sigma == sigmas[40]]
         assert tied == [10, 40]
 
+    def test_bin_of_one_hundred_estimates_has_its_own_interval(self):
+        """Each bin draws from its own stream (group i of interval_generator), from 100 estimates on."""
+        import dataclasses
+        from dice.analysis.statistics import interval_generator, runs_by_cnr_bin, standard_deviation_interval
+        seed = np.random.SeedSequence(8)
+        output = dataclasses.replace(
+            self._range_output(list(np.linspace(0.05, 0.01, 500))), analysis_seed=seed)
+
+        bins = analyze_simulation_results(output)['cnr_bins']
+
+        assert [entry['num_runs'] for entry in bins] == [100] * 5
+        for number, (entry, runs) in enumerate(zip(bins, runs_by_cnr_bin(output)), start=1):
+            wls = np.array([run.wls_slope / 2 for run in runs])
+            interval = entry['accuracy']['wls']['std_interval']
+            assert interval[0] < wls.std(ddof=1) < interval[1]
+            assert entry['accuracy']['wls']['relative_std_interval'] == pytest.approx(
+                [interval[0] / 0.01, interval[1] / 0.01])
+            assert tuple(interval) == standard_deviation_interval(wls, interval_generator(seed, number, 'wls'))
+            assert tuple(interval) != standard_deviation_interval(wls, interval_generator(seed, 0, 'wls'))
+
     def test_bin_sizes_differ_by_at_most_one(self):
         from dice.analysis.statistics import runs_by_cnr_bin
         bins = runs_by_cnr_bin(self._range_output(list(np.linspace(0.05, 0.01, 103))))

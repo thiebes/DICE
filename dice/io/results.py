@@ -291,7 +291,11 @@ def table_lines(rows: List[List[str]], indent: str = "") -> List[str]:
 
 
 def _headline(analysis: Dict[str, Any]) -> Tuple[str, List[str]]:
-    """The opening of the result line ("Result, <fit>, <runs>") and the parts of the result."""
+    """The opening of the result line ("Result, <fit>, <runs>") and the parts of the result.
+
+    The analysis has at least one estimator in 'accuracy' (result_lines and
+    result_sentence check it).
+    """
     spec = in_display_order(analysis['accuracy'])[0]
     # The name without a note such as ", for comparison".
     opening = f"Result, {spec.summary_name.split(', ')[0]} ({spec.short_name})"
@@ -301,6 +305,8 @@ def _headline(analysis: Dict[str, Any]) -> Tuple[str, List[str]]:
         opening += f", {fits['num_successful']} of {fits['num_successful'] + fits['num_failed']} runs"
         if fits['num_successful'] == 0:
             return opening, ["no estimate from this fit"]
+    elif not np.isfinite(metrics['mean']):
+        return opening, ["no estimate from this fit"]
     nominal = analysis.get('summary', {}).get('nominal_diffusion_coefficient')
     parts = []
     if HEADLINE_LEVEL in analysis.get('precision', {}):
@@ -329,23 +335,23 @@ def result_lines(results: MonteCarloOutput, analysis: Dict[str, Any]) -> List[st
     if results.noise_range is not None:
         return ["The statistics below are given for each bin of initial contrast-to-noise ratio (CNR);",
                 "pooled over the range of CNR, they would mix noise regimes."]
-    if 'accuracy' not in analysis:
+    if not analysis.get('accuracy'):
         return []
     opening, parts = _headline(analysis)
-    return [f"{opening}:"] + [f"  {part}" for part in parts]
+    return [f"{opening}:"] + [f"  {part}" for part in parts] if parts else []
 
 
 def result_sentence(results: MonteCarloOutput, analysis: Dict[str, Any]) -> Optional[str]:
-    """The result block in one line, for the end of the console output; None when no run gave an estimate."""
+    """The result block in one line, for the end of the console output; None when there is no result to state."""
     if not results.has_estimates():
         return None
     if results.noise_range is not None:
         return ("Result: the summary gives the statistics for each bin of initial "
                 "contrast-to-noise ratio (CNR).")
-    if 'accuracy' not in analysis:
+    if not analysis.get('accuracy'):
         return None
     opening, parts = _headline(analysis)
-    return f"{opening}: {'; '.join(parts)}."
+    return f"{opening}: {'; '.join(parts)}." if parts else None
 
 
 def _fraction_cell(fraction: float, interval: Optional[Dict[str, float]]) -> str:

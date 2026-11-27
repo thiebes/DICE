@@ -323,6 +323,19 @@ class TestCommandLineReportsHowARunEnded:
             assert captured.err == ("Warning: Simulation completed, but no run gave an estimate "
                                     "of the diffusion coefficient.\n")
 
+    def test_partial_analysis_gives_no_broken_result(self, capsys):
+        """A hand-built analysis without the parts of the result states none, and warns of nothing."""
+        from dice.cli.main import report_completion
+        from dice.io.results import result_lines, result_sentence
+        output = edge_case_output()
+        analysis = analyze_simulation_results(output)
+        partial = {key: value for key, value in analysis.items() if key not in ('precision', 'summary')}
+
+        assert result_lines(output, partial) == [] and result_sentence(output, partial) is None
+        assert result_lines(output, {'accuracy': {}}) == []
+        report_completion(output, partial, quiet=False)
+        assert capsys.readouterr() == ("", "")
+
     def test_folder_and_result_are_printed_unless_quiet(self, capsys, tmp_path):
         from dice.cli.main import report_completion
         output = edge_case_output()
