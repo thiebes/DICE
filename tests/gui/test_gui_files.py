@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from PyQt6.QtWidgets import QMessageBox
 
-from dice.io.parameters import open_parameters, parameter_parser
+from dice.io.parameters import is_network_path, open_parameters, parameter_parser
 from dice.utils.units import global_length_unit, global_time_unit, resolve_units
 from dice_gui import dice_gui as dice_gui_window
 from dice_gui.dice_interface import DiceInterface
@@ -750,3 +750,79 @@ class TestParameterFileEncoding:
         assert dialogs.titles("information") == ["Parameters Loaded"]
         assert window.filename_slug_input.text() == self.SLUG
         assert open_parameters(path)["filename slug"] == self.SLUG
+
+
+class TestNetworkPathInFile:
+    """File > Open asks before it loads a file that names a measured profile on a network path.
+
+    No test contacts a computer: the host name ends in .invalid, which never
+    resolves, and the checks of the form on disk are replaced for such paths.
+    """
+
+    NETWORK_PROFILE = "//dice-test.invalid/share/profile.csv"
+    QUESTION = "Network Path in the Parameters File"
+
+    @pytest.fixture
+    def network_file(self, work_dir) -> Path:
+        return _write_quick_test_variant(
+            work_dir, "network_profile", {"estimate noise from data": self.NETWORK_PROFILE}, ("noise value",))
+
+    @pytest.fixture
+    def disk_checks(self, monkeypatch) -> list:
+        """Record the network paths that the form checks on disk, and answer that they do not exist."""
+        checked = []
+        for name in ("exists", "isfile"):
+            real = getattr(os.path, name)
+
+            def check(path, real=real):
+                if is_network_path(os.fspath(path)):
+                    checked.append(os.fspath(path))
+                    return False
+                return real(path)
+
+            monkeypatch.setattr(os.path, name, check)
+        return checked
+
+    @pytest.fixture
+    def loaded_window(self, window, dialogs):
+        _open_via_menu(window, dialogs, EXAMPLES_DIR / "publication.txt")
+        dialogs.shown.clear()
+        return window
+
+    def test_declining_leaves_the_form_unchanged_and_checks_nothing(
+            self, loaded_window, dialogs, network_file, disk_checks):
+        window = loaded_window
+        before = _engine_parameters(window)
+        dialogs.question_answers.append(QMessageBox.StandardButton.No)
+
+        _open_via_menu(window, dialogs, network_file)
+
+        assert dialogs.titles("question") == [self.QUESTION]
+        assert self.NETWORK_PROFILE in dialogs.texts("question")[0]
+        assert dialogs.titles("critical") == [] and dialogs.titles("information") == []
+        assert disk_checks == []
+        assert _engine_parameters(window) == before
+        assert window.current_parameter_file == str(EXAMPLES_DIR / "publication.txt")
+        assert window.status_label.text() == "Parameters not loaded"
+
+    def test_agreeing_loads_the_path(
+            self, loaded_window, dialogs, network_file, disk_checks):
+        window = loaded_window
+        dialogs.question_answers.append(QMessageBox.StandardButton.Yes)
+
+        _open_via_menu(window, dialogs, network_file)
+
+        assert dialogs.titles("question") == [self.QUESTION]
+        assert dialogs.titles("information") == ["Parameters Loaded"]
+        assert window.noise_estimate_radio.isChecked()
+        assert window.noise_file_input.text() == self.NETWORK_PROFILE
+        assert window.current_parameter_file == str(network_file)
+
+    def test_local_profile_loads_without_the_question(self, loaded_window, dialogs, work_dir):
+        path = _write_quick_test_variant(
+            work_dir, "local_profile", {"estimate noise from data": str(EXAMPLE_PROFILE_CSV)}, ("noise value",))
+
+        _open_via_menu(loaded_window, dialogs, path)
+
+        assert dialogs.titles("question") == []
+        assert dialogs.titles("information") == ["Parameters Loaded"]
