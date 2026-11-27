@@ -90,9 +90,10 @@ class EstimatorSpec:
         CSV column prefix ('<csv_label> diffusion slope', ...). No label may
         begin with another, because CSV readers match columns by prefix.
     summary_name : str
-        Heading in the summary file.
+        Name in the notes of the summary file, and, up to a comma, in its
+        result when the estimator comes first in display order.
     short_name : str
-        Name in the summary precision line and in GUI messages.
+        Column name in the tables of the summary file, and name in GUI messages.
     estimate : callable
         Fits one run's FrameFits; returns None when it produces no fit.
     """

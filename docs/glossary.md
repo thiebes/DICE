@@ -162,7 +162,7 @@ The response of an imaging system to a point source. In microscopy, the PSF is o
 
 How closely the diffusion coefficient estimates of repeated measurements agree with each other. The standard deviation of the estimates and the relative standard deviation measure it.
 
-In the summary file, the heading "Precision at standard thresholds" stands over the fractions of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Such a fraction is high only when the estimates are both precise and accurate: a large spread or a large bias lowers it.
+In the summary file, the rows "Within ±5% of nominal" to "Within ±50% of nominal" give the fractions of estimates within ±5%, ±10%, ±20%, and ±50% of the nominal value. Such a fraction is high only when the estimates are both precise and accurate: a large spread or a large bias lowers it.
 
 **See also:** Accuracy, Proximity Level, Relative Standard Deviation
 
@@ -188,7 +188,7 @@ The square root of the mean squared difference between the estimates and the nom
 
 ### Score Interval of a Fraction
 
-The 95% interval that the summary file and the GUI give with each fraction of estimates within a proximity level, for example "19.0% (19 of 100; 12.5% to 27.8%)". The fraction comes from a finite number of runs. The interval is the range in which the fraction of a much longer simulation lies with 95% confidence. It is the score interval for a binomial proportion (the Wilson interval), which stays between 0% and 100% and keeps a width when the count is zero.
+The 95% interval that the summary file and the GUI give with each fraction of estimates within a proximity level, for example 16.7% to 33.2% for 24 of 100 estimates (24.0%). The fraction comes from a finite number of runs. The interval is the range in which the fraction of a much longer simulation lies with 95% confidence. It is the score interval for a binomial proportion (the Wilson interval), which stays between 0% and 100% and keeps a width when the count is zero.
 
 ### Sigma (σ)
 

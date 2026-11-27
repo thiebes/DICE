@@ -90,7 +90,15 @@
    "bias": NaN,
    "relative_bias": NaN,
    "rmse": NaN,
-   "relative_rmse": NaN
+   "relative_rmse": NaN,
+   "std_interval": [
+    NaN,
+    NaN
+   ],
+   "relative_std_interval": [
+    NaN,
+    NaN
+   ]
   },
   "wls": {
    "mean": NaN,
@@ -100,7 +108,15 @@
    "bias": NaN,
    "relative_bias": NaN,
    "rmse": NaN,
-   "relative_rmse": NaN
+   "relative_rmse": NaN,
+   "std_interval": [
+    NaN,
+    NaN
+   ],
+   "relative_std_interval": [
+    NaN,
+    NaN
+   ]
   }
  },
  "noise_analysis": {},

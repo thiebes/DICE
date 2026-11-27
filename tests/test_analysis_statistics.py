@@ -382,6 +382,26 @@ class TestCnrBins:
         tied = [run.run_id for run in ordered if run.noise_sigma == sigmas[40]]
         assert tied == [10, 40]
 
+    def test_bin_of_one_hundred_estimates_has_its_own_interval(self):
+        """Each bin draws from its own stream (group i of interval_generator), from 100 estimates on."""
+        import dataclasses
+        from dice.analysis.statistics import interval_generator, runs_by_cnr_bin, standard_deviation_interval
+        seed = np.random.SeedSequence(8)
+        output = dataclasses.replace(
+            self._range_output(list(np.linspace(0.05, 0.01, 500))), analysis_seed=seed)
+
+        bins = analyze_simulation_results(output)['cnr_bins']
+
+        assert [entry['num_runs'] for entry in bins] == [100] * 5
+        for number, (entry, runs) in enumerate(zip(bins, runs_by_cnr_bin(output)), start=1):
+            wls = np.array([run.wls_slope / 2 for run in runs])
+            interval = entry['accuracy']['wls']['std_interval']
+            assert interval[0] < wls.std(ddof=1) < interval[1]
+            assert entry['accuracy']['wls']['relative_std_interval'] == pytest.approx(
+                [interval[0] / 0.01, interval[1] / 0.01])
+            assert tuple(interval) == standard_deviation_interval(wls, interval_generator(seed, number, 'wls'))
+            assert tuple(interval) != standard_deviation_interval(wls, interval_generator(seed, 0, 'wls'))
+
     def test_bin_sizes_differ_by_at_most_one(self):
         from dice.analysis.statistics import runs_by_cnr_bin
         bins = runs_by_cnr_bin(self._range_output(list(np.linspace(0.05, 0.01, 103))))
@@ -409,7 +429,12 @@ class TestCnrBins:
             for key in ('wls', 'ols'):
                 d = np.array([getattr(run, f'{key}_slope') / 2 for run in in_bin
                               if getattr(run, f'{key}_slope') is not None])
-                assert entry['accuracy'][key] == pytest.approx(calculate_accuracy_metrics(d, 0.01))
+                metrics = dict(entry['accuracy'][key])
+                interval = metrics.pop('std_interval')
+                relative_interval = metrics.pop('relative_std_interval')
+                assert metrics == pytest.approx(calculate_accuracy_metrics(d, 0.01))
+                # A bin of fewer than 100 estimates has no bootstrap interval.
+                assert all(np.isnan(interval)) and all(np.isnan(relative_interval))
                 for label, level in (('5%', 0.05), ('20%', 0.2)):
                     assert entry['precision'][label][key] == pytest.approx(
                         np.mean(np.abs(d / 0.01 - 1) <= level))
@@ -489,3 +514,132 @@ class TestUncertaintyOfTheStatistics:
         assert np.isnan(single['std']) and np.isnan(single['standard_error'])
         empty = calculate_accuracy_metrics(np.array([]), 0.01)
         assert np.isnan(empty['std']) and np.isnan(empty['standard_error'])
+
+
+@pytest.fixture(scope='module')
+def seeded_quick_test():
+    """A seeded simulation of the quick_test example, 120 runs, and a function that repeats it.
+
+    120 runs give more estimates than the 100 from which the bootstrap interval is reported.
+    """
+    from pathlib import Path
+    from dice.analysis.simulation import run_monte_carlo_simulation
+    from dice.io.parameters import open_parameters
+    from dice.models.parameters import simulation_parameters_from_dict
+
+    params = open_parameters(Path(__file__).parent.parent / 'data' / 'examples' / 'quick_test.txt')
+    sim_params = simulation_parameters_from_dict(
+        params, params['nominal diffusion coefficient'], params['nominal lifetime (tau)'],
+        params['nominal diffusion length'])
+
+    def simulate(seed):
+        return run_monte_carlo_simulation(
+            sim_params, params['x array'], params['time series'], params['noise series'],
+            num_runs=120, multiprocessing=True, seed=seed)
+
+    return simulate(17), simulate
+
+
+class TestStandardDeviationInterval:
+    """The bootstrap interval of the standard deviation, which the summary and the JSON file report."""
+
+    def test_interval_brackets_the_standard_deviation(self, seeded_quick_test):
+        result, _ = seeded_quick_test
+        analysis = analyze_simulation_results(result)
+        nominal = result.parameters.physics.diffusion_coefficient
+        for key in ('wls', 'ols'):
+            metrics = analysis['accuracy'][key]
+            lower, upper = metrics['std_interval']
+            assert lower < metrics['std'] < upper
+            assert metrics['relative_std_interval'] == pytest.approx([lower / nominal, upper / nominal])
+
+    def test_seeded_simulation_repeats_its_interval(self, seeded_quick_test):
+        result, simulate = seeded_quick_test
+        first = analyze_simulation_results(result)['accuracy']['wls']['std_interval']
+
+        assert analyze_simulation_results(result)['accuracy']['wls']['std_interval'] == first
+        assert analyze_simulation_results(simulate(17))['accuracy']['wls']['std_interval'] == first
+        assert analyze_simulation_results(simulate(18))['accuracy']['wls']['std_interval'] != first
+
+    def test_interval_is_the_percentile_interval_of_the_resampled_deviations(self, seeded_quick_test):
+        from dice.analysis.statistics import standard_deviation_interval
+        estimates = seeded_quick_test[0].d_estimates('wls')
+
+        spreads = estimates[np.random.default_rng(3).integers(0, estimates.size, size=(500, estimates.size))]
+        expected = np.quantile(spreads.std(axis=1, ddof=1), [0.025, 0.975])
+
+        assert standard_deviation_interval(estimates, np.random.default_rng(3), resamples=500) == pytest.approx(
+            tuple(expected), rel=1e-12)
+
+    def test_resampling_in_batches_gives_the_same_interval(self, seeded_quick_test, monkeypatch):
+        import dice.analysis.statistics as statistics
+        estimates = seeded_quick_test[0].d_estimates('wls')
+        whole = statistics.standard_deviation_interval(estimates, np.random.default_rng(9), resamples=300)
+
+        monkeypatch.setattr(statistics, 'BOOTSTRAP_BATCH_VALUES', 7 * estimates.size)
+        assert statistics.standard_deviation_interval(estimates, np.random.default_rng(9), resamples=300) == whole
+
+    def test_fewer_than_two_estimates_have_no_interval(self):
+        from dice.analysis.statistics import standard_deviation_interval
+        rng = np.random.default_rng(0)
+        assert all(np.isnan(standard_deviation_interval(np.array([0.01]), rng)))
+        assert all(np.isnan(calculate_accuracy_metrics(np.array([]), 0.01, rng)['std_interval']))
+
+    def test_interval_is_given_from_one_hundred_estimates_on(self, seeded_quick_test):
+        from dice.analysis.statistics import MIN_BOOTSTRAP_ESTIMATES
+        estimates = seeded_quick_test[0].d_estimates('wls')
+        assert MIN_BOOTSTRAP_ESTIMATES == 100 and estimates.size > 100
+
+        too_few = calculate_accuracy_metrics(estimates[:99], 0.01, np.random.default_rng(0))
+        enough = calculate_accuracy_metrics(estimates[:100], 0.01, np.random.default_rng(0))
+
+        assert all(np.isnan(too_few['std_interval'])) and all(np.isnan(too_few['relative_std_interval']))
+        assert all(np.isfinite(enough['std_interval'])) and all(np.isfinite(enough['relative_std_interval']))
+
+    def test_without_a_generator_there_is_no_interval(self, seeded_quick_test):
+        estimates = seeded_quick_test[0].d_estimates('wls')
+        assert 'std_interval' not in calculate_accuracy_metrics(estimates, 0.01)
+
+
+class TestAnalysisSeed:
+    """The resampling of the analysis is seeded from the simulation's seed, after the run seeds."""
+
+    def test_analysis_seed_is_the_child_after_the_run_seeds(self):
+        from dice.analysis.simulation import analysis_seed, spawn_run_seeds
+        children = np.random.SeedSequence(11).spawn(4)
+
+        seed = analysis_seed(11, 3)
+        assert (seed.entropy, seed.spawn_key) == (children[3].entropy, children[3].spawn_key)
+        assert [child.spawn_key for child in spawn_run_seeds(11, 3)] == [child.spawn_key for child in children[:3]]
+        assert analysis_seed(None, 3) is None
+
+    def test_child_seed_of_the_command_line_gives_its_own_child(self):
+        from dice.analysis.simulation import analysis_seed
+        parent = np.random.SeedSequence(5)
+        noise_draws, simulation = parent.spawn(2)
+
+        seed = analysis_seed(simulation, 40)
+        assert (seed.entropy, seed.spawn_key) == (5, (1, 40))
+        assert simulation.n_children_spawned == 0  # the caller's seed is not advanced
+
+    def test_the_seed_does_not_take_part_in_equality(self, seeded_quick_test):
+        import dataclasses
+        result = seeded_quick_test[0]
+        assert dataclasses.replace(result, analysis_seed=None) == result
+
+    def test_interval_of_a_fit_does_not_depend_on_the_other_fits(self, seeded_quick_test):
+        import dataclasses
+        result = seeded_quick_test[0]
+        both = analyze_simulation_results(result)['accuracy']['wls']['std_interval']
+        alone = analyze_simulation_results(dataclasses.replace(result, estimator_keys=('wls',)))
+
+        assert alone['accuracy']['wls']['std_interval'] == both
+
+    def test_each_group_of_runs_and_each_fit_has_its_own_stream(self):
+        from dice.analysis.statistics import interval_generator
+        seed = np.random.SeedSequence(3)
+        draws = {(group, key): tuple(interval_generator(seed, group, key).integers(0, 2 ** 32, 4))
+                 for group in (0, 1) for key in ('wls', 'ols')}
+
+        assert len(set(draws.values())) == 4
+        assert tuple(interval_generator(seed, 1, 'wls').integers(0, 2 ** 32, 4)) == draws[(1, 'wls')]

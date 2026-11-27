@@ -28,6 +28,7 @@ from dice.io.results import results_column
 import dice
 from dice.cli.main import main
 from seeded_results import assert_seeded_frames_agree
+from summary_text import last_line, result_block, row_after, summary_skeleton, summary_values
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 QUICK_TEST = EXAMPLES_DIR / 'quick_test.txt'
@@ -129,12 +130,14 @@ class TestGlobalUnitsReachOutputs:
 
     def test_nanometer_picosecond_summary_labels(self, nanometer_run):
         summary = nanometer_run.read_summary()
-        assert "Spatial width:\n    5000 nanometer\n" in summary
-        assert "Time range:\n    0.000 to 1.000 picosecond\n" in summary
-        assert "Nominal diffusion length:\n    100.000 nanometer\n" in summary
-        assert "Nominal diffusion coefficient:\n    10000.00000 nanometer^2/picosecond\n" in summary
-        assert ("Nominal lifetime:\n    1 picosecond (assumed: the file gives only the diffusion length, "
-                "so its times are in units of the lifetime)\n") in summary
+        values = summary_values(summary)
+        assert values['Spatial width'] == ['5000 nanometer']
+        assert values['Time range'] == ['0.000 to 1.000 picosecond']
+        assert values['Nominal diffusion length'] == ['100.000 nanometer']
+        assert values['Nominal diffusion coefficient'] == ['10000.00000 nanometer^2/picosecond']
+        assert values['Nominal lifetime'] == ['1 picosecond']
+        assert line_after(summary, 'Nominal lifetime') == ASSUMED_LIFETIME
+        assert "Diffusion coefficients in nanometer^2/picosecond." in summary
         assert "micrometer" not in summary
         assert "nanosecond" not in summary
 
@@ -145,9 +148,9 @@ class TestGlobalUnitsReachOutputs:
         assert df[D_COLUMN].to_numpy() == pytest.approx(0.1, rel=1e-12)
         assert df[WLS_D_COLUMN].to_numpy() == pytest.approx(
             df[results_column(df.columns, 'weighted fit diffusion slope')].to_numpy() / 2 * 10, rel=1e-12)
-        summary = micrometer_run.read_summary()
-        assert "Spatial width:\n    5 micrometer\n" in summary
-        assert "Nominal diffusion coefficient:\n    0.01000 micrometer^2/nanosecond\n" in summary
+        values = summary_values(micrometer_run.read_summary())
+        assert values['Spatial width'] == ['5 micrometer']
+        assert values['Nominal diffusion coefficient'] == ['0.01000 micrometer^2/nanosecond']
 
     def test_unit_systems_describe_the_same_problem(self, micrometer_run, nanometer_run):
         micrometer_df, nanometer_df = micrometer_run.read_csv(), nanometer_run.read_csv()
@@ -190,13 +193,15 @@ class TestOutputDiffusionUnits:
 
     def test_summary_diffusion_coefficients_agree_with_the_csv(self, nm2_per_ps_run):
         df = nm2_per_ps_run.read_csv()
-        values = summary_label_to_values(nm2_per_ps_run.read_summary())
+        summary = nm2_per_ps_run.read_summary()
+        values = summary_values(summary)
         unit = 'nanometer^2/picosecond'
         assert values['Nominal diffusion coefficient'] == [f"10.00000 {unit}"]
+        assert f"Diffusion coefficients in {unit}." in summary
         estimates = {'wls': df['weighted fit diffusion coeff [nm²/ps]'].to_numpy(),
                      'ols': df['unweighted fit diffusion coeff [nm²/ps]'].to_numpy()}
-        assert values['Mean estimate'] == [f"{estimates[m].mean():.5f} {unit}" for m in ('wls', 'ols')]
-        assert values['Standard deviation'] == [f"{estimates[m].std(ddof=1):.5f} {unit}" for m in ('wls', 'ols')]
+        assert values['Mean estimate'] == [f"{estimates[m].mean():.5f}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{estimates[m].std(ddof=1):.5f}" for m in ('wls', 'ols')]
         # Lengths, times, and the unitless ratios stay as they were.
         assert values['Nominal diffusion length'] == ['0.100 micrometer']
         assert values['Relative standard deviation'] == [
@@ -404,7 +409,7 @@ class TestDryRun:
             removed=('time range',))
         run = run_cli(tmp_path, params_file, 'unsorted')
         assert run.exit_code == 0
-        assert "Time range:\n    0.000 to 1.000 nanosecond" in run.read_summary()
+        assert summary_values(run.read_summary())['Time range'] == ['0.000 to 1.000 nanosecond']
 
     def test_missing_file_fails_like_a_real_run(self, tmp_path, capsys):
         missing = str(tmp_path / 'missing.txt')
@@ -449,8 +454,8 @@ class TestZeroNoiseRun:
         run = run_cli(tmp_path, params_file, 'noise_free', '--no-plots')
         assert run.exit_code == 0
         summary = run.read_summary()
-        assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in summary
-        assert summary.endswith("Simulation completed successfully.\n")
+        assert summary_values(summary)['Initial CNR (Contrast-to-Noise Ratio)'] == ['inf']
+        assert result_block(summary)[0] == "Result, Weighted Least Squares (WLS), 3 of 3 runs:"
         assert (run.read_csv()['nominal CNR'] == float('inf')).all()
 
 
@@ -465,7 +470,7 @@ class TestZeroLifetimeRun:
         run = run_cli(tmp_path, params_file, 'no_decay', '--export-format', 'both')
         assert run.exit_code == 0
 
-        values = summary_label_to_values(run.read_summary())
+        values = summary_values(run.read_summary())
         assert values['Nominal diffusion length'] == ['inf micrometer']
         assert values['Nominal lifetime'] == ['0 nanosecond']  # given in the file, so not marked as assumed
         df = run.read_csv()
@@ -503,89 +508,61 @@ CSV_COLUMNS = [
     'nominal diffusion coeff [cm²/s]',
 ]
 
-# The summary for quick_test.txt with every number on a value line replaced by '#'.
-FRACTION_LINE = "    WLS: #% (# of #; #% to #%)    OLS: #% (# of #; #% to #%)"
+# The summary for quick_test.txt with every number replaced by '#' and every gap
+# between cells by two spaces (summary_skeleton).
+WITHIN_ROWS = ["Within ±#% of nominal  #% (# of #)  #% (# of #)", "  #% interval  #% to #%  #% to #%"]
 
 SUMMARY_SKELETON = [
-    "DICE Simulation Summary",
-    "=" * 50,
+    "DICE simulation summary: quick_test",
     "",
-    "DICE version:", "    <version>",
-    "Seed:", "    #",
+    "Result, Weighted Least Squares (WLS), # of # runs:",
+    "  #% of estimates within ±#% of nominal",
+    "  relative standard deviation #",
+    "  mean estimate / nominal #",
     "",
-    "Simulation Parameters:",
-    "-" * 30,
-    "Number of runs:", "    #",
-    "Spatial width:", "    # micrometer",
-    "Pixel width:", "    # pixels",
-    "Time frames:", "    # frames",
-    "Time range:", "    # to # nanosecond",
-    "Noise standard deviation values:", "    [#]",
-    "Initial CNR (Contrast-to-Noise Ratio):", "    #",
-    "Initial profile squared width (sigma^2):", "    # micrometer^2",
-    "Nominal diffusion length:", "    # micrometer",
-    "Nominal diffusion coefficient:", "    # micrometer^2/nanosecond",
-    "Nominal lifetime:",
-    "    # nanosecond (assumed: the file gives only the diffusion length, so its times are in units of the lifetime)",
+    "  WLS  OLS",
+    "Runs with an estimate  # of #  # of #",
+    *WITHIN_ROWS * 4,
+    "Mean estimate / nominal  #  #",
+    "Relative standard deviation  #  #",
+    "  #% interval  # to #  # to #",
+    "Standard deviation  #  #",
+    "  #% interval  # to #  # to #",
+    "Mean estimate  #  #",
+    "Bias (mean - nominal)  #  #",
+    "  standard error  #  #",
+    "Root mean square error  #  #",
     "",
-    "Analysis Results:",
-    "-" * 30,
-    "Diffusion Coefficient Estimate Statistics:",
-    "  Weighted Least Squares:",
-    "    Estimates:", "        # of # runs (# without an estimate)",
-    "    Standard deviation:", "        # micrometer^2/nanosecond",
-    "    Relative standard deviation:", "        #",
-    "    Mean estimate:", "        # micrometer^2/nanosecond",
-    "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
-    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
-    "    Mean estimate / nominal:", "        #",
-    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
-    "  Ordinary (unweighted) Least Squares, for comparison:",
-    "    Estimates:", "        # of # runs (# without an estimate)",
-    "    Standard deviation:", "        # micrometer^2/nanosecond",
-    "    Relative standard deviation:", "        #",
-    "    Mean estimate:", "        # micrometer^2/nanosecond",
-    "    Standard error of the mean and of the bias:", "        # micrometer^2/nanosecond",
-    "    Bias (mean - nominal):", "        # micrometer^2/nanosecond",
-    "    Mean estimate / nominal:", "        #",
-    "    Root Mean Square Error:", "        # micrometer^2/nanosecond",
+    "WLS: Weighted Least Squares. OLS: Ordinary (unweighted) Least Squares, for comparison.",
+    "Diffusion coefficients in micrometer^2/nanosecond.",
+    "Intervals are #%: for a fraction, the Wilson score interval; for a standard deviation, "
+    "a bootstrap interval from #,# resamples, given from # estimates on, because with fewer it is too narrow.",
     "",
-    "Precision at standard thresholds:",
-    "  (each fraction with its count of estimates and its 95% interval)",
-    "  Fraction within ±5% of nominal:", FRACTION_LINE,
-    "  Fraction within ±10% of nominal:", FRACTION_LINE,
-    "  Fraction within ±20% of nominal:", FRACTION_LINE,
-    "  Fraction within ±50% of nominal:", FRACTION_LINE,
+    "Simulation parameters",
+    "  Number of runs  #",
+    "  Spatial width  # micrometer",
+    "  Pixel width  # pixels",
+    "  Time frames  # frames",
+    "  Time range  # to # nanosecond",
+    "  Noise standard deviation values  #",
+    "  Initial CNR (Contrast-to-Noise Ratio)  #",
+    "  Initial profile squared width (sigma^2)  # micrometer^2",
+    "  Nominal diffusion length  # micrometer",
+    "  Nominal diffusion coefficient  # micrometer^2/nanosecond",
+    "  Nominal lifetime  # nanosecond",
+    "  (assumed: the file gives only the diffusion length, so its times are in units of the lifetime)",
     "",
-    "Simulation completed successfully.",
+    "DICE <version>, seed #",
 ]
 
-SUMMARY_NUMBER = re.compile(r"(?<![\^\w.])-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?|\binf\b|\bnan\b")
+ASSUMED_LIFETIME = "(assumed: the file gives only the diffusion length, so its times are in units of the lifetime)"
 
 
-def summary_skeleton(summary: str) -> list[str]:
-    """Summary lines with the numbers on value lines (indented lines after a label) masked."""
-    skeleton, previous = [], ""
-    for line in summary.splitlines():
-        is_value_line = previous.endswith(":") and line.startswith("    ")
-        if previous == "DICE version:":
-            line = line.replace(dice.__version__, "<version>")
-        elif is_value_line:
-            line = SUMMARY_NUMBER.sub("#", line)
-        skeleton.append(line)
-        previous = line
-    return skeleton
-
-
-def summary_label_to_values(summary: str) -> dict[str, list[str]]:
-    """Each summary label mapped to the value lines under it, in file order."""
-    label_to_values: dict[str, list[str]] = {}
-    previous = ""
-    for line in summary.splitlines():
-        if previous.endswith(":") and line.startswith("    "):
-            label_to_values.setdefault(previous.strip().rstrip(":"), []).append(line.strip())
-        previous = line
-    return label_to_values
+def line_after(summary: str, start: str) -> str:
+    """The line after the first line that starts with `start` once its indentation is removed, stripped."""
+    lines = summary.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.strip().startswith(start))
+    return lines[index + 1].strip()
 
 
 class TestSmallValuesInSummary:
@@ -604,7 +581,7 @@ class TestSmallValuesInSummary:
 
     def test_no_value_prints_as_zero(self, meter_second_run):
         assert meter_second_run.exit_code == 0
-        values = summary_label_to_values(meter_second_run.read_summary())
+        values = summary_values(meter_second_run.read_summary())
         nominal_d, unit = values['Nominal diffusion coefficient'][0].split(' ', 1)
         assert unit == 'meter^2/second'
         assert float(nominal_d) == pytest.approx(1e-14, rel=1e-5)
@@ -615,13 +592,13 @@ class TestSmallValuesInSummary:
 
     def test_estimate_lines_share_the_nominal_format(self, meter_second_run):
         summary = meter_second_run.read_summary()
-        values = summary_label_to_values(summary)
+        values = summary_values(summary)
         csv = meter_second_run.read_csv()
-        for label in ('Standard deviation', 'Mean estimate', 'Root Mean Square Error'):
-            for line in values[label]:
-                number, unit = line.split(' ', 1)
-                assert unit == 'meter^2/second' and 'e' in number, (label, line)
-        wls_mean = float(values['Mean estimate'][0].split(' ', 1)[0])
+        assert "Diffusion coefficients in meter^2/second." in summary
+        for label in ('Standard deviation', 'Mean estimate', 'Root mean square error'):
+            for number in values[label]:
+                assert 'e' in number, (label, number)
+        wls_mean = float(values['Mean estimate'][0])
         assert wls_mean == pytest.approx(csv[WLS_D_COLUMN].mean() * 1e-4, rel=1e-5)
 
 
@@ -667,48 +644,65 @@ class TestQuickTestOutputSchema:
         assert not df.isna().any().any()
 
     def test_summary_skeleton(self, quick_test_run):
-        assert summary_skeleton(quick_test_run.read_summary()) == SUMMARY_SKELETON
+        assert summary_skeleton(quick_test_run.read_summary(), dice.__version__) == SUMMARY_SKELETON
 
     def test_summary_agrees_with_csv(self, quick_test_run):
         df = quick_test_run.read_csv()
-        values = summary_label_to_values(quick_test_run.read_summary())
+        summary = quick_test_run.read_summary()
+        values = summary_values(summary)
         assert values['Number of runs'] == ['100']
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
-        assert values['Noise standard deviation values'] == ['[0.02]']
+        assert values['Noise standard deviation values'] == ['0.02']
         d_estimates = {
             'wls': df[results_column(df.columns, 'weighted fit diffusion slope')].to_numpy() / 2,
             'ols': df[results_column(df.columns, 'unweighted fit diffusion slope')].to_numpy() / 2,
         }
-        # WLS is listed before OLS under each statistic.
-        d_unit = 'micrometer^2/nanosecond'
-        assert values['Mean estimate'] == [
-            f"{d_estimates[m].mean():.5f} {d_unit}" for m in ('wls', 'ols')]
-        assert values['Standard deviation'] == [
-            f"{d_estimates[m].std(ddof=1):.5f} {d_unit}" for m in ('wls', 'ols')]
-        assert values['Bias (mean - nominal)'] == [
-            f"{d_estimates[m].mean() - 0.01:.5f} {d_unit}" for m in ('wls', 'ols')]
-        assert values['Root Mean Square Error'] == [
-            f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f} {d_unit}" for m in ('wls', 'ols')]
+        # The WLS column comes before the OLS column.
+        assert values['WLS'] == ['OLS']
+        assert values['Mean estimate'] == [f"{d_estimates[m].mean():.5f}" for m in ('wls', 'ols')]
+        assert values['Standard deviation'] == [f"{d_estimates[m].std(ddof=1):.5f}" for m in ('wls', 'ols')]
+        assert values['Bias (mean - nominal)'] == [f"{d_estimates[m].mean() - 0.01:.5f}" for m in ('wls', 'ols')]
+        assert values['Root mean square error'] == [
+            f"{np.sqrt(np.mean((d_estimates[m] - 0.01) ** 2)):.5f}" for m in ('wls', 'ols')]
         assert values['Relative standard deviation'] == [
             f"{d_estimates[m].std(ddof=1) / 0.01:.3f}" for m in ('wls', 'ols')]
-        assert values['Standard error of the mean and of the bias'] == [
-            f"{d_estimates[m].std(ddof=1) / np.sqrt(100):.5f} {d_unit}" for m in ('wls', 'ols')]
+        assert values['standard error'] == [
+            f"{d_estimates[m].std(ddof=1) / np.sqrt(100):.5f}" for m in ('wls', 'ols')]
         # The ratio is the bias in the paper's form: 1 + bias / nominal.
         assert values['Mean estimate / nominal'] == [f"{d_estimates[m].mean() / 0.01:.3f}" for m in ('wls', 'ols')]
-        assert values['Estimates'] == ["100 of 100 runs (0 without an estimate)"] * 2
-        assert values['DICE version'] == [dice.__version__]
-        assert values['Seed'] == ['1']
+        assert values['Runs with an estimate'] == ["100 of 100"] * 2
+        assert last_line(summary) == f"DICE {dice.__version__}, seed 1"
+
+        # The bootstrap interval brackets each standard deviation, and the
+        # interval of the relative standard deviation is the same divided by the nominal value.
+        label, sd_intervals = row_after(summary, 'Standard deviation')
+        _, rsd_intervals = row_after(summary, 'Relative standard deviation')
+        assert label == '95% interval'
+        for method, sd_interval, rsd_interval in zip(('wls', 'ols'), sd_intervals, rsd_intervals):
+            lower, upper = (float(limit) for limit in sd_interval.split(' to '))
+            assert lower < d_estimates[method].std(ddof=1) < upper
+            assert rsd_interval == f"{lower / 0.01:.3f} to {upper / 0.01:.3f}"
+
+        # The result block repeats the WLS column.
+        count = int(np.sum(np.abs(d_estimates['wls'] / 0.01 - 1) <= 0.1))
+        assert result_block(summary) == [
+            "Result, Weighted Least Squares (WLS), 100 of 100 runs:",
+            f"  {count / 100:.1%} of estimates within ±10% of nominal",
+            f"  relative standard deviation {d_estimates['wls'].std(ddof=1) / 0.01:.3f}",
+            f"  mean estimate / nominal {d_estimates['wls'].mean() / 0.01:.3f}",
+        ]
 
         # The count and the 95% interval of the fraction, recomputed with statsmodels.
         from statsmodels.stats.proportion import proportion_confint
 
-        def fraction(method: str) -> str:
+        def fraction(method: str) -> tuple[str, str]:
             count = int(np.sum(np.abs(d_estimates[method] / 0.01 - 1) <= 0.1))
             lower, upper = proportion_confint(count, 100, alpha=0.05, method='wilson')
-            return f"{count / 100:.1%} ({count} of 100; {lower:.1%} to {upper:.1%})"
+            return f"{count / 100:.1%} ({count} of 100)", f"{lower:.1%} to {upper:.1%}"
 
-        assert values['Fraction within ±10% of nominal'] == [
-            f"WLS: {fraction('wls')}    OLS: {fraction('ols')}"]
+        assert values['Within ±10% of nominal'] == [fraction(m)[0] for m in ('wls', 'ols')]
+        assert row_after(summary, 'Within ±10% of nominal') == (
+            '95% interval', [fraction(m)[1] for m in ('wls', 'ols')])
 
 
 class TestOutputOptions:
@@ -730,15 +724,16 @@ class TestOutputOptions:
             assert main([str(params_file), '--multiprocessing', '0']) == 1
 
         console = capsys.readouterr().out
-        assert 'saved to: ' + str(blocked) not in console
+        assert 'Output files in' not in console
         last = console.splitlines()[-1]
         assert last.startswith("Error: The results were saved, but the plot could not be saved: ")
         assert plot_name in last
         # The file and the reason, not Python's text of the error.
         assert "[Errno" not in last and "\\\\" not in last
         assert (blocked.parent / 'no_plot.csv').exists()
-        assert (blocked.parent / 'no_plot_summary.txt').read_text(encoding='utf-8').endswith(
-            "Simulation completed successfully.\n")
+        summary = (blocked.parent / 'no_plot_summary.txt').read_text(encoding='utf-8')
+        # The summary was written to its last line.
+        assert last_line(summary).startswith(f"DICE {dice.__version__}, ")
 
     OPTION_RUNS = 4
 
@@ -751,16 +746,24 @@ class TestOutputOptions:
         """--seed N reproduces the run, although the runs draw from a child of N."""
         run = self._run(tmp_path, 'seeded', '--seed', '7', '--export-format', 'both', '--no-plots')
         assert run.exit_code == 0
-        assert "Seed:\n    7\n" in run.read_summary()
+        assert last_line(run.read_summary()) == f"DICE {dice.__version__}, seed 7"
         assert json.loads((run.output_dir / 'seeded.json').read_text())['summary']['seed'] == 7
 
-    def test_console_ends_with_the_completion_line_of_the_summary(self, tmp_path, capsys):
+    def test_console_ends_with_the_folder_and_the_result_of_the_summary(self, tmp_path, capsys):
         params_file = write_quick_test_variant(tmp_path, 'spoken', {'number of runs': self.OPTION_RUNS})
         with contextlib.chdir(tmp_path):
             assert main([str(params_file), '--multiprocessing', '1', '--no-plots']) == 0
         console = capsys.readouterr().out.splitlines()
-        summary = (tmp_path / 'output' / 'spoken' / 'spoken_summary.txt').read_text(encoding='utf-8').splitlines()
-        assert console[-1] == summary[-1] == "Simulation completed successfully."
+        block = result_block((tmp_path / 'output' / 'spoken' / 'spoken_summary.txt').read_text(encoding='utf-8'))
+        assert console[-2].startswith("Output files in ")
+        assert console[-2].endswith("spoken: spoken.csv, spoken_summary.txt")
+        assert console[-1] == f"{block[0]} {'; '.join(line.strip() for line in block[1:])}."
+
+    def test_quiet_console_has_no_folder_and_no_result(self, tmp_path, capsys):
+        params_file = write_quick_test_variant(tmp_path, 'hushed', {'number of runs': self.OPTION_RUNS})
+        with contextlib.chdir(tmp_path):
+            assert main([str(params_file), '--multiprocessing', '1', '--no-plots', '--quiet']) == 0
+        assert capsys.readouterr().out == ""
 
     def test_json_and_csv_export(self, tmp_path):
         run = self._run(tmp_path, 'both', '--export-format', 'both', '--no-plots')
@@ -900,7 +903,7 @@ class TestOutputOptions:
         # The repository profile's peak is too narrow for fft-cnr, which the run reports.
         assert [w.category for w in caught if 'pixels wide at half maximum' in str(w.message)] == [
             UserWarning]
-        values = summary_label_to_values(run.read_summary())
+        values = summary_values(run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
         assert run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(file_cnr, rel=1e-12)
 
@@ -927,7 +930,7 @@ class TestRelativeNoiseDataPath:
         assert run.exit_code == 0
         assert run.output_dir.parent.parent == workdir
         file_cnr = fft_cnr(np.loadtxt(EXAMPLES_DIR / 'example_profile.csv', delimiter=',')).cnr
-        values = summary_label_to_values(run.read_summary())
+        values = summary_values(run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == [f"{file_cnr:.3f}"]
 
 
@@ -989,7 +992,7 @@ class TestNominalCnrUsesAmplitude:
     def test_nominal_cnr_is_amplitude_over_noise(self, double_amplitude_run):
         assert double_amplitude_run.exit_code == 0
         assert double_amplitude_run.read_csv()['nominal CNR'].to_numpy() == pytest.approx(2 / 0.04)
-        values = summary_label_to_values(double_amplitude_run.read_summary())
+        values = summary_values(double_amplitude_run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
 
     def test_mean_estimated_cnr_agrees_with_nominal(self, double_amplitude_run):
@@ -1008,7 +1011,7 @@ class TestNominalCnrUsesAmplitude:
         assert unit_amplitude_run.exit_code == 0
         unit_df, double_df = unit_amplitude_run.read_csv(), double_amplitude_run.read_csv()
         assert unit_df['nominal CNR'].to_numpy() == pytest.approx(1 / 0.02)
-        values = summary_label_to_values(unit_amplitude_run.read_summary())
+        values = summary_values(unit_amplitude_run.read_summary())
         assert values['Initial CNR (Contrast-to-Noise Ratio)'] == ['50.000']
         # Scaling signal and noise together leaves every CNR, and every slope, unchanged.
         assert double_df['estimated CNR'].to_numpy() == pytest.approx(
@@ -1082,7 +1085,7 @@ class TestNoiseRangeExample:
     def test_summary_agrees_with_csv_and_json(self, example_run):
         df = example_run.read_csv()
         summary = example_run.read_summary()
-        values = summary_label_to_values(summary)
+        values = summary_values(summary)
         noise, cnr = df['noise standard deviation'], df['nominal CNR']
         assert values['Number of runs'] == ['100']
         assert values['Noise standard deviation, drawn for each run'] == [
@@ -1092,12 +1095,14 @@ class TestNoiseRangeExample:
         assert 'Noise standard deviation values' not in values
         bin_headers = [line for line in summary.splitlines() if re.match(r'Initial CNR [0-9.]+ to ', line)]
         assert bin_headers == [
-            f"Initial CNR {entry['cnr_min']:.3f} to {entry['cnr_max']:.3f} ({entry['num_runs']} runs):"
+            f"Initial CNR {entry['cnr_min']:.3f} to {entry['cnr_max']:.3f} ({entry['num_runs']} runs)"
             for entry in self._json(example_run)['analysis']['cnr_bins']]
-        d_unit = 'micrometer^2/nanosecond'
         assert values['Mean estimate'] == [
-            f"{entry['accuracy'][key]['mean']:.5f} {d_unit}"
+            f"{entry['accuracy'][key]['mean']:.5f}"
             for entry in self._json(example_run)['analysis']['cnr_bins'] for key in ('wls', 'ols')]
+        # The intervals of each bin are in the JSON file too.
+        assert all(len(entry['accuracy'][key]['std_interval']) == 2
+                   for entry in self._json(example_run)['analysis']['cnr_bins'] for key in ('wls', 'ols'))
 
     @pytest.mark.parametrize('noise_range, message', [
         ([0.05, 0.01], "Invalid noise range [0.05, 0.01]. The first value (low) must be less than the second (high)."),

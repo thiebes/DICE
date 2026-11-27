@@ -6,6 +6,7 @@ reference statistics computed independently from DICE's exported CSV.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,13 @@ class CompletedRun:
     def as_thread_result(self) -> tuple[Any, dict[str, Any]]:
         """The (result, processed parameters) pair SimulationThread.finished carries."""
         return self.result, self.processed_parameters
+
+
+def summary_parameter(summary: str, label: str) -> str:
+    """The value of a row of the parameter table of a summary file, such as '5 micrometer' for 'Spatial width'."""
+    match = re.search(rf"^  {re.escape(label)} {{2,}}(\S.*)$", summary, re.MULTILINE)
+    assert match is not None, f"no parameter row {label!r}"
+    return match.group(1)
 
 
 def read_example(filename: str) -> dict[str, Any]:

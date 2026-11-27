@@ -25,6 +25,7 @@ from dice.io.results import (
 from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput
 from dice.models.parameters import simulation_parameters_from_dict
+from summary_text import last_line, result_block, row_after, summary_values
 
 EXAMPLES_DIR = Path(__file__).parent.parent / 'data' / 'examples'
 PLUS_MINUS = '±'
@@ -69,7 +70,7 @@ class TestTextOutputEncoding:
         write_summary_file(quick_test_simulation, summary_file,
                            quick_test_parameters, quick_test_analysis)
         text = summary_file.read_bytes().decode('utf-8')
-        assert f"Fraction within {PLUS_MINUS}5% of nominal:" in text
+        assert f"Within {PLUS_MINUS}5% of nominal" in text
 
     def test_print_and_append_is_utf8(self, tmp_path):
         log_file = tmp_path / 'log.txt'
@@ -89,8 +90,8 @@ class TestZeroNoise:
         summary_file = tmp_path / 'summary.txt'
         write_summary_file(noise_free, summary_file, quick_test_parameters, quick_test_analysis)
         text = summary_file.read_text(encoding='utf-8')
-        assert "Initial CNR (Contrast-to-Noise Ratio):\n    inf\n" in text
-        assert text.endswith("Simulation completed successfully.\n")
+        assert summary_values(text)['Initial CNR (Contrast-to-Noise Ratio)'] == ['inf']
+        assert result_block(text)[0].startswith("Result, Weighted Least Squares (WLS), ")
 
 
 def simulate_quick_test(params: dict, time_axis, num_runs: int, **options) -> MonteCarloOutput:
@@ -118,8 +119,9 @@ class TestAnalysisToSummarySchema:
         summary_file = tmp_path / 'summary.txt'
         write_summary_file(quick_test_simulation, summary_file, quick_test_parameters)
         text = summary_file.read_text(encoding='utf-8')
-        assert "Analysis Results:" not in text
-        assert text.endswith("Simulation completed successfully.\n")
+        assert "Result" not in text and "WLS" not in text
+        assert "Simulation parameters" in text
+        assert last_line(text).startswith("DICE ")
 
     def test_summary_without_precision(self, tmp_path, quick_test_simulation,
                                        quick_test_parameters, quick_test_analysis):
@@ -127,8 +129,11 @@ class TestAnalysisToSummarySchema:
         summary_file = tmp_path / 'summary.txt'
         write_summary_file(quick_test_simulation, summary_file, quick_test_parameters, analysis)
         text = summary_file.read_text(encoding='utf-8')
-        assert "Weighted Least Squares:" in text
-        assert "Precision at standard thresholds:" not in text
+        values = summary_values(text)
+        assert 'Standard deviation' in values
+        assert "Within ±" not in text
+        # The result block has no fraction without the precision.
+        assert [line.strip().split(' ')[0] for line in result_block(text)[1:]] == ['relative', 'mean']
 
 
 class TestExportCollatedResults:
@@ -250,15 +255,14 @@ class TestNoiseRangeOutputs:
                              analyze_simulation_results(range_simulation))
         sigmas = np.array(range_simulation.noise_values)
 
-        assert "Noise standard deviation values:" not in text
+        values = summary_values(text)
+        assert 'Noise standard deviation values' not in values
         assert str(range_simulation.noise_values[0]) not in text  # no list of every value
-        assert (f"Noise standard deviation, drawn for each run:\n"
-                f"    {RANGE_RUNS} values from {sigmas.min():.4f} to {sigmas.max():.4f}"
-                f" (range 0.0100 to 0.0500)\n") in text
-        assert (f"Initial CNR (Contrast-to-Noise Ratio), drawn for each run:\n"
-                f"    {2 / sigmas.max():.3f} to {2 / sigmas.min():.3f}"
-                f" (range 40.000 to 200.000, uniform in CNR)\n") in text
-        assert "Number of runs:\n    45\n" in text
+        assert values['Noise standard deviation, drawn for each run'] == [
+            f"{RANGE_RUNS} values from {sigmas.min():.4f} to {sigmas.max():.4f} (range 0.0100 to 0.0500)"]
+        assert values['Initial CNR (Contrast-to-Noise Ratio), drawn for each run'] == [
+            f"{2 / sigmas.max():.3f} to {2 / sigmas.min():.3f} (range 40.000 to 200.000, uniform in CNR)"]
+        assert values['Number of runs'] == ['45']
 
     def test_summary_reports_each_cnr_bin(self, tmp_path, range_simulation, quick_test_parameters):
         analysis = analyze_simulation_results(range_simulation)
@@ -267,25 +271,24 @@ class TestNoiseRangeOutputs:
         # Recompute the bins from the runs: sorted by CNR, the first 23 runs, then 22.
         runs = sorted(range_simulation.run_results, key=lambda run: -run.noise_sigma)
         bins = [runs[:23], runs[23:]]
-        assert "Statistics in bins of initial CNR with equal numbers of runs:\n" in text
+        assert ("The statistics below are given for each bin of initial contrast-to-noise ratio (CNR);\n"
+                "pooled over the range of CNR, they would mix noise regimes.\n") in text
         for runs_in_bin in bins:
             cnr = [2.0 / run.noise_sigma for run in runs_in_bin]
-            header = f"\nInitial CNR {min(cnr):.3f} to {max(cnr):.3f} ({len(runs_in_bin)} runs):\n"
+            header = f"\nInitial CNR {min(cnr):.3f} to {max(cnr):.3f} ({len(runs_in_bin)} runs)\n"
             assert header in text
-            section = text.split(header)[1].split("\nInitial CNR ")[0]
+            # The table of the bin, which ends at the next empty line.
+            values = summary_values(text.split(header)[1].split("\n\n")[0])
             wls = np.array([run.wls_slope / 2 for run in runs_in_bin])
-            assert f"      Mean estimate:\n          {wls.mean():.5f} micrometer^2/nanosecond\n" in section
-            assert f"      Standard deviation:\n          {wls.std(ddof=1):.5f} micrometer^2/nanosecond\n" in section
+            assert values['Mean estimate'][0] == f"{wls.mean():.5f}"
+            assert values['Standard deviation'][0] == f"{wls.std(ddof=1):.5f}"
             count = int(np.sum(np.abs(wls / 0.01 - 1) <= 0.1))
-            assert (f"    Fraction within ±10% of nominal:\n"
-                    f"      WLS: {count / len(wls):.1%} ({count} of {len(wls)}; ") in section
-            assert f"      Estimates:\n          {len(wls)} of {len(runs_in_bin)} runs (0 without an estimate)\n" in section
-            assert (f"      Standard error of the mean and of the bias:\n"
-                    f"          {wls.std(ddof=1) / np.sqrt(len(wls)):.5f} micrometer^2/nanosecond\n") in section
-        # The pooled statistics of all runs are not reported.
-        assert "\nDiffusion Coefficient Estimate Statistics:" not in text
-        assert text.count("Diffusion Coefficient Estimate Statistics:") == 2
-        assert text.endswith("\n\nSimulation completed successfully.\n")
+            assert values['Within ±10% of nominal'][0] == f"{count / len(wls):.1%} ({count} of {len(wls)})"
+            assert values['Runs with an estimate'][0] == f"{len(wls)} of {len(runs_in_bin)}"
+            assert values['standard error'][0] == f"{wls.std(ddof=1) / np.sqrt(len(wls)):.5f}"
+        # The pooled statistics of all runs are not reported: each table belongs to a bin.
+        assert text.count("Runs with an estimate") == 2
+        assert "Result," not in text
 
     def test_summary_names_the_logarithmic_distribution(self, tmp_path, range_simulation,
                                                         quick_test_parameters):
@@ -326,6 +329,28 @@ class TestWritersTakeTheUnitsOfTheRun:
         assert 'micrometer' not in text and 'nanosecond' not in text
 
 
+class TestIntervalOfTheStandardDeviation:
+    """The bootstrap interval in the summary, from 100 estimates on, in the unit of the diffusion coefficients."""
+
+    def test_interval_follows_the_output_unit(self, tmp_path, quick_test_parameters):
+        result = simulate_quick_test(quick_test_parameters, quick_test_parameters['time series'], num_runs=110)
+        analysis = analyze_simulation_results(result)
+        assert len(result.d_estimates('wls')) >= 100
+        texts = {}
+        for name, units in (('global', None),
+                            ('cm2_per_s', OutputUnitPreferences(diffusion_length='centimeter', diffusion_time='second'))):
+            write_summary_file(result, tmp_path / f'{name}.txt', quick_test_parameters, analysis, output_units=units)
+            texts[name] = (tmp_path / f'{name}.txt').read_text(encoding='utf-8')
+
+        lower, upper = analysis['accuracy']['wls']['std_interval']
+        # 1 micrometer^2/ns is 10 cm^2/s; the relative standard deviation has no unit.
+        assert row_after(texts['global'], 'Standard deviation') == (
+            '95% interval', [f"{lower:.5f} to {upper:.5f}", row_after(texts['global'], 'Standard deviation')[1][1]])
+        assert row_after(texts['cm2_per_s'], 'Standard deviation')[1][0] == f"{lower * 10:.5f} to {upper * 10:.5f}"
+        assert (row_after(texts['cm2_per_s'], 'Relative standard deviation')
+                == row_after(texts['global'], 'Relative standard deviation'))
+
+
 class TestSummaryRecordsWhatReproducesIt:
     """The summary names the DICE version and the seed of the simulation."""
 
@@ -338,7 +363,7 @@ class TestSummaryRecordsWhatReproducesIt:
         text = summary_file.read_text(encoding='utf-8')
 
         assert seeded.seed == 3
-        assert f"DICE version:\n    {dice.__version__}\nSeed:\n    3\n" in text
+        assert last_line(text) == f"DICE {dice.__version__}, seed 3"
 
     def test_unseeded_simulation_says_so(self, tmp_path, quick_test_simulation, quick_test_parameters,
                                          quick_test_analysis):
@@ -346,7 +371,8 @@ class TestSummaryRecordsWhatReproducesIt:
         write_summary_file(quick_test_simulation, summary_file, quick_test_parameters, quick_test_analysis)
 
         assert quick_test_simulation.seed is None
-        assert "Seed:\n    none (another simulation" in summary_file.read_text(encoding='utf-8')
+        assert last_line(summary_file.read_text(encoding='utf-8')).endswith(
+            ", no seed (another simulation with these parameters draws other noise)")
 
     @staticmethod
     def _simulate(params, seed):
@@ -379,7 +405,8 @@ class TestSummaryRecordsWhatReproducesIt:
 
         summary_file = tmp_path / 'summary.txt'
         write_summary_file(result, summary_file, quick_test_parameters, analyze_simulation_results(result))
-        assert "Seed:\n    SeedSequence(entropy=[1, 2], spawn_key=())\n" in summary_file.read_text(encoding='utf-8')
+        assert last_line(summary_file.read_text(encoding='utf-8')).endswith(
+            ", seed SeedSequence(entropy=[1, 2], spawn_key=())")
 
 
 class TestColumnsNameTheirUnits:

@@ -82,7 +82,7 @@ The [Installation Guide](docs/installation.md) covers:
 
 DICE writes three output files to `output/<filename_slug>/`:
 
-- **Summary text file** (`<slug>_summary.txt`): the main parameters and the statistics of the estimates
+- **Summary text file** (`<slug>_summary.txt`): the result, a table of the statistics of the estimates of each fit, and the main parameters
 - **Results CSV file** (`<slug>.csv`): the results of every run, for further analysis
 - **Histogram plot** (`<slug>_accuracy_histogram.png`): the distribution of the ratio of estimated to nominal diffusion coefficient
 

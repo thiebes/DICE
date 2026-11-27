@@ -35,6 +35,7 @@ from dice.io.results import export_collated_results, write_summary_file
 from dice.models.parameters import OutputUnitPreferences
 from dice.models.results import MonteCarloOutput, RunResult
 from dice.models.parameters import simulation_parameters_from_dict
+from summary_text import result_block, summary_rows
 
 GOLDEN_DIR = Path(__file__).parent / 'golden' / 'estimators'
 SUMMARY_PARAMETERS = {'spatial width': 5, 'pixel width': 100, 'time series': [0.0, 0.5, 1.0]}
@@ -60,8 +61,10 @@ def _output(runs, noise_values) -> MonteCarloOutput:
     parameters = simulation_parameters_from_dict(
         {'sigma^2_0': 0.18033688, 'amplitude_0': 1.0, 'mu_0': 0.0},
         diffusion_coefficient=0.01, lifetime=1.0, diffusion_length=0.1)
+    # A fixed seed of the resampling, so that the bootstrap intervals in the
+    # golden files are the same in every run.
     return MonteCarloOutput(parameters=parameters, run_results=runs, num_runs=len(runs),
-                            noise_values=noise_values)
+                            noise_values=noise_values, analysis_seed=np.random.SeedSequence(2024))
 
 
 def edge_case_output() -> MonteCarloOutput:
@@ -146,7 +149,7 @@ def written_text(name: str, directory: Path) -> str:
     path = directory / name
     write(build(), path)
     text = path.read_text(encoding='utf-8')
-    return text.replace(f"DICE version:\n    {dice.__version__}\n", "DICE version:\n    <version>\n")
+    return text.replace(f"DICE {dice.__version__},", "DICE <version>,")
 
 
 def assert_same_values(written: Any, golden: Any, where: str = 'analysis') -> None:
@@ -231,12 +234,10 @@ def test_summary_reports_only_the_estimators_in_the_analysis(tmp_path):
     text = (tmp_path / 'summary.txt').read_text(encoding='utf-8')
     golden = (GOLDEN_DIR / 'edge_cases_summary.txt').read_text(encoding='utf-8')
 
-    assert 'Least Squares' not in text.replace('  Weighted Least Squares:', '')
-    wls_block = golden[golden.index('  Weighted Least Squares:'):golden.index('  Ordinary')]
-    assert wls_block in text
-    precision_lines = [line for line in text.splitlines() if line.startswith('    WLS:')]
-    assert precision_lines == [line.split('    OLS:')[0] for line in golden.splitlines()
-                               if line.startswith('    WLS:')]
+    assert 'OLS' not in text and 'Ordinary' not in text
+    # Every row of the table holds the WLS cell of the golden summary of both estimators.
+    golden_rows = [(label, cells[:1]) for label, cells in summary_rows(golden) if label != 'WLS']
+    assert summary_rows(text) == golden_rows
 
 
 def test_summary_rejects_an_unknown_estimator_key(tmp_path):
@@ -263,16 +264,20 @@ def test_summary_in_output_units_converts_every_diffusion_coefficient(tmp_path):
     global_lines = (tmp_path / 'global.txt').read_text(encoding='utf-8').splitlines()
     converted_lines = (tmp_path / 'cm2_per_s.txt').read_text(encoding='utf-8').splitlines()
 
-    changed = [(a, b) for a, b in zip(global_lines, converted_lines) if a != b]
+    changed = [(a.split(), b.split()) for a, b in zip(global_lines, converted_lines) if a != b]
     assert len(global_lines) == len(converted_lines)
-    assert all(a.endswith(' micrometer^2/nanosecond') and b.endswith(' centimeter^2/second')
-               for a, b in changed)
-    # The nominal value and std, mean, standard error, bias, RMSE of both estimators.
-    assert len(changed) == 1 + 5 * 2
-    assert "    0.10000 centimeter^2/second" in converted_lines
+    # The rows of std, mean, bias, standard error and RMSE, the note that names
+    # the unit, and the nominal value. With 4 estimates no interval of std is given.
+    assert [a[0] for a, _ in changed] == [
+        'Standard', 'Mean', 'Bias', 'standard', 'Root', 'Diffusion', 'Nominal']
+    assert "Diffusion coefficients in centimeter^2/second." in converted_lines
+    rows = dict(summary_rows('\n'.join(converted_lines)))
+    assert rows['Nominal diffusion coefficient'] == ['0.10000 centimeter^2/second']
     wls = analysis['accuracy']['wls']
-    for key in ('std', 'mean', 'standard_error', 'bias', 'rmse'):
-        assert f"        {wls[key] * 10:.5f} centimeter^2/second" in converted_lines
+    for label, key in (('Standard deviation', 'std'), ('Mean estimate', 'mean'),
+                       ('standard error', 'standard_error'), ('Bias (mean - nominal)', 'bias'),
+                       ('Root mean square error', 'rmse')):
+        assert rows[label][0] == f"{wls[key] * 10:.5f}", label
 
 
 def test_csv_columns_follow_first_appearance(tmp_path):
@@ -312,18 +317,38 @@ class TestCommandLineReportsHowARunEnded:
 
         # Twice: a warning of Python from one place would be shown only once.
         for _ in range(2):
-            report_completion(all_failed_output(), quiet)
+            report_completion(all_failed_output(), analyze_simulation_results(all_failed_output()), quiet)
             captured = capsys.readouterr()
             assert captured.out == ""
             assert captured.err == ("Warning: Simulation completed, but no run gave an estimate "
                                     "of the diffusion coefficient.\n")
 
-    def test_success_is_printed_unless_quiet(self, capsys):
+    def test_partial_analysis_gives_no_broken_result(self, capsys):
+        """A hand-built analysis without the parts of the result states none, and warns of nothing."""
         from dice.cli.main import report_completion
+        from dice.io.results import result_lines, result_sentence
+        output = edge_case_output()
+        analysis = analyze_simulation_results(output)
+        partial = {key: value for key, value in analysis.items() if key not in ('precision', 'summary')}
 
-        report_completion(edge_case_output(), quiet=False)
-        assert capsys.readouterr() == ("Simulation completed successfully.\n", "")
-        report_completion(edge_case_output(), quiet=True)
+        assert result_lines(output, partial) == [] and result_sentence(output, partial) is None
+        assert result_lines(output, {'accuracy': {}}) == []
+        report_completion(output, partial, quiet=False)
+        assert capsys.readouterr() == ("", "")
+
+    def test_folder_and_result_are_printed_unless_quiet(self, capsys, tmp_path):
+        from dice.cli.main import report_completion
+        output = edge_case_output()
+        analysis = analyze_simulation_results(output)
+        _summary(output, tmp_path / 'run_summary.txt')
+        block = result_block((tmp_path / 'run_summary.txt').read_text(encoding='utf-8'))
+        written = [tmp_path / 'run.csv', tmp_path / 'run_summary.txt']
+
+        report_completion(output, analysis, quiet=False, output_dir=tmp_path, written=written)
+        assert capsys.readouterr() == (
+            f"Output files in {tmp_path}: run.csv, run_summary.txt\n"
+            f"{block[0]} {'; '.join(line.strip() for line in block[1:])}.\n", "")
+        report_completion(output, analysis, quiet=True, output_dir=tmp_path, written=written)
         assert capsys.readouterr() == ("", "")
 
     def test_missing_plot_is_reported_and_an_older_plot_is_removed(self, tmp_path, capsys):
