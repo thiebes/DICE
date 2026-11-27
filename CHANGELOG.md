@@ -37,7 +37,10 @@ and Fixed give the details.
   `analysis["accuracy"]`). DICE draws 10,000 resamples of the estimates; an
   interval computed as for normally distributed values would be too narrow
   for the heavy-tailed estimates at a low CNR. The resampling is seeded from
-  the seed of the simulation, so `--seed` repeats the interval.
+  the seed of the simulation, so `--seed` repeats the interval. The interval
+  is given from 100 estimates on: with fewer, the bootstrap interval is too
+  narrow (on DICE's own estimates, it covered the standard deviation in
+  about 85% of subsets of 20 estimates).
 - Graphical user interface (GUI), started with `dice-gui` or
   `python -m dice_gui`. It has five tabs (Simulation Setup, Physical
   Parameters, Experimental Conditions, Analysis, Output) and
@@ -95,8 +98,9 @@ and Fixed give the details.
 - Uncertainty of the reported statistics. The summary file gives, for each
   fit, the number of runs with an estimate, the standard error of the mean
   and of the bias, and each fraction within a proximity level with its count
-  and its 95% interval, for example `19.0% (19 of 100; 12.5% to 27.8%)`. The
-  GUI Analysis tab shows the same for the bias and the fraction.
+  and, in the row below, its 95% interval, for example `24.0% (24 of 100)`
+  and `16.7% to 33.2%`. The GUI Analysis tab shows the same for the bias and
+  the fraction.
   The analysis dictionary and the JSON file carry them as `standard_error`
   and `precision_intervals`.
 - The summary file gives the ratio of the mean estimate to the nominal value
@@ -104,9 +108,9 @@ and Fixed give the details.
   bias. "Bias" in DICE is the difference, mean minus nominal, with its
   standard error.
 - The summary file and the JSON file record the DICE version and the seed of
-  the simulation. A simulation in which no run gives an estimate says so in
-  the summary, on the console and in the GUI, in place of "completed
-  successfully".
+  the simulation. A simulation in which no run gives an estimate says so: in
+  the summary in place of the result, on the console as a warning, and in
+  the GUI.
 - Example files in `data/examples/`: `quick_test.txt` (100 runs),
   `publication.txt` (1000 runs), `high_precision.txt` (10000 runs), and
   `noise_range.txt` (100 runs over a range of CNR).
@@ -275,10 +279,8 @@ and Fixed give the details.
   `time_unit`, the units the results are in. `write_summary_file()` takes
   them from its `parameters` argument when they are not given. Both used to
   assume micrometers and nanoseconds.
-- The summary file lists the dispersion statistics of the estimates first,
-  followed by the fractions within the standard proximity levels. It marks
-  the ordinary least squares fit as given for comparison; the weighted fit
-  is the default and the one the plots show.
+- The summary file marks the ordinary least squares fit as given for
+  comparison; the weighted fit is the default and the one the plots show.
 - The accuracy histogram shows the probability of each bin on the y-axis,
   with the normal curve scaled to match, and draws no proximity limits. A
   dashed line marks the nominal value, the legend names the normal curve,
@@ -382,9 +384,9 @@ and Fixed give the details.
 - A lifetime of 0, which means no decay, gives an infinite diffusion length
   in the summary, the results file, the JSON file, and the GUI. The diffusion
   length was reported as 0.
-- The summary file prints the unit after the standard deviation, mean, bias,
-  and root-mean-square error of the estimates, and the GUI Analysis
-  tab prints it after the standard deviation and bias. These values had no
+- The summary file names the unit of the standard deviation, mean, bias,
+  and root-mean-square error of the estimates in a note below its table,
+  and the GUI Analysis tab prints it after the standard deviation and bias. These values had no
   unit, although they are in the units of the diffusion coefficient.
 - The summary file shows values too small for its fixed decimals in
   scientific notation. In meters and seconds, for example, the diffusion
