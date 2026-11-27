@@ -818,6 +818,19 @@ class TestNetworkPathInFile:
         assert window.noise_file_input.text() == self.NETWORK_PROFILE
         assert window.current_parameter_file == str(network_file)
 
+    def test_the_question_answers_no_unless_the_user_chooses_yes(self, window, monkeypatch):
+        """Enter or Escape on the question keeps the file from loading."""
+        defaults = []
+
+        def question(parent, title, text, buttons, default):
+            defaults.append(default)
+            return default
+
+        monkeypatch.setattr(dice_gui_window.QMessageBox, "question", question)
+
+        assert window._confirm_network_path(self.NETWORK_PROFILE) is False
+        assert defaults == [QMessageBox.StandardButton.No]
+
     def test_local_profile_loads_without_the_question(self, loaded_window, dialogs, work_dir):
         path = _write_quick_test_variant(
             work_dir, "local_profile", {"estimate noise from data": str(EXAMPLE_PROFILE_CSV)}, ("noise value",))

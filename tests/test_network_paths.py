@@ -36,8 +36,14 @@ pytestmark = pytest.mark.filterwarnings("ignore:The peak of the measured profile
     '\\\\.\\pipe\\name',
     '\\/server/share/profile.csv',
     '  //server/share/profile.csv',
+    # The NT prefix, which Windows passes through without changing it.
+    '\\??\\UNC\\server\\share\\profile.csv',
+    '/??/UNC/server/share/profile.csv',
+    # Local forms that the rule covers too, because it reads only the text.
+    '\\\\?\\C:\\data\\profile.csv',
+    '//home/user/profile.csv',
 ])
-def test_paths_that_start_with_two_separators_are_network_paths(path):
+def test_paths_that_start_with_two_separators_or_the_nt_prefix_are_network_paths(path):
     assert is_network_path(path)
 
 
@@ -97,7 +103,7 @@ class TestOpenParameters:
     def test_network_path_is_refused_before_it_is_opened(self, tmp_path, profile_reads, key):
         params_file = write_file_with_profile(tmp_path, NETWORK_PROFILE, key)
 
-        with pytest.raises(ValueError, match="names a file on a network path") as raised:
+        with pytest.raises(ValueError, match="names a network or device path") as raised:
             open_parameters(params_file)
 
         assert NETWORK_PROFILE in str(raised.value)
@@ -120,8 +126,25 @@ class TestOpenParameters:
 
         assert Path(parsed['estimate noise from data']) == tmp_path / 'profile.csv'
 
+    def test_dice_runner_passes_its_permission_to_open_parameters(self, monkeypatch):
+        import dice.io.parameters as io_parameters
+        received = []
+
+        def stop_after_recording(filename, seed=None, allow_network_paths=False):
+            received.append(allow_network_paths)
+            raise RuntimeError("recorded")
+
+        monkeypatch.setattr(io_parameters, 'open_parameters', stop_after_recording)
+        for allowed in (True, False):
+            with pytest.raises(RuntimeError, match="recorded"):
+                dice.dice_runner('parameters.txt', allow_network_paths=allowed)
+        with pytest.raises(RuntimeError, match="recorded"):
+            dice.dice_runner('parameters.txt')
+
+        assert received == [True, False, False]
+
     def test_dice_runner_refuses_a_network_path(self, tmp_path, profile_reads):
-        with pytest.raises(ValueError, match="names a file on a network path"):
+        with pytest.raises(ValueError, match="names a network or device path"):
             dice.dice_runner(str(write_file_with_profile(tmp_path, NETWORK_PROFILE)))
         assert profile_reads == []
 

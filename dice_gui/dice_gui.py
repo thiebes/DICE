@@ -1567,7 +1567,7 @@ class DiceGUI(QMainWindow):
 
         A relative 'estimate noise from data' path is resolved against the
         file's folder, as the command-line interface resolves it. A file
-        that names a measured profile on a network path is loaded only if
+        that names a measured profile on a network or device path is loaded only if
         the user agrees; None means the user declined.
         """
         import ast
@@ -1595,13 +1595,13 @@ class DiceGUI(QMainWindow):
         return resolve_noise_data_path(params, Path(file_path).parent)
 
     def _confirm_network_path(self, path: str) -> bool:
-        """Ask whether to load a parameters file that names a measured profile on a network path."""
+        """Ask whether to load a parameters file that names a measured profile on a network or device path."""
         reply = QMessageBox.question(
             self, "Network Path in the Parameters File",
-            "This parameters file names a measured profile on a network path:\n\n"
+            "This parameters file names a measured profile on a network or device path:\n\n"
             f"{path}\n\n"
-            "DICE opens that file to estimate the noise. Windows may then contact the computer it "
-            "names and send it your sign-in credentials. Load the file only if you trust it.\n\n"
+            "DICE opens that file to estimate the noise. If the path names another computer, Windows "
+            "may contact it and send it your sign-in credentials. Load the file only if you trust it.\n\n"
             "Load the parameters?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,

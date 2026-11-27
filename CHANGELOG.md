@@ -227,8 +227,9 @@ and Fixed give the details.
   may send it the user's sign-in credentials, so a parameters file received
   from someone else could make DICE contact a computer of the sender's
   choice. The GUI asks before it loads such a file. `open_parameters()` and
-  `dice.dice_runner()` take `allow_network_paths`. A path on a mapped drive
-  letter is not affected.
+  `dice.dice_runner()` refuse such a path too, unless their argument
+  `allow_network_paths` is True, so a script that relies on one must pass it.
+  A path on a mapped drive letter is not affected.
 - Behavior change: a `time series` is sorted into ascending order, as the
   GUI sorts it. The command-line interface used to run the series in the
   order given.
