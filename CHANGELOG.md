@@ -213,6 +213,12 @@ and Fixed give the details.
   `image numbins` is a whole number, 1 or more. These files used to fail
   during the run or at the plot, or to run without an estimate. The command-line interface used to cut a `time
   range` of 5.5 steps to 5.
+- Behavior change: a parameters file that gives one parameter under two
+  spellings, for example `time series` and `time_series`, or `mean_0` and
+  `mu_0`, is rejected when it is read, and the message names both. DICE used
+  one of the two values and ignored the other without a message. The
+  command-line interface, `parameter_parser()`, and File > Open in the GUI
+  reject such a file.
 - Behavior change: a `time series` is sorted into ascending order, as the
   GUI sorts it. The command-line interface used to run the series in the
   order given.

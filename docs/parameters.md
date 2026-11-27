@@ -20,6 +20,8 @@ The table lists the parameters by group. "One of" means that you give exactly on
 | Plot | keys that start with `image` | No |
 | Performance | `retain profile data`, `multiprocessing` | No |
 
+Give each parameter once. The command-line interface also reads some keys in another spelling, for example `time_series` for `time series` and `mu_0` for `mean_0`; File > Open in the GUI reads only the spellings of this document. Both reject a file that gives one parameter in two spellings, even with equal values, because they would use one value and ignore the other.
+
 ## Simulation control
 
 ### `filename slug`

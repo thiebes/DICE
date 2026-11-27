@@ -644,6 +644,10 @@ class TestFileThatCannotBeLoaded:
         # The command-line interface rejects fewer than 16 pixels too, so it is not suggested.
         ({"pixel width": 8}, "'pixel width' is 8; it must be 16 or more."),
         ({"time_range_unit": "fortnight"}, "fortnight"),
+        # The command-line interface rejects it too; the form would show one of the two.
+        ({"time_range": [0, 1, 5]}, "'time range' and 'time_range' are spellings of one parameter. Give each "
+                                    "parameter once, in one spelling. The GUI reads the spelling of the parameter "
+                                    "reference"),
         # This one fails after the first fields of the form are filled.
         ({"number of runs": 7, "estimate noise from data": 5}, ""),
     ])

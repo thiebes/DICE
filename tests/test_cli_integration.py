@@ -351,6 +351,7 @@ class TestDryRun:
         ({'FWHM_0': 0}, "'FWHM_0' must be greater than 0"),
         ({'pixel width': 1}, "'pixel width' (the number of pixels) is 1"),
         ({'mean_0': 1.3}, "outside the central 40% of the spatial window"),
+        ({'mu_0': 0}, "'mean_0' and 'mu_0' are spellings of one parameter"),
         ({'length unit': 'um'}, "Unknown length unit 'um'"),
         ({'image type': 'bmp'}, "Unknown image type 'bmp'"),
         ({'output_length_unit': 'nanometer'}, "'output_length_unit' is not supported"),
