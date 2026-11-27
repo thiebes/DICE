@@ -219,6 +219,16 @@ and Fixed give the details.
   one of the two values and ignored the other without a message. The
   command-line interface, `parameter_parser()`, and File > Open in the GUI
   reject such a file.
+- Behavior change: the command-line interface refuses an
+  `estimate noise from data` path that starts with two slashes or
+  backslashes, a network path such as `\\server\share\profile.csv`, unless
+  `--allow-network-paths` is given; `--dry-run` refuses it too. Windows
+  contacts the computer that such a path names when the file is opened, and
+  may send it the user's sign-in credentials, so a parameters file received
+  from someone else could make DICE contact a computer of the sender's
+  choice. The GUI asks before it loads such a file. `open_parameters()` and
+  `dice.dice_runner()` take `allow_network_paths`. A path on a mapped drive
+  letter is not affected.
 - Behavior change: a `time series` is sorted into ascending order, as the
   GUI sorts it. The command-line interface used to run the series in the
   order given.
