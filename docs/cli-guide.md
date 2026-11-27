@@ -70,6 +70,7 @@ dice [options] parameters_file
 | `--progress-interval N` | With `--verbose`, a progress message each time the number of finished runs passes a multiple of N, and at the end (default 100). A serial simulation reports at every multiple; a parallel simulation reports at the first count past each one. |
 | `--retain-profiles` | Keep the profiles of every run in memory. The output files do not include them. |
 | `--dry-run`, `--check` | Load and validate the parameters file as a real run would, then stop without a simulation and without writing files. |
+| `--allow-network-paths` | Open a measured profile (`estimate noise from data`) that the parameters file names on a network path, a path that starts with two slashes or backslashes. Without the option DICE refuses such a file, because Windows may send your sign-in credentials to that computer. See [`estimate noise from data`](parameters.md#estimate-noise-from-data). |
 | `--version` | Print the version and stop. |
 | `--help`, `-h` | Print the list of options and stop. |
 

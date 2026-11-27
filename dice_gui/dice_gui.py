@@ -1528,6 +1528,9 @@ class DiceGUI(QMainWindow):
     def load_parameters_from_file(self, file_path: str):
         """Load parameters from a specific file path."""
         params = self._read_parameter_file(file_path)
+        if params is None:
+            self.status_label.setText("Parameters not loaded")
+            return
 
         # Populate GUI from parameters
         self.populate_gui_from_parameters(params)
@@ -1559,14 +1562,16 @@ class DiceGUI(QMainWindow):
                 f'dice "{file_path}"'
             )
 
-    def _read_parameter_file(self, file_path: str) -> dict:
+    def _read_parameter_file(self, file_path: str) -> dict | None:
         """Parse a parameters.txt-format file into its dictionary.
 
         A relative 'estimate noise from data' path is resolved against the
-        file's folder, as the command-line interface resolves it.
+        file's folder, as the command-line interface resolves it. A file
+        that names a measured profile on a network or device path is loaded only if
+        the user agrees; None means the user declined.
         """
         import ast
-        from dice.io.parameters import read_parameters_text, resolve_noise_data_path
+        from dice.io.parameters import network_paths, read_parameters_text, resolve_noise_data_path
         from dice.models.parameter_keys import check_one_spelling_per_key
 
         params = ast.literal_eval(read_parameters_text(file_path))
@@ -1583,7 +1588,25 @@ class DiceGUI(QMainWindow):
                 f"{error} The GUI reads the spelling of the parameter reference (docs/parameters.md), "
                 "for example 'time range' and 'mean_0', and ignores the others."
             ) from error
+        # Asked before the form checks the file, which would open the path.
+        for _, path in network_paths(params):
+            if not self._confirm_network_path(path):
+                return None
         return resolve_noise_data_path(params, Path(file_path).parent)
+
+    def _confirm_network_path(self, path: str) -> bool:
+        """Ask whether to load a parameters file that names a measured profile on a network or device path."""
+        reply = QMessageBox.question(
+            self, "Network Path in the Parameters File",
+            "This parameters file names a measured profile on a network or device path:\n\n"
+            f"{path}\n\n"
+            "DICE opens that file to estimate the noise. If the path names another computer, Windows "
+            "may contact it and send it your sign-in credentials. Load the file only if you trust it.\n\n"
+            "Load the parameters?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
 
     def load_example(self, example_name: str):
         """Load example parameters without making the bundled file the save target."""

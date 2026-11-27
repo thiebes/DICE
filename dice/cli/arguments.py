@@ -68,6 +68,14 @@ For more information, visit: https://github.com/thiebes/DICE
         action='store_true',
         help='Load and validate the parameters file, then exit without running or writing files'
     )
+
+    parser.add_argument(
+        '--allow-network-paths',
+        action='store_true',
+        help=('Open a measured profile that the parameters file names on a network path '
+              '(a path that starts with two slashes or backslashes). Without this option such a '
+              'file is refused, because Windows may send your sign-in credentials to that computer'),
+    )
     
     parser.add_argument(
         '--output-dir', '-o',

@@ -29,7 +29,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def dice_runner(parameters_filename):
+def dice_runner(parameters_filename, allow_network_paths: bool = False):
     """
     Run a DICE simulation from a parameters file.
 
@@ -37,6 +37,9 @@ def dice_runner(parameters_filename):
     ----------
     parameters_filename : str
         Path to parameters file.
+    allow_network_paths : bool
+        Open an 'estimate noise from data' file on a network path; see
+        dice.io.parameters.open_parameters.
 
     Returns
     -------
@@ -49,7 +52,7 @@ def dice_runner(parameters_filename):
     from .models.parameters import simulation_parameters_from_dict
 
     # Load parameters
-    parameters = open_parameters(parameters_filename)
+    parameters = open_parameters(parameters_filename, allow_network_paths=allow_network_paths)
     validate_parameters(parameters)
 
     # Create axes

@@ -12,7 +12,7 @@ import locale
 import os
 import warnings
 import numpy as np
-from typing import Dict, Any, List, Optional, Sequence, Union
+from typing import Dict, Any, List, Optional, Sequence, Tuple, Union
 from pathlib import Path
 
 from ..utils.converters import fwhm_to_sigma2
@@ -116,7 +116,53 @@ def resolve_noise_data_path(
     return resolved
 
 
-def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, Any]:
+def is_network_path(path: Any) -> bool:
+    """
+    Whether a path is a network or device path: it starts with two slashes or
+    backslashes, or with the NT prefix \\??\\.
+
+    On Windows, opening such a path (\\\\server\\share\\profile.csv,
+    //server/share/profile.csv, or a device form such as \\\\?\\UNC\\... or
+    \\??\\UNC\\...) can contact the computer it names, which may then receive
+    the user's sign-in credentials. The rule reads only the text, before
+    anything is opened, and is the same on every platform, so it also covers
+    local forms such as \\\\?\\C:\\... and a POSIX path that starts with //.
+    A mapped drive letter (Z:\\profile.csv) is not covered.
+    """
+    if not isinstance(path, str):
+        return False
+    text = path.lstrip()
+    two_separators = len(text) >= 2 and text[0] in '\\/' and text[1] in '\\/'
+    nt_prefix = text[:4].replace('/', '\\') == '\\??\\'
+    return two_separators or nt_prefix
+
+
+def network_paths(parameters_dictionary: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """The measured-profile keys of a parameters dictionary whose value is a network or device path, with the path."""
+    return [(key, parameters_dictionary[key]) for key in NOISE_DATA_KEYS
+            if is_network_path(parameters_dictionary.get(key))]
+
+
+def check_no_network_paths(parameters_dictionary: Dict[str, Any]) -> None:
+    """
+    Refuse a parameters dictionary that names a measured profile on a network or device path.
+
+    Raises
+    ------
+    ValueError
+        Naming the key and the path, and how to proceed.
+    """
+    for key, path in network_paths(parameters_dictionary):
+        raise ValueError(
+            f"'{key}' names a network or device path, {path}. DICE opens the file while reading the "
+            "parameters, and if the path names another computer, Windows may contact it and send it your "
+            "sign-in credentials. Copy the file to this computer and name the copy, or, if you trust this "
+            "parameters file, allow the path with --allow-network-paths (allow_network_paths=True in Python)."
+        )
+
+
+def open_parameters(filename: Union[str, Path], seed: Seed = None,
+                    allow_network_paths: bool = False) -> Dict[str, Any]:
     """
     Read simulation parameters from a file.
     
@@ -127,6 +173,10 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
     seed : int or SeedSequence, optional
         Seed for the noise draws of the 'noise range' options, one for each
         run; None draws fresh entropy.
+    allow_network_paths : bool
+        Open an 'estimate noise from data' file on a network or device
+        path (see is_network_path). Without it, such a file is refused
+        before anything is opened.
     
     Returns
     -------
@@ -143,6 +193,10 @@ def open_parameters(filename: Union[str, Path], seed: Seed = None) -> Dict[str, 
     """
     try:
         parms_dict = ast.literal_eval(read_parameters_text(filename))
+        # A file received from someone else could name a profile on another
+        # computer, which Windows contacts when the file is opened.
+        if isinstance(parms_dict, dict) and not allow_network_paths:
+            check_no_network_paths(parms_dict)
         # Resolve per-parameter unit overrides before parsing,
         # so that values are in the global unit system when the
         # parser converts between representations (e.g., FWHM -> sigma^2).

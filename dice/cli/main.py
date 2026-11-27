@@ -505,7 +505,9 @@ def run_command(argv: Optional[list] = None) -> int:
         if not args.quiet:
             print(f"Loading parameters from: {args.parameters_file}")
 
-        parameters = open_parameters(args.parameters_file, seed=noise_draw_seed)
+        parameters = open_parameters(
+            args.parameters_file, seed=noise_draw_seed,
+            allow_network_paths=getattr(args, 'allow_network_paths', False))
         validate_parameters(parameters)
         
         if args.verbose and not args.quiet:
